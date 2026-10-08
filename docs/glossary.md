@@ -36,4 +36,9 @@
 | **Domain** | A plug-in schema that adds element types for one discipline (architecture, structure, MEP, civil and so on). |
 | **Port / Adapter** | A core interface (port) and an interchangeable implementation of it (adapter), such as a solver, an importer or a renderer. |
 | **Workspace** | A discipline-specific UI layout over the shared core, similar to Revit's discipline tabs (Architecture, Structure, Systems). |
+| **Model** | A container of elements with one kind: physical, definition, drawing, analytical or linked. Every element lives in exactly one model. See [architecture/element-model.md](architecture/element-model.md). |
+| **Aspect** | A group of properties that one domain attaches to another domain's element, such as structural data on a wall. |
+| **Code** | An optional human-readable name, unique within a scope, such as the structural mark C12. It is not the element's identity. |
+| **Representation** | One named geometry of an element (`Body`, `Axis`, `FootPrint`), all generated from the same parameters. |
+| **Change set** | The record of one committed transaction: what was created, modified and deleted, with before and after values. It drives undo, saving and collaboration. |
 | **Founding user** | The civil engineer whose day-to-day Revit use drives the build order. See [vision/target-user.md](vision/target-user.md). |

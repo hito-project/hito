@@ -35,7 +35,7 @@ So we build the shared rows once, as a core, and add each discipline as a domain
                      Geometry port (B-rep, mesh, TIN, curves)
 ```
 
-- **Core:** element store with stable IDs, schema system, relationships and dependency propagation, transactions, coordinates, view generation, spatial queries, the operator framework. Kept as small as possible.
+- **Core:** element store with stable IDs, schema system, relationships and dependency propagation, transactions, coordinates, view generation, spatial queries, the operator framework. Kept as small as possible. The element store and schema design is in [element-model.md](element-model.md).
 - **Domains:** plug-in schemas that add element types (wall, beam, pipe, alignment, bolt) on shared base classes. This follows the BisCore and domain pattern in Bentley BIS.
 - **Adapters:** solvers, importers and exporters, and renderers behind ports. Existing open-source solvers are wrapped, not rewritten, under the solver rules in [ADR 0012](../decisions/0012-suite-definition.md): for example EPANET, SWMM, MYSTRAN, Kratos, and Code_Aster as a separate program.
 - **Workspaces:** discipline-specific UI layouts, similar to Revit's discipline tabs.
