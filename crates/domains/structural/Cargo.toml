@@ -1,0 +1,13 @@
+[package]
+name = "hito-structural"
+description = "The HITO structural domain schema."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+# A domain depends on the core only.
+[dependencies]
+hito-core.workspace = true

@@ -1,0 +1,6 @@
+# The Rust toolchain everyone builds HITO with. rustup reads this file and
+# installs the right version on the first `cargo` command.
+[toolchain]
+channel = "1.99"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

@@ -1,0 +1,33 @@
+# The crates mirror the architecture (docs/architecture/unified-core.md):
+#
+#   crates/core        The shared core. Depends on no other HITO crate and no UI.
+#   crates/domains/*   Discipline schemas. Depend on the core only.
+#   crates/adapters/*  Storage, solvers, importers/exporters and renderers behind
+#                      the core's ports. Depend on the core and domains, never
+#                      on the app or a UI toolkit.
+#   crates/app         The desktop application. The only crate that may use a
+#                      UI toolkit.
+#
+# tools/architecture-check enforces these rules as part of `cargo test`.
+[workspace]
+resolver = "3"
+members = [
+    "crates/core",
+    "crates/domains/*",
+    "crates/adapters/*",
+    "crates/app",
+    "tools/architecture-check",
+]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/hito-project/hito"
+publish = false
+
+[workspace.dependencies]
+hito-core = { path = "crates/core" }
+hito-structural = { path = "crates/domains/structural" }
+hito-storage-sqlite = { path = "crates/adapters/storage-sqlite" }

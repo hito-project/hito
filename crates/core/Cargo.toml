@@ -1,0 +1,13 @@
+[package]
+name = "hito-core"
+description = "The HITO core: element store, schemas, relationships, transactions, coordinates and views."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+# The core depends on no other HITO crate and no UI toolkit.
+# tools/architecture-check fails the tests if that changes.
+[dependencies]

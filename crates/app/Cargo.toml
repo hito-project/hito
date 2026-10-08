@@ -1,0 +1,19 @@
+[package]
+name = "hito"
+description = "The HITO desktop application."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+hito-core.workspace = true
+hito-structural.workspace = true
+hito-storage-sqlite.workspace = true
+
+# The UI toolkit lives in this crate only, so it can be swapped without
+# touching the core, domains or adapters. Spike #4 is reviewing the choice;
+# eframe/egui is ADR 0005's initial one.
+eframe = "0.36"
