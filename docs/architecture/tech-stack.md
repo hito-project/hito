@@ -6,7 +6,8 @@
 |---|---|---|---|
 | Language | Rust | ✅ | Accepted |
 | Rendering | wgpu | ✅ | Vulkan, Metal and DX12 from one API. First-class on Linux. |
-| UI | egui | ✅ | Custom-drawn, so we control the UX fully ([ADR 0007](../decisions/0007-ui-familiar-to-current-users.md)). Maturity to be reviewed. |
+| UI | egui and eframe on wgpu, with egui_dock, behind HITO's own shell layer ([ADR 0015](../decisions/0015-ui-toolkit.md), proposed) | ✅ | Custom-drawn, so we control the UX fully ([ADR 0007](../decisions/0007-ui-familiar-to-current-users.md)). The 3D viewport renders off-screen and egui shows the result. No bidi text yet, so RTL languages wait. |
+| Localisation | Fluent (`fluent-bundle`) | ✅ | One message file per locale ([ADR 0015](../decisions/0015-ui-toolkit.md), proposed) |
 | Geometry | Manifold (mesh booleans) behind a multi-representation geometry port, with boolmesh (Rust) as a second adapter ([ADR 0014](../decisions/0014-geometry-kernel.md)). | ❌ (C++, justified in ADR 0014) | Parameters are the source of truth; the kernel evaluates them into meshes. Curves, sweeps, TINs and point clouds are separate modules. |
 | IFC | Our own IFC4 exporter, unless a Rust library proves sufficient | ✅ | IFC STEP files are plain text, so export is tractable |
 | DWG | To be decided | ? | LibreDWG is GPL, which conflicts with the [license](../decisions/0009-license.md) |
