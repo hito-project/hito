@@ -5,7 +5,7 @@
 
 ## Context
 
-AEC disciplines are served by separate products (Revit, AutoCAD, Civil 3D, ETABS, Navisworks…) that duplicate the same infrastructure and lose data when exchanging it ([research](https://github.com/hito-project/hito/discussions/77)). Bentley's BIS/iModel shows that one schema-based data core can span disciplines ([prior art](https://github.com/hito-project/hito/discussions/79)).
+AEC disciplines are served by separate products (Revit, AutoCAD, Civil 3D, ETABS, Navisworks…) that duplicate the same infrastructure and lose data when exchanging it. Bentley's BIS/iModel shows that one schema-based data core can span disciplines.
 
 ## Decision
 

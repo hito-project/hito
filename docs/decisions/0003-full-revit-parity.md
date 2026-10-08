@@ -14,4 +14,4 @@ Every Revit capability is in scope. No feature is classified as "won't do". Road
 ## Consequences
 
 - The core must be designed up front for late features such as worksharing, families, the analytical model and scripting, even though they are built later.
-- The roadmap is a sequence of phases, not a cut list ([roadmap/phases.md](../roadmap/phases.md)).
+- The roadmap is a sequence of phases, not a cut list.

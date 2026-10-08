@@ -8,7 +8,7 @@ Thanks for your interest! HITO is in its early stages. Read [docs/vision](docs/v
 Discussion  →  ADR (if a decision is needed)  →  Epic  →  Stories  →  Pull requests
 ```
 
-1. **Ideas and questions** start in [Discussions](https://github.com/hito-project/hito/discussions). Describe the problem and the workflow, not just a solution.
+1. **Ideas and questions** start in Discussions. Describe the problem and the workflow, not just a solution.
 2. **Decisions** that shape the architecture or product are recorded as ADRs in [docs/decisions](docs/decisions/README.md). Accepted ADRs are never edited. A new ADR supersedes the old one.
 3. **Epics** (`type:epic`) are capability areas, grouped into **milestones** (usable releases).
 4. **Stories** (`type:story`) are user-visible increments, attached to their epic as sub-issues. **Spikes** (`type:spike`) are time-boxed research stories that end in an ADR or a design document.

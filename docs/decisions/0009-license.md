@@ -28,4 +28,4 @@ The project owner wants to:
 
 - Companies can adopt it freely, which supports the services business model.
 - A company could release a closed fork. This is accepted.
-- **Dependencies must be compatible.** GPL libraries can't be linked without changing our license. One example is LibreDWG, which affects DWG support ([DWG spike](https://github.com/hito-project/hito/issues/7)).
+- **Dependencies must be compatible.** GPL libraries can't be linked without changing our license. One example is LibreDWG, which affects DWG support.

@@ -36,14 +36,14 @@ So we build the shared rows once, as a core, and add each discipline as a domain
 ```
 
 - **Core:** element store with stable IDs, schema system, relationships and dependency propagation, transactions, coordinates, view generation, spatial queries, the operator framework. Kept as small as possible.
-- **Domains:** plug-in schemas that add element types (wall, beam, pipe, alignment, bolt) on shared base classes. This follows the BisCore and domain pattern in [Bentley BIS](https://github.com/hito-project/hito/discussions/79).
+- **Domains:** plug-in schemas that add element types (wall, beam, pipe, alignment, bolt) on shared base classes. This follows the BisCore and domain pattern in Bentley BIS.
 - **Adapters:** solvers, importers and exporters, and renderers behind ports. Existing open-source solvers (OpenSees, EPANET, SWMM, Code_Aster) are wrapped, not rewritten.
 - **Workspaces:** discipline-specific UI layouts, similar to Revit's discipline tabs.
 - **Regional packs:** design codes, units, language and drawing standards, as adapters ([ADR 0008](../decisions/0008-argentina-first-international-by-design.md)).
 
 ## Constraints
 
-- **Scope.** Every discipline is in scope, but the roadmap must deliver usable increments, starting with the founding user's needs. See [roadmap/phases.md](../roadmap/phases.md).
+- **Scope.** Every discipline is in scope, and the core must be designed for all of them, including future epics. Delivery still comes in usable increments, starting with the founding user's needs.
 - **No speculative abstractions.** Design the ports up front, but generalise an abstraction only once a second domain needs it.
 - **Scale.** Fabrication-level models (millions of bolts) must be feasible, so the element store is designed for that from the start.
 - **Coordinates.** Use 64-bit coordinates with a project base point, so building and site scales coexist.

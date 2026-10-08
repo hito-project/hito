@@ -5,7 +5,7 @@
 
 ## Context
 
-The suite is huge ([ADR 0006](0006-civil-engineering-suite-scope.md)), and the first usable milestone has to be small and valuable, and it has to exercise the core. In Argentina, most civil engineers work on reinforced-concrete buildings, and structural modelling is the most common Revit use ([workflows](https://github.com/hito-project/hito/discussions/75)).
+The suite is huge ([ADR 0006](0006-civil-engineering-suite-scope.md)), and the first usable milestone has to be small and valuable, and it has to exercise the core. In Argentina, most civil engineers work on reinforced-concrete buildings, and structural modelling is the most common Revit use.
 
 ## Decision
 
@@ -27,6 +27,6 @@ Analysis, CIRSOC design checks, rebar, sheets and schedules, families editor, ar
 
 ## Consequences
 
-- The MVP slices across roadmap phases 0, 3 and 4 ([phases](../roadmap/phases.md)), so milestones follow releases, not phases.
-- The backlog for M0 and M1 is written in full as epics and stories ([milestones](https://github.com/hito-project/hito/milestones)). Later work is listed as epics only.
+- The MVP slices across roadmap phases 0, 3 and 4, so milestones follow releases, not phases.
+- The backlog for M0 and M1 is written in full as epics and stories. Later work is listed as epics only.
 - Rebar and CIRSOC checks are the natural next milestone after M1, because they build directly on the M1 elements.

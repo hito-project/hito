@@ -9,9 +9,9 @@ The ambition is a **silver bullet for civil engineering software**: one free too
 - Every capability of the programs the suite replaces is in scope. Nothing is ever classified as "won't do".
 - Roadmap discussions decide **order**, never **whether**.
 - Exceeding those programs is welcome, especially by removing the data loss between them.
-- Which programs the suite replaces is still being defined ([open question](https://github.com/hito-project/hito/discussions/80)).
+- Which programs the suite replaces is still being defined.
 
 ## Non-negotiables
 
 - **Cross-platform, Linux first.** The programs it replaces are largely Windows-only, and that's the reason the project started. See [target-user.md](target-user.md).
-- **Interoperability with existing files.** Users can only switch if they can still exchange RVT, DWG and IFC with everyone else. See [ADR 0002](../decisions/0002-native-model-with-early-ifc-export.md) and [the DWG and RVT spikes (#7, #8)](https://github.com/hito-project/hito/issues/1).
+- **Interoperability with existing files.** Users can only switch if they can still exchange RVT, DWG and IFC with everyone else. See [ADR 0002](../decisions/0002-native-model-with-early-ifc-export.md) and the DWG and RVT research spikes.

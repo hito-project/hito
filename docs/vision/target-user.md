@@ -7,7 +7,7 @@ A civil engineer in Argentina who:
 - uses Revit professionally and describes it as "CAD, but in 3D, with metadata embedded into the model, like cables, pipes, etc.",
 - would switch to Linux if Revit did not keep them on Windows.
 
-Their specific workflow hasn't been gathered yet. Common workflows stand in for it ([Civil engineer workflows (discussion)](https://github.com/hito-project/hito/discussions/75)).
+Their specific workflow hasn't been gathered yet. Common workflows stand in for it.
 
 ## Broader audience
 
