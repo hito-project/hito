@@ -1,6 +1,6 @@
 # Principles
 
-Each principle answers a documented industry pain point. See [research/industry-pain-points.md](../research/industry-pain-points.md).
+Each principle answers a documented industry pain point. See [Industry pain points (discussion)](https://github.com/hito-project/hito/discussions/78).
 
 | # | Principle | Pain point it answers |
 |---|---|---|

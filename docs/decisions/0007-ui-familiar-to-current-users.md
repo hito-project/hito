@@ -6,7 +6,7 @@
 
 ## Context
 
-ADR 0001 assumed the target users came from Blender. They don't: the founding user only uses Revit, and Blender was only mentioned as an alternative ([workflows](../research/civil-engineer-workflows.md)). Target users come from Revit, AutoCAD and CYPE. Any unfamiliar UX pattern is a switching cost, even when it's objectively better, because many users don't adapt easily.
+ADR 0001 assumed the target users came from Blender. They don't: the founding user only uses Revit, and Blender was only mentioned as an alternative ([workflows](https://github.com/hito-project/hito/discussions/75)). Target users come from Revit, AutoCAD and CYPE. Any unfamiliar UX pattern is a switching cost, even when it's objectively better, because many users don't adapt easily.
 
 ## Decision
 

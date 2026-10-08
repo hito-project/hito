@@ -1,10 +1,10 @@
 # Open questions
 
-Unresolved questions that block or shape decisions. On GitHub these become Discussions, or issues once they are actionable.
+Open questions live on GitHub: in [Discussions](https://github.com/hito-project/hito/discussions), or as spike issues once they are actionable.
 
-| Document | Question | Status | Blocks |
-|---|---|---|---|
-| [project-name.md](project-name.md) | What is the project called? | Resolved: HITO | — |
-| [suite-definition.md](suite-definition.md) | Which programs does the suite replace, and what can each one do? | Open | Scope, roadmap |
-| [rvt-interop-feasibility.md](rvt-interop-feasibility.md) | Can we read and write RVT (and DWG) files? | Open: tracked by the E01 spikes | Adoption strategy, roadmap order |
-| [founding-user-questions.md](founding-user-questions.md) | How does the founding user actually use Revit? | Answered by assumption | Roadmap order, MVP |
+| Question | Where | Status |
+|---|---|---|
+| Which programs does the suite replace, and what can each one do? | [Discussion #80](https://github.com/hito-project/hito/discussions/80) | Open |
+| How does the founding user actually use Revit? | [Discussion #81](https://github.com/hito-project/hito/discussions/81) | Answered by assumption |
+| Can we read and write DWG and RVT files? | Spikes [#7](https://github.com/hito-project/hito/issues/7) and [#8](https://github.com/hito-project/hito/issues/8) | Open |
+| What is the project called? | [project-name.md](project-name.md), [ADR 0010](../decisions/0010-project-name-hito.md) | Resolved: HITO |

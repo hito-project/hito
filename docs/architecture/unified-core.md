@@ -36,7 +36,7 @@ So we build the shared rows once, as a core, and add each discipline as a domain
 ```
 
 - **Core:** element store with stable IDs, schema system, relationships and dependency propagation, transactions, coordinates, view generation, spatial queries, the operator framework. Kept as small as possible.
-- **Domains:** plug-in schemas that add element types (wall, beam, pipe, alignment, bolt) on shared base classes. This follows the BisCore and domain pattern in [Bentley BIS](../research/prior-art.md).
+- **Domains:** plug-in schemas that add element types (wall, beam, pipe, alignment, bolt) on shared base classes. This follows the BisCore and domain pattern in [Bentley BIS](https://github.com/hito-project/hito/discussions/79).
 - **Adapters:** solvers, importers and exporters, and renderers behind ports. Existing open-source solvers (OpenSees, EPANET, SWMM, Code_Aster) are wrapped, not rewritten.
 - **Workspaces:** discipline-specific UI layouts, similar to Revit's discipline tabs.
 - **Regional packs:** design codes, units, language and drawing standards, as adapters ([ADR 0008](../decisions/0008-argentina-first-international-by-design.md)).

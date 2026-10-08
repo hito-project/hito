@@ -5,7 +5,7 @@
 
 ## Context
 
-The founding user works in Argentina, where structural design follows the CIRSOC and INPRES-CIRSOC codes and drawings follow IRAM standards ([workflows](../research/civil-engineer-workflows.md)). The final product must not be limited to Argentina.
+The founding user works in Argentina, where structural design follows the CIRSOC and INPRES-CIRSOC codes and drawings follow IRAM standards ([workflows](https://github.com/hito-project/hito/discussions/75)). The final product must not be limited to Argentina.
 
 ## Decision
 

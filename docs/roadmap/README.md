@@ -9,7 +9,7 @@
 - **Phases** group capabilities by technical dependency. They describe the shape of the whole suite.
 - **Milestones** are usable releases, and each can slice across several phases. M1, the structural BIM MVP ([ADR 0011](../decisions/0011-mvp-structural-bim.md)), takes parts of phases 0, 3 and 4.
 
-The milestones and their epics and stories live in [backlog/](../backlog/README.md), and on GitHub after migration.
+The milestones, epics and stories live on GitHub: [milestones](https://github.com/hito-project/hito/milestones) and [epics](https://github.com/hito-project/hito/issues?q=label%3Atype%3Aepic).
 
 | Milestone | Status |
 |---|---|

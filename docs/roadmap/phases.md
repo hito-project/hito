@@ -10,7 +10,7 @@ Capabilities are grouped by dependency. Per [ADR 0006](../decisions/0006-civil-e
 
 ## BIM (Revit parity)
 
-The full Revit inventory is in [research/revit-capabilities.md](../research/revit-capabilities.md).
+The full Revit inventory is in [Revit capabilities (discussion)](https://github.com/hito-project/hito/discussions/74).
 
 | Phase | Name | Capabilities |
 |---|---|---|
@@ -24,7 +24,7 @@ The full Revit inventory is in [research/revit-capabilities.md](../research/revi
 
 ## Rest of the suite
 
-These capability inventories are still pending ([suite-definition.md](../open-questions/suite-definition.md)).
+These capability inventories are still pending ([suite-definition.md](https://github.com/hito-project/hito/discussions/80)).
 
 | Phase | Name | Replaces (candidates) | Capabilities (preliminary) |
 |---|---|---|---|
@@ -39,6 +39,6 @@ These capability inventories are still pending ([suite-definition.md](../open-qu
 ## Notes
 
 - Phase 0 design decisions must account for **every later phase**.
-- Interoperability (phase 14) is numbered last for dependency reasons only. It decides adoption ([principle 8](../vision/principles.md)), so parts of it will move earlier, depending on [RVT feasibility](../open-questions/rvt-interop-feasibility.md).
-- The founding user's workflow decides which phases come first ([assumed workflow](../research/civil-engineer-workflows.md)).
+- Interoperability (phase 14) is numbered last for dependency reasons only. It decides adoption ([principle 8](../vision/principles.md)), so parts of it will move earlier, depending on [RVT feasibility](https://github.com/hito-project/hito/issues/8).
+- The founding user's workflow decides which phases come first ([assumed workflow](https://github.com/hito-project/hito/discussions/75)).
 - **Argentina context:** AutoCAD and CYPECAD dominate there, and cross-company BIM exchange is rare. So DWG interop, 2D drafting and CIRSOC design checks may matter more for the first users than RVT import ([ADR 0008](../decisions/0008-argentina-first-international-by-design.md)).
