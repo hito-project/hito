@@ -5,7 +5,7 @@
 
 ## Context
 
-HITO needs solids with openings that are reliable. Spike [#2](https://github.com/hito-project/hito/issues/2) compared the candidate kernels and built the same prototypes with each. The evaluation, benchmarks and sources are in [Discussion GEOMETRY_DISCUSSION](https://github.com/hito-project/hito/discussions/GEOMETRY_DISCUSSION). The prototype code is in [PR GEOMETRY_PR](https://github.com/hito-project/hito/pull/GEOMETRY_PR).
+HITO needs solids with openings that are reliable. Spike [#2](https://github.com/hito-project/hito/issues/2) compared the candidate kernels and built the same prototypes with each. The evaluation, benchmarks and sources are in [Discussion #104](https://github.com/hito-project/hito/discussions/104). The prototype code is in [PR #103](https://github.com/hito-project/hito/pull/103).
 
 The suite inventories add three constraints:
 
