@@ -1,0 +1,19 @@
+[package]
+name = "k-occt"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+
+# Built on its own (not in the workspace). The binding targets OCCT 7.8 and
+# doesn't compile against nixpkgs' OCCT 7.9.3, so this uses the `builtin`
+# feature, which compiles the bundled OCCT from source (see README).
+[workspace]
+
+[dependencies]
+common = { path = "../common" }
+opencascade = { version = "0.3.0", features = ["builtin"] }
+glam = "0.24"
+
+[profile.release]
+debug = false

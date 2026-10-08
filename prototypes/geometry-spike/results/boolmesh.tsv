@@ -1,0 +1,8 @@
+kernel	case	ok	volume	exact	rel_error	triangles	ms	note
+boolmesh	wall-window	true	2.712000000	2.712000000	-1.637e-16	32	0.6	
+boolmesh	wall-door	true	2.580000000	2.580000000	+0.000e0	28	0.5	
+boolmesh	plate-200-holes	true	0.038489221	0.038479469	+2.534e-4	26416	6071.4	32-gon holes, sequential subtraction
+boolmesh	plate-200-holes-batched	true	0.038489221	0.038479469	+2.534e-4	26412	770.3	32-gon holes, union tree then one subtraction
+boolmesh	corridor-sweep	true	2399.637503002	2401.079757109	-6.007e-4	3204	1.9	200 m clothoid sweep built by our code, imported
+boolmesh	corridor-minus-culvert	true	2382.307175485	NaN	NaN	3264	4.5	box culvert cut across the sweep
+boolmesh	10k-walls	true	20998.485019558	20998.484999999	+9.315e-10	320000	1201.8	far from origin, single thread

@@ -1,0 +1,8 @@
+kernel	case	ok	volume	exact	rel_error	triangles	ms	note
+manifold	wall-window	true	2.712000000	2.712000000	-1.637e-16	32	0.7	
+manifold	wall-door	true	2.580000000	2.580000000	-1.721e-16	28	0.3	
+manifold	plate-200-holes	true	0.038489221	0.038479469	+2.534e-4	26412	96.4	32-gon holes, sequential subtraction
+manifold	plate-200-holes-batched	true	0.038489221	0.038479469	+2.534e-4	26412	91.2	32-gon holes, batch difference
+manifold	corridor-sweep	true	2399.637503002	2401.079757109	-6.007e-4	3204	4.7	200 m clothoid sweep built by our code, imported
+manifold	corridor-minus-culvert	true	2382.307175485	NaN	NaN	3264	4.7	box culvert cut across the sweep
+manifold	10k-walls	true	20998.485019558	20998.484999999	+9.315e-10	320000	992.5	far from origin; Manifold may use its own threads

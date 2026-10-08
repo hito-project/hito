@@ -1,0 +1,6 @@
+kernel	case	ok	volume	exact	rel_error	triangles	ms	note
+truck	wall-window	true	2.712000000	2.712000000	-3.275e-16	116	3.4	
+truck	wall-door	false	0.000000000	2.580000000	-1.000e0	0	0.5	error: boolean failed (returned None)
+truck	plate-1-hole	true	0.039992443	0.039992397	+1.133e-6	1314	383.7	true circles, sequential subtraction
+truck	plate-10-holes	false	0.000000000	0.039923973	-1.000e0	0	474.8	error: boolean failed (returned None)
+truck	1k-walls	false	2098.890001957	2098.890000000	+9.326e-10	224196	3989.8	far from origin; x10 for 10k

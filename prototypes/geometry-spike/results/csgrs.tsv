@@ -1,0 +1,6 @@
+kernel	case	ok	volume	exact	rel_error	triangles	ms	note
+csgrs	wall-window	true	2.712000000	2.712000000	+4.912e-16	56	3.4
+csgrs	wall-door	true	2.580000000	2.580000000	-1.721e-16	52	2.0
+csgrs	plate-10-holes	true	0.039924461	0.039923973	+1.221e-5	2700	2400.7	32-gon holes, sequential subtraction
+csgrs	plate-50-holes	true	0.039622305	0.039619867	+6.153e-5	19656	311649.7	32-gon holes, sequential subtraction
+csgrs	1k-walls	true	2098.890001957	2098.890000000	+9.326e-10	56000	1221.8	far from origin; x10 for 10k

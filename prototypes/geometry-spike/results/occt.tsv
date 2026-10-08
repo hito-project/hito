@@ -1,0 +1,5 @@
+kernel	case	ok	volume	exact	rel_error	triangles	ms	note
+occt	wall-window	true	2.712000000	2.712000000	-1.637e-16	32	5.0
+occt	wall-door	true	2.580000000	2.580000000	-1.721e-16	28	4.3
+occt	plate-200-holes	true	0.038488640	0.038479469	+2.383e-4	27212	5082.4	true circles, sequential subtraction
+occt	1k-walls	true	2098.890001957	2098.890000000	+9.326e-10	32000	4143.4	far from origin; x10 for 10k

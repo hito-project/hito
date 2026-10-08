@@ -1,0 +1,11 @@
+[package]
+name = "k-manifold"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Links nixpkgs' prebuilt manifold through MANIFOLD_CSG_LIB_DIR (see README).
+[dependencies]
+common = { path = "../common" }
+manifold-csg = "0.4.1"

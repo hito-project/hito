@@ -1,0 +1,6 @@
+kernel	case	ok	volume	exact	rel_error	triangles	ms	note
+monstertruck	wall-window	true	2.712000000	2.712000000	+0.000e0	52	3.3	
+monstertruck	wall-door	false	0.000000000	2.580000000	-1.000e0	0	1.7	error: InvalidOutputShell { operation: "and", source: NotClosedShell }
+monstertruck	plate-1-hole	true	0.039992404	0.039992397	+1.570e-7	5080	124.6	true circles, sequential subtraction
+monstertruck	plate-10-holes	false	0.000000000	0.039923973	-1.000e0	0	113.2	error: EmptyOutputShell { operation: "and" }
+monstertruck	1k-walls	true	2098.890001957	2098.890000000	+9.326e-10	55616	2338.8	far from origin; x10 for 10k

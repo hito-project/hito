@@ -1,0 +1,13 @@
+[package]
+name = "k-truck"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+common = { path = "../common" }
+truck-modeling = "0.6"
+truck-shapeops = "0.4"
+truck-meshalgo = "0.4"
+truck-polymesh = "0.6"
