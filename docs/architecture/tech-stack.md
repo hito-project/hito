@@ -10,6 +10,7 @@
 | Geometry | To be decided | ? | Candidates: pure-Rust kernels, or Manifold (C++, would need a justification). Most BIM geometry is extruded profiles with openings. |
 | IFC | Our own IFC4 exporter, unless a Rust library proves sufficient | ✅ | IFC STEP files are plain text, so export is tractable |
 | DWG | To be decided | ? | LibreDWG is GPL, which conflicts with the [license](../decisions/0009-license.md) |
+| Storage | SQLite through rusqlite (bundled), proposed | ❌ (justified) | The `.hito` file is a SQLite database ([ADR 0013](../decisions/0013-storage-engine-and-file-format.md), proposed). turso, a Rust rewrite with the same file format, is the path to pure Rust later. |
 
 ## Interaction model
 
