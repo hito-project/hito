@@ -37,7 +37,7 @@ So we build the shared rows once, as a core, and add each discipline as a domain
 
 - **Core:** element store with stable IDs, schema system, relationships and dependency propagation, transactions, coordinates, view generation, spatial queries, the operator framework. Kept as small as possible.
 - **Domains:** plug-in schemas that add element types (wall, beam, pipe, alignment, bolt) on shared base classes. This follows the BisCore and domain pattern in Bentley BIS.
-- **Adapters:** solvers, importers and exporters, and renderers behind ports. Existing open-source solvers (OpenSees, EPANET, SWMM, Code_Aster) are wrapped, not rewritten.
+- **Adapters:** solvers, importers and exporters, and renderers behind ports. Existing open-source solvers are wrapped, not rewritten, under the solver rules in [ADR 0012](../decisions/0012-suite-definition.md): for example EPANET, SWMM, MYSTRAN, Kratos, and Code_Aster as a separate program.
 - **Workspaces:** discipline-specific UI layouts, similar to Revit's discipline tabs.
 - **Regional packs:** design codes, units, language and drawing standards, as adapters ([ADR 0008](../decisions/0008-argentina-first-international-by-design.md)).
 

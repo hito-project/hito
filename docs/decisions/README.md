@@ -17,5 +17,6 @@ Each ADR records one decision, its context and its consequences. ADRs are never 
 | [0009](0009-license.md) | License: MIT OR Apache-2.0 | Accepted |
 | [0010](0010-project-name-hito.md) | Project name: HITO (HITO Is Totally Open) | Accepted |
 | [0011](0011-mvp-structural-bim.md) | MVP: structural BIM (M1), preceded by foundations (M0) | Accepted |
+| [0012](0012-suite-definition.md) | Suite definition: which programs the suite replaces, and the rules for wrapping solvers | Accepted |
 
 Use [template.md](template.md) for new ADRs.
