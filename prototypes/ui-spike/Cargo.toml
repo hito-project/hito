@@ -1,0 +1,25 @@
+[package]
+name = "ui-spike"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.95"
+publish = false
+license = "MIT OR Apache-2.0"
+description = "Throwaway prototype for spike #4 (UI toolkit). Not part of HITO."
+
+# Standalone: not a member of any workspace.
+[workspace]
+
+[dependencies]
+eframe = { version = "0.36", default-features = false, features = ["wgpu", "accesskit", "default_fonts", "wayland", "x11"] }
+egui = "0.36"
+egui-wgpu = "0.36"
+egui_dock = "0.21"
+fluent-bundle = "0.16"
+unic-langid = { version = "0.9", features = ["macros"] }
+bytemuck = { version = "1", features = ["derive"] }
+glam = "0.30"
+
+[dev-dependencies]
+egui_kittest = { version = "0.36", features = ["eframe", "wgpu", "snapshot"] }
+image = { version = "0.25", default-features = false, features = ["png"] }

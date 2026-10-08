@@ -1,0 +1,6 @@
+sample	chars	glyphs	text
+Spanish	58	58	Señalización: ¿Pilar 30×30 cm? Sí, hormigón H-30, ø12 c/15
+Hebrew	9	15	שלום עולם
+Arabic	13	23	مرحبا بالعالم
+LTR + Arabic	19	23	Viga V-101 مرحبا 42
+RTL + Latin	17	23	שלום Viga 42 עולם
