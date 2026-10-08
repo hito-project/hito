@@ -1,0 +1,14 @@
+[package]
+name = "storage-spike"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Throwaway benchmark for spike #5 (storage engine and native file format). Not product code."
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+rusqlite = { version = "0.40", features = ["bundled", "blob"] }
+redb = "4.3"
+fjall = "3.1"
+zip = { version = "8.6", default-features = false, features = ["deflate"] }
+uuid = { version = "1", features = ["v7"] }
