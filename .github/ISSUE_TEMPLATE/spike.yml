@@ -3,6 +3,10 @@ description: Time-boxed research that ends in a decision (ADR) or a design docum
 title: "Spike: "
 labels: ["type:spike"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Spike results are stored in GitHub-native tools (Discussions, linked issues, sub-issues, ADRs), not as long plain-text comments on the spike. The **Where results go** section below is copied into the issue. Adjust it if this spike's outputs differ.
   - type: textarea
     id: question
     attributes:
@@ -18,5 +22,22 @@ body:
       value: |
         - [ ]
         - [ ] ADR or design document records the outcome
+    validations:
+      required: true
+  - type: textarea
+    id: results
+    attributes:
+      label: "Where results go: GitHub-native tools, not plain text on this issue"
+      description: Comments on the spike should only be short progress notes and links.
+      value: |
+        | Result | Where it goes |
+        |---|---|
+        | Option evaluations, comparisons, benchmarks and notes | A **Discussion** in the Research category |
+        | Prototype code | A **branch or draft PR** linked from this issue (no pasted code) |
+        | The decision | An **ADR** in `docs/decisions` (or a design document in `docs/architecture`) |
+        | A finding that affects other work | Linked on the **affected issue** |
+        | New work the spike reveals | New **stories or spikes**, as sub-issues of the relevant epic, with labels and milestone |
+
+        This spike is done when every result lives in one of those places and is linked from the checklist above.
     validations:
       required: true
