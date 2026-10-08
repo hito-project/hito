@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ideas and questions
+    url: https://github.com/hito-project/hito/discussions
+    about: Propose features or ask questions in Discussions. Agreed ideas become epics and stories.

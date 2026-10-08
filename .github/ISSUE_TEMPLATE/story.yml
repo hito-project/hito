@@ -1,0 +1,24 @@
+name: Story
+description: A user-visible increment that belongs to an epic
+labels: ["type:story"]
+body:
+  - type: textarea
+    id: story
+    attributes:
+      label: Story
+      value: "As a <role>, I want <capability>, so that <benefit>."
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      value: |
+        - [ ]
+    validations:
+      required: true
+  - type: input
+    id: epic
+    attributes:
+      label: Epic
+      description: The parent epic (for example #12). Maintainers will attach this story as a sub-issue.

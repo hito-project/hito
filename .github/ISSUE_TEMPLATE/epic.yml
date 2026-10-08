@@ -1,0 +1,24 @@
+name: Epic
+description: A capability area delivered by several stories (maintainers only)
+title: "E??: "
+labels: ["type:epic"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What capability does this epic deliver, and why does it matter?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Related ADRs, research and dependencies on other epics.
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: What is true when the epic is complete? Stories are added as sub-issues.
+    validations:
+      required: true

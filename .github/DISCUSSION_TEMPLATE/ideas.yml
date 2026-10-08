@@ -1,0 +1,18 @@
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What problem do you face in your work? Describe the workflow, not the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: How you solve it today
+      description: Which programs and steps do you use now (Revit, AutoCAD, CYPE…)?
+  - type: textarea
+    id: idea
+    attributes:
+      label: Idea
+      description: Optional. How HITO could solve it.

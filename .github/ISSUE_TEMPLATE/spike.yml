@@ -1,0 +1,22 @@
+name: Spike
+description: Time-boxed research that ends in a decision (ADR) or a design document
+title: "Spike: "
+labels: ["type:spike"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What do we need to find out, and which decision does it unblock?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Options to evaluate, criteria, prototypes, and the expected output (ADR or design doc).
+      value: |
+        - [ ]
+        - [ ] ADR or design document records the outcome
+    validations:
+      required: true
