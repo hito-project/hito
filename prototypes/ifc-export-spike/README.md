@@ -1,6 +1,6 @@
 # IFC export spike (#3)
 
-Throwaway prototype for [spike #3](https://github.com/hito-project/hito/issues/3). It writes the M1 structural elements to IFC4 and IFC4X3 with our own STEP Part 21 writer, with no dependencies, then checks the files with IfcOpenShell, an IDS file and the buildingSMART Validation Service's rules. The comparison with existing crates is in the "IFC export evaluation" Research discussion. The decision is in `docs/decisions/0016-ifc-export.md`.
+Throwaway prototype for [spike #3](https://github.com/hito-project/hito/issues/3). It writes the M1 structural elements to IFC4 and IFC4X3 with our own STEP Part 21 writer, with no dependencies, then checks the files with IfcOpenShell, an IDS file and the buildingSMART Validation Service's rules. The comparison with existing crates is in [Discussion #115](https://github.com/hito-project/hito/discussions/115). The decision is in `docs/decisions/0016-ifc-export.md`.
 
 This code isn't part of HITO and won't be merged.
 

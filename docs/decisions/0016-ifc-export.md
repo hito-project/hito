@@ -5,7 +5,7 @@
 
 ## Context
 
-M1 exports IFC4 ([ADR 0011](0011-mvp-structural-bim.md)), and IFC export comes early ([ADR 0002](0002-native-model-with-early-ifc-export.md)). Spike [#3](https://github.com/hito-project/hito/issues/3) surveyed the Rust IFC and STEP crates and built a prototype writer for the M1 elements. The survey, results and sources are in the IFC export evaluation Research discussion. The prototype is in the spike's draft PR.
+M1 exports IFC4 ([ADR 0011](0011-mvp-structural-bim.md)), and IFC export comes early ([ADR 0002](0002-native-model-with-early-ifc-export.md)). Spike [#3](https://github.com/hito-project/hito/issues/3) surveyed the Rust IFC and STEP crates and built a prototype writer for the M1 elements. The survey, results and sources are in [Discussion #115](https://github.com/hito-project/hito/discussions/115). The prototype code is in [PR #114](https://github.com/hito-project/hito/pull/114).
 
 What the survey found, checked on 2026-10-08:
 
