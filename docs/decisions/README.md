@@ -20,5 +20,6 @@ Each ADR records one decision, its context and its consequences. ADRs are never 
 | [0012](0012-suite-definition.md) | Suite definition: which programs the suite replaces, and the rules for wrapping solvers | Accepted |
 | [0013](0013-storage-engine-and-file-format.md) | Storage engine and native file format: SQLite, behind a storage port | Accepted |
 | [0014](0014-geometry-kernel.md) | Geometry kernel: Manifold behind a multi-representation geometry port, boolmesh as a second adapter | Accepted |
+| [0015](0015-ui-toolkit.md) | UI toolkit: egui on wgpu, behind HITO's own shell layer; Fluent for i18n; RTL languages wait for bidi support | Accepted |
 
 Use [template.md](template.md) for new ADRs.
