@@ -65,4 +65,4 @@ These are Python tools used only in CI. They aren't shipped or linked, so they d
 - CI needs Python with IfcOpenShell (LGPL, run as a tool), ifctester and the gherkin rules. The buildingSMART rules take about 40 s on a 1,700-element model, so per-PR fixtures stay small.
 - `IfcGridPlacement` is out until readers support it. The grid relationship can be added later with `IfcRelPositions` in IFC 4.3.
 - openbimrs is worth checking again if its license changes. ifc-lite is a candidate for IFC import (E22), as a reader.
-- New work: the Part 21 writer crate, the IFC export adapter (#51), the CI validation pipeline (#52), and an IDS file for M1.
+- New work: the Part 21 writer crate ([#116](https://github.com/hito-project/hito/issues/116)), the IFC export adapter ([#51](https://github.com/hito-project/hito/issues/51)), the CI validation pipeline ([#52](https://github.com/hito-project/hito/issues/52)) and an IDS file for M1 ([#117](https://github.com/hito-project/hito/issues/117)).
