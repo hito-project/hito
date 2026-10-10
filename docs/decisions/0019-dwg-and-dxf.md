@@ -1,6 +1,6 @@
 # 0019. DWG and DXF: our own pure-Rust codec, DXF first
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-10
 
 ## Context
@@ -27,7 +27,7 @@ Legal points from the spike (not legal advice; open questions are in [#130](http
 
 - **GPL.** The FSF treats programs that talk through pipes, sockets and command-line arguments as separate programs. Converting a DWG to a DXF file with LibreDWG's command-line tool is that case.
 - **Trademark.** The USPTO refused "DWG" as a trademark for Autodesk as merely descriptive, and the application was abandoned in 2016. Autodesk still treats DWG as its mark, sued the ODA in 2006 over writing the TrustedDWG watermark, and made the ODA drop DWG from its product names in 2010. TrustedDWG is a registered Autodesk trademark.
-- **Reverse engineering.** The EU allows decompiling for interoperability and holds that data file formats aren't protected by copyright. In the US it can be fair use, but a license can forbid it. Argentina's Ley 11.723 has no such exception. HITO doesn't need to decompile anything: the published specification, the DXF reference, permissively licensed code and sample files are enough.
+- **Reverse engineering.** The EU allows decompiling for interoperability and holds that data file formats aren't protected by copyright. In the US it can be fair use, but a license can forbid it. Argentine law doesn't prohibit reverse engineering, but unlike the EU's it has no explicit exception for decompiling, so how Ley 11.723 applies to decompilation is untested. Studying file formats isn't affected. HITO doesn't need to decompile anything: the published specification, the DXF reference, permissively licensed code and sample files are enough.
 
 ## Decision
 
