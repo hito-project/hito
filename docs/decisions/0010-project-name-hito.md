@@ -1,6 +1,6 @@
 # 0010. Project name: HITO
 
-- **Status:** Accepted
+- **Status:** Superseded by [0018](0018-hito-as-working-name.md)
 - **Date:** 2026-10-08
 
 ## Context
