@@ -1,0 +1,138 @@
+# Builds HITO for Linux, Windows and macOS on every push to main and
+# publishes the result as the `dev` prerelease, so anyone can try the latest
+# main without compiling (ADR 0017):
+#
+#   Linux     hito-linux-x86_64.AppImage   built on the oldest supported
+#                                          Ubuntu, so it runs on older glibc
+#   Windows   hito-windows-x86_64.zip      hito.exe, static C runtime
+#   macOS     hito-macos-universal.zip     HITO.app for Apple silicon and
+#                                          Intel, signed ad hoc
+#
+# Pull requests that change the packaging build the artifacts without
+# publishing them.
+name: Development builds
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - .cargo/config.toml
+      - .github/workflows/dev-builds.yml
+      - packaging/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  linux:
+    name: Linux AppImage
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install the Rust toolchain
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: cargo build --release --locked -p hito
+      - name: Package
+        run: |
+          mkdir dist
+          packaging/linux/build-appimage.sh target/release/hito dist/hito-linux-x86_64.AppImage
+      - uses: actions/upload-artifact@v7
+        with:
+          name: linux
+          path: dist/
+          if-no-files-found: error
+
+  windows:
+    name: Windows zip
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install the Rust toolchain
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: cargo build --release --locked -p hito
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory dist
+          Compress-Archive -Path target/release/hito.exe -DestinationPath dist/hito-windows-x86_64.zip
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows
+          path: dist/
+          if-no-files-found: error
+
+  macos:
+    name: macOS app
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install the Rust toolchain
+        run: |
+          rustup toolchain install
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: |
+          cargo build --release --locked -p hito --target aarch64-apple-darwin
+          cargo build --release --locked -p hito --target x86_64-apple-darwin
+          lipo -create -output target/hito \
+            target/aarch64-apple-darwin/release/hito \
+            target/x86_64-apple-darwin/release/hito
+      - name: Package
+        run: |
+          mkdir dist
+          version=$(cargo pkgid -p hito | sed 's/.*[#@]//')
+          packaging/macos/build-app.sh target/hito "$version" dist/hito-macos-universal.zip
+      - uses: actions/upload-artifact@v7
+        with:
+          name: macos
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: Publish the dev prerelease
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: [linux, windows, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Point the dev tag at this commit and replace the files
+        run: |
+          cat > notes.md <<EOF
+          The latest build of \`main\` ($GITHUB_SHA). It isn't a release: it may be broken, and files saved with it may not open in later builds.
+
+          | System | File | How to run |
+          |---|---|---|
+          | Linux | \`hito-linux-x86_64.AppImage\` | Make it executable (\`chmod +x\`), then open it. |
+          | Windows | \`hito-windows-x86_64.zip\` | Unzip and open \`hito.exe\`. If SmartScreen warns, choose *More info*, then *Run anyway*. |
+          | macOS | \`hito-macos-universal.zip\` | Unzip and open \`HITO.app\`. The first time, macOS blocks it: go to *System Settings → Privacy & Security* and choose *Open Anyway*. |
+          EOF
+          title="Development build"
+          if gh release view dev > /dev/null 2>&1; then
+            gh api --method PATCH "repos/$GH_REPO/git/refs/tags/dev" -f sha="$GITHUB_SHA" -F force=true
+            gh release upload dev dist/* --clobber
+            gh release edit dev --title "$title" --notes-file notes.md --prerelease
+          else
+            gh release create dev dist/* --target "$GITHUB_SHA" --title "$title" --notes-file notes.md --prerelease
+          fi

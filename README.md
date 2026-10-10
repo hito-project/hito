@@ -8,6 +8,18 @@ The project is in the research and design phase. The code so far is the workspac
 
 All documentation lives in [`docs/`](docs/README.md). To get involved, read [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Try the latest build
+
+Every change to `main` is built for Linux, Windows and macOS, with no compiling needed. These are development builds: expect them to break, and don't keep work in them.
+
+| System | Download | How to run |
+|---|---|---|
+| Linux | [hito-linux-x86_64.AppImage](https://github.com/hito-project/hito/releases/download/dev/hito-linux-x86_64.AppImage) | Make it executable (`chmod +x hito-linux-x86_64.AppImage`, or *Properties → Allow executing*), then open it. |
+| Windows | [hito-windows-x86_64.zip](https://github.com/hito-project/hito/releases/download/dev/hito-windows-x86_64.zip) | Unzip and open `hito.exe`. If SmartScreen warns, choose *More info*, then *Run anyway*. |
+| macOS | [hito-macos-universal.zip](https://github.com/hito-project/hito/releases/download/dev/hito-macos-universal.zip) | Unzip and open `HITO.app`. The first time, macOS blocks it: go to *System Settings → Privacy & Security* and choose *Open Anyway*. |
+
+The [dev prerelease](https://github.com/hito-project/hito/releases/tag/dev) shows which commit the files come from. The builds aren't signed yet, which is why Windows and macOS warn ([ADR 0017](docs/decisions/0017-development-builds.md)).
+
 ## Building and running
 
 ### Prerequisites

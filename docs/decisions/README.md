@@ -22,5 +22,6 @@ Each ADR records one decision, its context and its consequences. ADRs are never 
 | [0014](0014-geometry-kernel.md) | Geometry kernel: Manifold behind a multi-representation geometry port, boolmesh as a second adapter | Accepted |
 | [0015](0015-ui-toolkit.md) | UI toolkit: egui on wgpu, behind HITO's own shell layer; Fluent for i18n; RTL languages wait for bidi support | Accepted |
 | [0016](0016-ifc-export.md) | IFC export: our own STEP Part 21 writer, IFC4 for M1, validated in CI with IfcOpenShell and the buildingSMART rules | Accepted |
+| [0017](0017-development-builds.md) | Development builds: an AppImage for Linux, zips for Windows and macOS, published as a rolling `dev` prerelease on every push to main | Accepted |
 
 Use [template.md](template.md) for new ADRs.
