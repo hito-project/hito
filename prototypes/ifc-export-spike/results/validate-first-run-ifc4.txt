@@ -1,0 +1,44 @@
+Validating results/m1-ifc4.ifc
+--- Error 1 ---
+On instance:
+    #5=IfcOwnerHistory(#3,#4,$,.ADDED.,$,$,$,1791460800)
+Rule IfcOwnerHistory.CorrectChangeAction:
+    (exists(lastmodifieddate) or (not exists(lastmodifieddate) and (not exists(changeaction))) or (not exists(lastmodifieddate) and exists(changeaction) and (changeaction == IfcChangeActionEnum.NOTDEFINED or changeaction == IfcChangeActionEnum.NOCHANGE)))
+Violated by:
+    ((False or (not False and not True) or (not False and True and ('ADDED' == 'NOTDEFINED' or 'ADDED' == 'NOCHANGE'))))
+     +  where False = exists(<indeterminate_type object at 0x7b9b544be270>)
+     +  and   False = exists(<indeterminate_type object at 0x7b9b544be270>)
+     +  and   True = exists('ADDED')
+     +  and   False = exists(<indeterminate_type object at 0x7b9b544be270>)
+     +  and   True = exists('ADDED')
+     +  and   'NOTDEFINED' = IfcChangeActionEnum.NOTDEFINED
+     +  and   'NOCHANGE' = IfcChangeActionEnum.NOCHANGE
+
+--- Error 2 ---
+On instance:
+    #68=IfcRelDefinesByProperties('2NL1FbkVgBqOLzxP6kIMrN',#5,$,$,(#64),#67)
+Rule IfcRelDefinesByProperties.NoRelatedTypeObject:
+    (sizeof([types for types in SELF.RelatedObjects if 'ifc4.ifctypeobject' in typeof(types)]) == 0)
+Violated by:
+    (1 == 0)
+     +  where 1 = sizeof([#64=IfcColumnType('1kDWXrHBQ2YfJCKlJbKUux',#5,'C 30x30',$,$,$,$,$,$,.COLUMN.)])
+
+--- Error 3 ---
+On instance:
+    #76=IfcRelDefinesByProperties('3lOCej_0Y2ZgVkFzAPKSM2',#5,$,$,(#72),#75)
+Rule IfcRelDefinesByProperties.NoRelatedTypeObject:
+    (sizeof([types for types in SELF.RelatedObjects if 'ifc4.ifctypeobject' in typeof(types)]) == 0)
+Violated by:
+    (1 == 0)
+     +  where 1 = sizeof([#72=IfcColumnType('1AWl$dbS_7ce29vvBMjmt0',#5,'C Ø40',$,$,$,$,$,$,.COLUMN.)])
+
+--- Error 4 ---
+On instance:
+    #84=IfcRelDefinesByProperties('15EnF5ZDs0TeKBlw25S10b',#5,$,$,(#80),#83)
+Rule IfcRelDefinesByProperties.NoRelatedTypeObject:
+    (sizeof([types for types in SELF.RelatedObjects if 'ifc4.ifctypeobject' in typeof(types)]) == 0)
+Violated by:
+    (1 == 0)
+     +  where 1 = sizeof([#80=IfcBeamType('2BId82Msk8dugrPQ1Ss0ZQ',#5,'V 20x50',$,$,$,$,$,$,.BEAM.)])
+
+4 error(s) found.

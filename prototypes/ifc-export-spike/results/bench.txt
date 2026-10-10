@@ -1,0 +1,9 @@
+bench 20x20	1681 elements	43886 entities	2.6 MB	export 0.024 s	write 0.001 s
+bench 50x50	10201 elements	267086 entities	16.6 MB	export 0.152 s	write 0.004 s
+bench 100x100	40401 elements	1059086 entities	66.8 MB	export 0.629 s	write 0.019 s
+bench 200x200	160801 elements	4218086 entities	273.7 MB	export 2.367 s	write 0.127 s
+
+Validation of bench-20.ifc (IfcOpenShell 0.9.0, ifc-gherkin-rules main 2026-10-08):
+  ifcopenshell.validate            2.9 s   0 errors
+  ifcopenshell.validate --rules    8.9 s   0 errors
+  gherkin.py (buildingSMART rules) 38.6 s  0 errors, 1 warning (GRF003: the bench model has no georeference)

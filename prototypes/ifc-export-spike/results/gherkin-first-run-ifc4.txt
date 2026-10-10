@@ -1,0 +1,20 @@
+WARNING GRF003 - CRS presence with spatial entities E00020 25 There must be at least 1 instance(s) of .IfcProjectedCRS. {'value': []}
+ERROR OJT001 - Object Predefined Type E00020 160 The value of attribute .PredefinedType. must be ^empty^ [ {'schema_identifier': 'BEAM'}
+ERROR OJT001 - Object Predefined Type E00020 184 The value of attribute .PredefinedType. must be ^empty^ [ {'schema_identifier': 'BEAM'}
+ERROR OJT001 - Object Predefined Type E00020 138 The value of attribute .PredefinedType. must be ^empty^ [ {'schema_identifier': 'COLUMN'}
+ERROR OJT001 - Object Predefined Type E00020 87 The value of attribute .PredefinedType. must be ^empty^ [ {'schema_identifier': 'COLUMN'}
+ERROR OJT001 - Object Predefined Type E00020 104 The value of attribute .PredefinedType. must be ^empty^ [ {'schema_identifier': 'COLUMN'}
+ERROR OJT001 - Object Predefined Type E00020 121 The value of attribute .PredefinedType. must be ^empty^ [ {'schema_identifier': 'COLUMN'}
+ERROR OJT001 - Object Predefined Type E00020 213 The value of attribute .PredefinedType. must be ^empty^ [ {'schema_identifier': 'FLOOR'}
+ERROR OJT001 - Object Predefined Type E00020 255 The value of attribute .PredefinedType. must be ^empty^ [ {'schema_identifier': 'SOLIDWALL'}
+ERROR QTY001 - Standard quantities and quantity sets validation E00020 291 The value of attribute .MethodOfMeasurement. must be 'BaseQuantities' None
+ERROR QTY001 - Standard quantities and quantity sets validation E00020 276 The value of attribute .MethodOfMeasurement. must be 'BaseQuantities' None
+ERROR QTY001 - Standard quantities and quantity sets validation E00020 113 The value of attribute .MethodOfMeasurement. must be 'BaseQuantities' None
+ERROR QTY001 - Standard quantities and quantity sets validation E00020 96 The value of attribute .MethodOfMeasurement. must be 'BaseQuantities' None
+ERROR QTY001 - Standard quantities and quantity sets validation E00020 130 The value of attribute .MethodOfMeasurement. must be 'BaseQuantities' None
+ERROR QTY001 - Standard quantities and quantity sets validation E00020 147 The value of attribute .MethodOfMeasurement. must be 'BaseQuantities' None
+ERROR QTY001 - Standard quantities and quantity sets validation E00020 169 The value of attribute .MethodOfMeasurement. must be 'BaseQuantities' None
+ERROR QTY001 - Standard quantities and quantity sets validation E00020 193 The value of attribute .MethodOfMeasurement. must be 'BaseQuantities' None
+ERROR QTY001 - Standard quantities and quantity sets validation E00020 234 The value of attribute .MethodOfMeasurement. must be 'BaseQuantities' None
+{'rules': 104, 'harness notes': 123, 'NOT_APPLICABLE': 3789, 'EXECUTED': 68, 'WARNING': 1, 'ERROR': 17}
+17 error(s)

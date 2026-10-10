@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What HITO promises about an M1 structural export, as a buildingSMART IDS 1.0 file.
+     Run with: python -m ifctester m1.ids FILE.ifc -r Console -->
+<ids:ids xmlns:ids="http://standards.buildingsmart.org/IDS" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://standards.buildingsmart.org/IDS http://standards.buildingsmart.org/IDS/1.0/ids.xsd">
+  <ids:info>
+    <ids:title>HITO M1 structural export</ids:title>
+    <ids:description>Spike #3: the information every M1 structural element must carry.</ids:description>
+  </ids:info>
+  <ids:specifications>
+    <ids:specification name="Structural elements are load-bearing, concrete and on a storey" ifcVersion="IFC4 IFC4X3_ADD2">
+      <ids:applicability minOccurs="1" maxOccurs="unbounded">
+        <ids:entity>
+          <ids:name>
+            <xs:restriction base="xs:string">
+              <xs:enumeration value="IFCCOLUMN"/>
+              <xs:enumeration value="IFCBEAM"/>
+              <xs:enumeration value="IFCSLAB"/>
+              <xs:enumeration value="IFCWALL"/>
+              <xs:enumeration value="IFCFOOTING"/>
+            </xs:restriction>
+          </ids:name>
+        </ids:entity>
+      </ids:applicability>
+      <ids:requirements>
+        <ids:attribute>
+          <ids:name><ids:simpleValue>Name</ids:simpleValue></ids:name>
+        </ids:attribute>
+        <ids:property dataType="IFCBOOLEAN">
+          <ids:propertySet>
+            <xs:restriction base="xs:string">
+              <xs:pattern value="Pset_(Column|Beam|Slab|Wall|Footing)Common"/>
+            </xs:restriction>
+          </ids:propertySet>
+          <ids:baseName><ids:simpleValue>LoadBearing</ids:simpleValue></ids:baseName>
+          <ids:value><ids:simpleValue>TRUE</ids:simpleValue></ids:value>
+        </ids:property>
+        <ids:material>
+          <ids:value><ids:simpleValue>concrete</ids:simpleValue></ids:value>
+        </ids:material>
+        <ids:partOf relation="IFCRELCONTAINEDINSPATIALSTRUCTURE">
+          <ids:entity>
+            <ids:name><ids:simpleValue>IFCBUILDINGSTOREY</ids:simpleValue></ids:name>
+          </ids:entity>
+        </ids:partOf>
+      </ids:requirements>
+    </ids:specification>
+    <ids:specification name="Structural elements carry an exact net volume" ifcVersion="IFC4 IFC4X3_ADD2">
+      <ids:applicability minOccurs="1" maxOccurs="unbounded">
+        <ids:entity>
+          <ids:name>
+            <xs:restriction base="xs:string">
+              <xs:enumeration value="IFCCOLUMN"/>
+              <xs:enumeration value="IFCBEAM"/>
+              <xs:enumeration value="IFCSLAB"/>
+              <xs:enumeration value="IFCWALL"/>
+              <xs:enumeration value="IFCFOOTING"/>
+            </xs:restriction>
+          </ids:name>
+        </ids:entity>
+      </ids:applicability>
+      <ids:requirements>
+        <ids:property dataType="IFCVOLUMEMEASURE">
+          <ids:propertySet>
+            <xs:restriction base="xs:string">
+              <xs:pattern value="Qto_(Column|Beam|Slab|Wall|Footing)BaseQuantities"/>
+            </xs:restriction>
+          </ids:propertySet>
+          <ids:baseName><ids:simpleValue>NetVolume</ids:simpleValue></ids:baseName>
+        </ids:property>
+      </ids:requirements>
+    </ids:specification>
+    <ids:specification name="Columns and beams have a type with a profile" ifcVersion="IFC4 IFC4X3_ADD2">
+      <ids:applicability minOccurs="1" maxOccurs="unbounded">
+        <ids:entity>
+          <ids:name>
+            <xs:restriction base="xs:string">
+              <xs:enumeration value="IFCCOLUMNTYPE"/>
+              <xs:enumeration value="IFCBEAMTYPE"/>
+            </xs:restriction>
+          </ids:name>
+        </ids:entity>
+      </ids:applicability>
+      <ids:requirements>
+        <ids:property dataType="IFCIDENTIFIER">
+          <ids:propertySet>
+            <xs:restriction base="xs:string">
+              <xs:pattern value="Pset_(Column|Beam)Common"/>
+            </xs:restriction>
+          </ids:propertySet>
+          <ids:baseName><ids:simpleValue>Reference</ids:simpleValue></ids:baseName>
+        </ids:property>
+        <ids:material>
+          <ids:value><ids:simpleValue>concrete</ids:simpleValue></ids:value>
+        </ids:material>
+      </ids:requirements>
+    </ids:specification>
+  </ids:specifications>
+</ids:ids>

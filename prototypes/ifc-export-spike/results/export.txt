@@ -1,0 +1,4 @@
+m1-ifc4.ifc	301 entities	17359 bytes	9 elements checked
+m1-ifc4x3.ifc	301 entities	17364 bytes	9 elements checked
+m1-ifc4-gridplacement.ifc	300 entities	17357 bytes	9 elements checked
+m1-ifc4x3-gridplacement.ifc	300 entities	17370 bytes	9 elements checked

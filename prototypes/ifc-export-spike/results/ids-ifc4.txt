@@ -1,0 +1,21 @@
+HITO M1 structural export
+[PASS] (9/9) *Structural elements are load-bearing, concrete and on a storey
+    Applies to:
+        All {'enumeration': ['IFCCOLUMN', 'IFCBEAM', 'IFCSLAB', 'IFCWALL', 'IFCFOOTING']} data
+    Requirements:
+        The Name shall be provided
+        LoadBearing data shall be TRUE and in the dataset {'pattern': 'Pset_(Column|Beam|Slab|Wall|Footing)Common'}
+        Shall have a material of concrete
+        An element must have an IFCRELCONTAINEDINSPATIALSTRUCTURE relationship with an IFCBUILDINGSTOREY
+[PASS] (9/9) *Structural elements carry an exact net volume
+    Applies to:
+        All {'enumeration': ['IFCCOLUMN', 'IFCBEAM', 'IFCSLAB', 'IFCWALL', 'IFCFOOTING']} data
+    Requirements:
+        NetVolume data shall be provided in the dataset {'pattern': 'Qto_(Column|Beam|Slab|Wall|Footing)BaseQuantities'}
+[PASS] (3/3) *Columns and beams have a type with a profile
+    Applies to:
+        All {'enumeration': ['IFCCOLUMNTYPE', 'IFCBEAMTYPE']} data
+    Requirements:
+        Reference data shall be provided in the dataset {'pattern': 'Pset_(Column|Beam)Common'}
+        Shall have a material of concrete
+

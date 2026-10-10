@@ -1,0 +1,13 @@
+[package]
+name = "ifc-export-spike"
+version = "0.0.0"
+edition = "2021"
+publish = false
+license = "MIT OR Apache-2.0"
+description = "Spike #3: a minimal STEP Part 21 writer and the M1 structural elements written to IFC4 and IFC4X3"
+
+# No dependencies on purpose: the spike measures how much code our own writer needs.
+[dependencies]
+
+[profile.release]
+debug = false

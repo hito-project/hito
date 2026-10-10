@@ -1,0 +1,13 @@
+schema IFC4X3_ADD2: 0 issue(s), 2.87 s
+geometry: class, name, exact volume (parameters), mesh volume (IfcOpenShell), relative difference, bbox ok
+  IfcColumn  C1   0.270000 0.270000 0.00e+00 True
+  IfcColumn  C2   0.270000 0.270000 1.85e-15 True
+  IfcColumn  C3   0.270000 0.270000 5.14e-15 True
+  IfcColumn  C4   0.376991 0.375767 3.25e-03 True
+  IfcBeam    V1   0.600000 0.600000 3.70e-16 True
+  IfcBeam    V2   0.500000 0.500000 6.66e-16 True
+  IfcSlab    L1   4.828500 4.828500 5.52e-16 True
+  IfcWall    M1   3.012000 3.012000 2.80e-15 True
+  IfcFooting Z1   0.720000 0.720000 0.00e+00 True
+semantics: 9 elements checked
+PASS

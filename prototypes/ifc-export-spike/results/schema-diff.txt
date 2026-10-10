@@ -1,0 +1,5 @@
+IfcGridPlacement: IFC4 ['PlacementLocation', 'PlacementRefDirection']
+    IFC4X3 ['PlacementRelTo', 'PlacementLocation', 'PlacementRefDirection']
+IfcPropertySingleValue: IFC4 ['Name', 'Description', 'NominalValue', 'Unit']
+    IFC4X3 ['Name', 'Specification', 'NominalValue', 'Unit']
+63 entity types used, 61 identical in both schemas

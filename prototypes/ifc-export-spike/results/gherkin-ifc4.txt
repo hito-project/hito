@@ -1,0 +1,2 @@
+{'rules': 104, 'harness notes': 123, 'NOT_APPLICABLE': 3786, 'EXECUTED': 71}
+PASS
