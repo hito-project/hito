@@ -1,0 +1,33 @@
+# Turns on auto-merge (squash) for the project owner's pull requests, so they
+# merge as soon as the required checks in ci.yml pass. Other people's pull
+# requests are left for review, and drafts wait until they're marked ready.
+#
+# It uses the AUTOMERGE_TOKEN secret, a fine-grained personal access token of
+# the owner with "Contents" and "Pull requests" read and write on this
+# repository. A merge made with the default GITHUB_TOKEN wouldn't trigger the
+# push workflows on main (CI and the dev builds of ADR 0017).
+name: Auto-merge
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  enable:
+    name: Enable auto-merge
+    if: github.event.pull_request.user.login == 'Santiago-Garrote' && !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enable auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::The AUTOMERGE_TOKEN secret isn't set. See the comment at the top of auto-merge.yml."
+            exit 1
+          fi
+          gh pr merge --auto --squash "$PR_URL"
