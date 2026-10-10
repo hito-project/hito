@@ -1,6 +1,14 @@
-# Builds HITO and runs its tests, including the architecture's dependency
-# rules (tools/architecture-check), on Linux, Windows and macOS.
-# Formatting, lints, license checks and required status checks come with #11.
+# Checks every pull request and every push to main. All jobs are required
+# status checks on main:
+#
+#   Format       rustfmt
+#   Licenses     dependency licenses are MIT/Apache-2.0 compatible (ADR 0009,
+#                deny.toml)
+#   Lint and test, on Linux, Windows and macOS
+#                clippy with warnings as errors, then the build and the tests.
+#                The tests include the architecture's dependency rules and the
+#                check that every non-Rust dependency is justified (ADR 0005),
+#                both in tools/architecture-check.
 name: CI
 
 on:
@@ -19,8 +27,33 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-and-test:
-    name: Build and test (${{ matrix.os }})
+  format:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # rustup is preinstalled on GitHub's runners; this installs the
+      # toolchain pinned in rust-toolchain.toml.
+      - name: Install the Rust toolchain
+        run: rustup toolchain install
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+  licenses:
+    name: Licenses
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install the Rust toolchain
+        run: rustup toolchain install
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+      - name: Check dependency licenses
+        run: cargo deny --locked check licenses
+
+  lint-and-test:
+    name: Lint and test (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
@@ -28,11 +61,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
-      # rustup is preinstalled on GitHub's runners; this installs the
-      # toolchain pinned in rust-toolchain.toml.
       - name: Install the Rust toolchain
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
+      - name: Lint (warnings fail the build)
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Build
         run: cargo build --workspace --locked
       - name: Test (includes the dependency rules)
