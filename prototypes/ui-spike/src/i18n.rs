@@ -18,8 +18,6 @@ pub struct I18n {
 fn bundle(id: LanguageIdentifier, src: &str) -> FluentBundle<FluentResource> {
     let res = FluentResource::try_new(src.to_owned()).expect("valid .ftl");
     let mut b = FluentBundle::new(vec![id]);
-    // No Unicode isolation marks around arguments: egui would draw them as boxes.
-    b.set_use_isolating(false);
     b.add_resource(res).expect("no duplicate keys");
     b
 }
