@@ -20,5 +20,6 @@ Each ADR records one decision, its context and its consequences. ADRs are never 
 | [0012](0012-suite-definition.md) | Suite definition: which programs the suite replaces, and the rules for wrapping solvers | Accepted |
 | [0013](0013-storage-engine-and-file-format.md) | Storage engine and native file format: SQLite, behind a storage port | Accepted |
 | [0014](0014-geometry-kernel.md) | Geometry kernel: Manifold behind a multi-representation geometry port, boolmesh as a second adapter | Accepted |
+| [0016](0016-ifc-export.md) | IFC export: our own STEP Part 21 writer, IFC4 for M1, validated in CI with IfcOpenShell and the buildingSMART rules | Proposed |
 
 Use [template.md](template.md) for new ADRs.
