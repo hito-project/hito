@@ -1,0 +1,4 @@
+# Link the C runtime statically on Windows, so hito.exe runs on machines
+# without the Visual C++ redistributable (ADR 0017).
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

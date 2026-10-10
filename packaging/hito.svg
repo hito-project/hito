@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- A hito: a survey marker, with the reference mark on top. -->
+  <rect width="256" height="256" rx="48" fill="#1f3a5f"/>
+  <path d="M92 76h72l24 132H68z" fill="#e8e4da"/>
+  <path d="M68 208h120" stroke="#c9c2b2" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="128" cy="76" r="22" fill="#e8e4da"/>
+  <path d="M128 40v72M92 76h72" stroke="#d9534f" stroke-width="10" stroke-linecap="round"/>
+</svg>

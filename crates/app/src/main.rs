@@ -1,5 +1,8 @@
 //! The HITO desktop application. For now it opens an empty window.
 
+// Release builds on Windows open no console window next to the app.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use eframe::egui;
 
 fn main() -> eframe::Result {

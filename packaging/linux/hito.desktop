@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=HITO
+Comment=Civil engineering suite
+Comment[es]=Suite de ingeniería civil
+Exec=hito
+Icon=hito
+Terminal=false
+Categories=Science;Engineering;
