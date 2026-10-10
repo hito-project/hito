@@ -11,12 +11,16 @@
 //! is checked as soon as it's added under `crates/`. The check reads the output
 //! of `cargo metadata` and runs in `cargo test --workspace`
 //! (see `tests/dependency_rules.rs`).
+//!
+//! The [`non_rust`] module flags dependencies that aren't pure Rust (ADR 0005).
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::path::Path;
 
 use serde_json::Value;
+
+pub mod non_rust;
 
 /// Crates that belong to a UI toolkit. Only the app may depend on them.
 pub const UI_CRATES: &[&str] = &[

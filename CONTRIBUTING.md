@@ -27,6 +27,19 @@ Discussion  →  ADR (if a decision is needed)  →  Epic  →  Stories  →  Pu
 - **Nothing region-specific in the core.** No hardcoded strings, units or design-code rules ([ADR 0008](docs/decisions/0008-argentina-first-international-by-design.md)).
 - **Familiar UX.** Follow the conventions of Revit, AutoCAD and CYPE. Departures need an ADR ([ADR 0007](docs/decisions/0007-ui-familiar-to-current-users.md)).
 
+## Checks
+
+CI runs these on every pull request, on Linux, Windows and macOS, and they must pass before merging:
+
+```sh
+cargo fmt --all --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+cargo deny check licenses    # needs cargo-deny
+```
+
+`cargo test` also checks the architecture's dependency rules and that every non-Rust dependency is justified. Justifications live in `tools/architecture-check/src/non_rust.rs`. Allowed licenses are in `deny.toml`.
+
 ## Labels
 
 | Label | Meaning |

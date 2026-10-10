@@ -1,6 +1,6 @@
 [package]
 name = "hito-architecture-check"
-description = "Checks that HITO's crates follow the architecture's dependency rules."
+description = "Checks that HITO's crates follow the architecture's dependency rules and that non-Rust dependencies are justified."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
