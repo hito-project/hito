@@ -1,0 +1,39 @@
+# Builds HITO and runs its tests, including the architecture's dependency
+# rules (tools/architecture-check), on Linux, Windows and macOS.
+# Formatting, lints, license checks and required status checks come with #11.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-and-test:
+    name: Build and test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      # rustup is preinstalled on GitHub's runners; this installs the
+      # toolchain pinned in rust-toolchain.toml.
+      - name: Install the Rust toolchain
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: cargo build --workspace --locked
+      - name: Test (includes the dependency rules)
+        run: cargo test --workspace --locked
