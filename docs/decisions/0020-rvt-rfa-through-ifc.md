@@ -1,6 +1,6 @@
 # 0020. RVT and RFA: through Revit's IFC export, no direct reader for now
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-10
 
 ## Context
@@ -23,7 +23,7 @@ No route available to an open-source project gives a native, editable round trip
 The law, summarised in the Discussion (it isn't legal advice):
 
 - Studying a file format to interoperate is generally lawful in the EU, where contract terms can't forbid it (Directive 2009/24/EC, articles 5, 6 and 8; *SAS v. WPL*). In the US it's fair use (*Sega*, *Connectix*), and RVT files aren't encrypted, so the DMCA anti-circumvention rule probably doesn't apply.
-- Argentina's Ley 11.723 has no exception for interoperability.
+- Argentine law doesn't prohibit reverse engineering, but unlike the EU's it has no explicit exception for interoperability or decompiling, so how Ley 11.723 applies to decompilation is untested. Studying file formats isn't affected.
 - Autodesk's terms forbid Revit users from studying Revit's "data structures", and put South American customers under California law. US courts have enforced such clauses (*Bowers v. Baystate*). Most people who would contribute RVT knowledge or test files to HITO are bound by them.
 - Autodesk has enforced hard around file compatibility before: it sued the ODA over DWG in 2006 and won a restraining order in nine days.
 

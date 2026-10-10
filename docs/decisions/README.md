@@ -25,6 +25,6 @@ Each ADR records one decision, its context and its consequences. ADRs are never 
 | [0017](0017-development-builds.md) | Development builds: an AppImage for Linux, zips for Windows and macOS, published as a rolling `dev` prerelease on every push to main | Accepted |
 | [0018](0018-hito-as-working-name.md) | HITO is a working name until the first public release; trademark conflicts in Argentina, the US and the EU | Accepted |
 | [0019](0019-dwg-and-dxf.md) | DWG and DXF: our own pure-Rust codec for the AutoCAD drawing database, DXF first, then DWG read and write; built from published specifications and permissive code only; no LibreDWG or ODA dependency | Accepted |
-| [0020](0020-rvt-rfa-through-ifc.md) | RVT and RFA: through Revit's IFC export, with a Revit add-in later for families; no direct RVT reader for now | Proposed |
+| [0020](0020-rvt-rfa-through-ifc.md) | RVT and RFA: through Revit's IFC export, with a Revit add-in later for families; no direct RVT reader for now | Accepted |
 
 Use [template.md](template.md) for new ADRs.
