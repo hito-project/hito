@@ -56,3 +56,4 @@ Every push to `main` builds all three and replaces the files of one GitHub prere
 - Only the newest build is available. Older builds are rebuilt from their commit if needed.
 - C and C++ dependencies are compiled on the build machine, so Ubuntu 22.04's compiler sets the oldest `libstdc++` HITO needs on Linux. When GitHub retires that image, the build moves to the next LTS.
 - macOS builds compile twice, once per architecture.
+- The AppImage starts with the AppImage runtime, a separate program (MIT) that statically links libfuse (LGPL-2.1) to mount the image. It isn't linked with HITO's code, so it doesn't affect HITO's license ([ADR 0009](0009-license.md)), but the runtime's license and libfuse's source must stay available to whoever receives the file. Both are public upstream.
