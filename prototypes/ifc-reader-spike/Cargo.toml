@@ -1,0 +1,26 @@
+[package]
+name = "ifc-reader-spike"
+version = "0.0.0"
+edition = "2024"
+publish = false
+license = "MIT OR Apache-2.0"
+description = "Spike #139: ifc-lite versus our own Part 21 reader for IFC import"
+
+# Not a member of HITO's workspace.
+[workspace]
+
+[dependencies]
+# Candidate A: ifc-lite (MPL-2.0), pinned to the release tested.
+ifc-lite-core = "=20.4.0"
+ifc-lite-geometry = "=20.4.0"
+ifc-lite-processing = "=20.4.0"
+rustc-hash = "2"
+# Candidate B: our own reader (src/p21.rs, no dependencies) with the IFC
+# geometry mapped in src/geom.rs. Booleans go through Manifold, as the
+# geometry port would (ADR 0014). Polygon triangulation uses earcutr (ISC).
+manifold-csg = "0.4.1"
+earcutr = "0.5"
+
+[profile.release]
+debug = false
+panic = "unwind"

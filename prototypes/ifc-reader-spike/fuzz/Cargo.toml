@@ -1,0 +1,29 @@
+[package]
+name = "ifc-reader-spike-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+license = "MIT OR Apache-2.0"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+ifc-reader-spike = { path = ".." }
+
+[[bin]]
+name = "own"
+path = "fuzz_targets/own.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "lite"
+path = "fuzz_targets/lite.rs"
+test = false
+doc = false
+bench = false
