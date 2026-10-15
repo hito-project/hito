@@ -1,6 +1,6 @@
 # 0011. MVP: structural BIM
 
-- **Status:** Accepted
+- **Status:** Superseded by [0021](0021-ifc-import-in-m1.md)
 - **Date:** 2026-10-08
 
 ## Context

@@ -96,7 +96,7 @@ Every element lives in exactly one **model**. Models have kinds:
 - **analytical:** later
 - **linked:** read-only external content (SR-10)
 
-This is BIS's design, kept small. It's cheap now, and it gives later features an obvious home: the analytical model, 2D drafting, linked DWG and IFC files, and per-model loading for large projects (SR-5). M1 uses a single physical model plus a definition model.
+This is BIS's design, kept small. It's cheap now, and it gives later features an obvious home: the analytical model, 2D drafting, linked DWG and IFC files, and per-model loading for large projects (SR-5). M1 uses a single physical model plus a definition model, and a linked model for each linked IFC file ([ADR 0021](../decisions/0021-ifc-import-in-m1.md)).
 
 ### 3. Classes and schemas: defined in Rust, described at runtime
 
