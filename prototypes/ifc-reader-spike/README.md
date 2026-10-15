@@ -1,6 +1,6 @@
 # IFC reader spike (#139)
 
-Throwaway prototype for [spike #139](https://github.com/hito-project/hito/issues/139). It reads the same IFC files with two candidate readers and with IfcOpenShell as the reference, and compares what each can turn into a mesh, how fast, with how much memory, and how they behave under fuzzing. The results are in the Discussion linked from the issue. The decision is in `docs/decisions/0022-ifc-reader.md`.
+Throwaway prototype for [spike #139](https://github.com/hito-project/hito/issues/139). It reads the same IFC files with two candidate readers and with IfcOpenShell as the reference, and compares what each can turn into a mesh, how fast, with how much memory, and how they behave under fuzzing. The results are in [Discussion #147](https://github.com/hito-project/hito/discussions/147). The decision is in `docs/decisions/0022-ifc-reader.md`.
 
 This code isn't part of HITO and won't be merged.
 

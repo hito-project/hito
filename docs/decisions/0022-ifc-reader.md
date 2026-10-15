@@ -10,7 +10,7 @@ M1 imports IFC ([ADR 0021](0021-ifc-import-in-m1.md)): linked read-only referenc
 - **ifc-lite** (`ifc-lite-core`, `-geometry`, `-processing`, MPL-2.0), a fast reader and geometry engine.
 - **Our own reader**: a STEP Part 21 reader next to the writer of [#116](https://github.com/hito-project/hito/issues/116), with the IFC mapping and geometry in HITO and booleans through the geometry port ([ADR 0014](0014-geometry-kernel.md)).
 
-Both read the same 118 public IFC files (47,650 elements: Revit 2011 to 2027, ArchiCAD, Tekla, IfcOpenShell and others, IFC2X3 to IFC4X3), with IfcOpenShell 0.9 as the reference. Both were fuzzed. The results, sources and corpus are in the Research Discussion linked from #139. The prototype is in the draft pull request for #139.
+Both read the same 118 public IFC files (47,650 elements: Revit 2011 to 2027, ArchiCAD, Tekla, IfcOpenShell and others, IFC2X3 to IFC4X3), with IfcOpenShell 0.9 as the reference. Both were fuzzed. The results, sources and corpus are in [Discussion #147](https://github.com/hito-project/hito/discussions/147). The prototype code is in [PR #146](https://github.com/hito-project/hito/pull/146).
 
 What the spike found:
 
