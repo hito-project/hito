@@ -8,13 +8,30 @@
 //! store and schemas is in
 //! [element-model.md](https://github.com/hito-project/hito/blob/main/docs/architecture/element-model.md).
 //!
-//! So far it has element identity: [`ElementId`]s, [`Code`]s and
-//! [`ExternalSource`]s.
+//! So far it has:
+//!
+//! - element identity: [`ElementId`]s, [`Code`]s and [`ExternalSource`]s
+//! - the schema system: domains declare a [`Schema`] of classes with typed
+//!   properties, and register it in the [`SchemaRegistry`] at startup
+//! - the [`ElementStore`], which holds [`Model`]s and [`Element`]s, checks
+//!   them against the schemas and resolves type and instance property values
 
 mod code;
+mod element;
 mod id;
 mod provenance;
+mod registry;
+mod schema;
+mod store;
+mod unit;
+mod value;
 
 pub use code::{Code, CodeSpec, EmptyCodeError};
+pub use element::{Aspect, Element, Model, ModelId, ModelKind, Properties};
 pub use id::{ElementId, ParseElementIdError};
 pub use provenance::ExternalSource;
+pub use registry::{Class, ClassKind, SchemaError, SchemaRegistry};
+pub use schema::{Access, ClassDef, ClassId, PropertyDef, Schema, SchemaVersion};
+pub use store::{ElementStore, StoreError};
+pub use unit::Dimension;
+pub use value::{DataType, Value};
