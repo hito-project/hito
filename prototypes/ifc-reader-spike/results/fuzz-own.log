@@ -1,0 +1,14 @@
+WARNING: Failed to find function "__sanitizer_acquire_crash_state".
+WARNING: Failed to find function "__sanitizer_print_stack_trace".
+WARNING: Failed to find function "__sanitizer_set_death_callback".
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 4091083944
+INFO: Loaded 1 modules   (6112 inline 8-bit counters): 6112 [0x64a01aef2fa0, 0x64a01aef4780), 
+INFO: Loaded 1 PC tables (6112 PCs): 6112 [0x64a01aef4780,0x64a01af0c580), 
+INFO: -fork=2: fuzzing in separate process(s)
+INFO: -fork=2: 1048 seed inputs, starting to fuzz in /tmp/libFuzzerTemp.FuzzWithFork99005.dir
+INFO: fuzzed for 7264 seconds, wrapping up soon
+INFO: exiting: 0 time: 7264s
+#4567131: cov: 2863 ft: 13008 corp: 3067 exec/s: 546 oom/timeout/crash: 0/0/0 time: 7264s job: 168 dft_time: 0
+INFO: fuzzed for 7264 seconds, wrapping up soon
+INFO: exiting: 0 time: 7264s
