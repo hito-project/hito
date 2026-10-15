@@ -27,5 +27,6 @@ Each ADR records one decision, its context and its consequences. ADRs are never 
 | [0019](0019-dwg-and-dxf.md) | DWG and DXF: our own pure-Rust codec for the AutoCAD drawing database, DXF first, then DWG read and write; built from published specifications and permissive code only; no LibreDWG or ODA dependency | Accepted |
 | [0020](0020-rvt-rfa-through-ifc.md) | RVT and RFA: through Revit's IFC export, with a Revit add-in later for families; no direct RVT reader for now | Accepted |
 | [0021](0021-ifc-import-in-m1.md) | M1 includes IFC import: linked read-only references, native import of M1 elements, and Revit's IFC exports, so Revit users can switch | Accepted |
+| [0022](0022-ifc-reader.md) | IFC reader: our own STEP Part 21 reader next to the writer, IFC geometry in HITO through the geometry port; ifc-lite as a CI reference, not a dependency | Proposed |
 
 Use [template.md](template.md) for new ADRs.
