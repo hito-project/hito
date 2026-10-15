@@ -31,3 +31,4 @@ publish = false
 hito-core = { path = "crates/core" }
 hito-structural = { path = "crates/domains/structural" }
 hito-storage-sqlite = { path = "crates/adapters/storage-sqlite" }
+hito-step = { path = "crates/adapters/step" }
