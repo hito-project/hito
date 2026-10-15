@@ -4,7 +4,9 @@
 
 Prints Markdown tables: per file, per geometry kind, and the most common failures.
 An element "matches" IfcOpenShell when both meshed it and the volumes agree within
-1% (or 1e-6 m3) and every bounding-box extent within 1% (or 5 mm).
+1% (or 1e-6 m3). Extents aren't compared because ifc-lite's pipeline returns meshes
+with the site rotation removed. EXTENTS=1 in the environment adds the extent check
+(every bounding-box extent within 1% or 5 mm), which only makes sense for `own`.
 """
 import collections, glob, json, os, sys
 
@@ -21,7 +23,7 @@ def matches(r, ref):
         return False
     if not close(r["vol"], ref["vol"], 0.01, 1e-6):
         return False
-    return all(close(x, y, 0.01, 0.005) for x, y in zip(r["ext"], ref["ext"]))
+    return not os.environ.get("EXTENTS") or all(close(x, y, 0.01, 0.005) for x, y in zip(r["ext"], ref["ext"]))
 
 
 def origin_family(o):
@@ -38,7 +40,7 @@ cats = collections.defaultdict(lambda: collections.Counter())
 fails = {r: collections.Counter() for r in READERS}
 fam = collections.defaultdict(lambda: collections.Counter())
 for path in sorted(glob.glob(f"{out}/*.jsonl")):
-    if path.endswith(".ios.jsonl"):
+    if path.endswith(".ios.jsonl") or path.endswith(".pipe.jsonl"):
         continue
     name = os.path.basename(path)[:-6]
     lines = open(path).read().splitlines()
@@ -53,6 +55,18 @@ for path in sorted(glob.glob(f"{out}/*.jsonl")):
             rows[r["id"]] = r
         except json.JSONDecodeError:
             pass
+    pipe_path = f"{out}/{name}.pipe.jsonl"
+    if os.path.exists(pipe_path):
+        # ifc-lite's own pipeline replaces the per-element router results
+        pipe = {}
+        for l in open(pipe_path).read().splitlines():
+            try:
+                r = json.loads(l)
+            except json.JSONDecodeError:
+                continue
+            pipe[r.pop("id")] = r
+        for i, r in rows.items():
+            r["lite"] = {"ok": True, **pipe[i]} if i in pipe and pipe[i]["tris"] > 0 else {"ok": False, "err": "not in pipeline output"}
     ios_path = f"{out}/{name}.ios.jsonl"
     if os.path.exists(ios_path):
         for l in open(ios_path).read().splitlines():

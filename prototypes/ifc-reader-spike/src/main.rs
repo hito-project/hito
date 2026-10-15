@@ -310,6 +310,21 @@ fn main() {
         "bench-lite" => bench_lite(path),
         "fuzz-own" => println!("{}", run_own(&std::fs::read(path).expect("read"))),
         "fuzz-lite" => println!("{}", run_lite(&std::fs::read(path).expect("read"))),
+        "lite-pipeline" => {
+            // Per-element results from ifc-lite's whole pipeline, to cross-check `compare`.
+            let data = std::fs::read(path).expect("read");
+            let r = ifc_lite_processing::process_geometry(&data);
+            let mut by: HashMap<u32, Mesh> = HashMap::new();
+            for m in &r.meshes {
+                let e = by.entry(m.express_id).or_default();
+                let base = e.pos.len() as u32;
+                e.pos.extend(m.positions.chunks(3).map(|c| [c[0] as f64, c[1] as f64, c[2] as f64]));
+                e.tri.extend(m.indices.chunks(3).filter(|t| t.len() == 3).map(|t| [t[0] + base, t[1] + base, t[2] + base]));
+            }
+            for (id, m) in by {
+                println!("{{\"id\":{id},{}}}", summary(&m));
+            }
+        }
         _ => eprintln!(
             "usage: ifc-reader-spike compare|bench-own|bench-lite|fuzz-own|fuzz-lite <file>"
         ),
