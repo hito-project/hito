@@ -11,3 +11,5 @@ publish.workspace = true
 # The core depends on no other HITO crate and no UI toolkit.
 # tools/architecture-check fails the tests if that changes.
 [dependencies]
+# Element IDs are UUID version 7, generated locally (docs/architecture/element-model.md).
+uuid = { version = "1.27", default-features = false, features = ["std", "v7"] }
