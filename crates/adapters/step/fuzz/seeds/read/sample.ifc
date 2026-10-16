@@ -1,0 +1,19 @@
+ISO-10303-21;
+HEADER;
+/* written by hand */
+FILE_DESCRIPTION(('ViewDefinition [ReferenceView_V1.2]','Option [x]'),'2;1');
+FILE_NAME('Edificio \X2\00D1\X0\and\X2\00FA\X0\.ifc','2026-10-15T12:00:00',('Ana P\X2\00E9\X0\rez'),
+  ('Estudio O''Higgins'),'pre 1.0','Autodesk Revit 2025 (ENU)','');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCCARTESIANPOINT((0.,1.5,-2.E-3));
+/* a comment ; with a semicolon and a ' quote */
+#3= IFCWALL ('2O2Fr$t4X7Zf8NOew3FLOH',$,'Hormig\X2\00F3\X0\n ''A''; x',$,$,#2,*,.T.,
+  IFCLABEL('x'),.NOTDEFINED.,(1,-2,+3),.U.);
+#2=IFCLOCALPLACEMENT($,#1);
+#10=(IFCA(1)IFCB(#1,'s'));
+#7=IFCCARTESIANPOINT((1.,2.,3.));
+#8=IFCPOLYLOOP(((0.,0.),(1.,0.)),'\X4\0001F3D7\X0\\X\F3\S\s\PA\');
+ENDSEC;
+END-ISO-10303-21;

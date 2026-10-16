@@ -9,6 +9,8 @@
 #                The tests include the architecture's dependency rules and the
 #                check that every non-Rust dependency is justified (ADR 0005),
 #                both in tools/architecture-check.
+#   Fuzz         the STEP Part 21 reader on arbitrary bytes for a few minutes
+#                (ADR 0022). It needs nightly, so it's a separate job.
 name: CI
 
 on:
@@ -70,3 +72,35 @@ jobs:
         run: cargo build --workspace --locked
       - name: Test (includes the dependency rules)
         run: cargo test --workspace --locked
+
+  fuzz:
+    name: Fuzz
+    runs-on: ubuntu-latest
+    # Locally, from crates/adapters/step: the same command, with a nightly
+    # toolchain and `cargo install cargo-fuzz`.
+    defaults:
+      run:
+        working-directory: crates/adapters/step
+    steps:
+      - uses: actions/checkout@v5
+      # cargo-fuzz needs nightly for the sanitizer and coverage flags.
+      - name: Install a nightly toolchain
+        run: rustup toolchain install nightly --profile minimal
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-fuzz
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/adapters/step/fuzz
+      - name: Fuzz the Part 21 reader for three minutes
+        run: |
+          mkdir -p fuzz/corpus/read
+          cargo +nightly fuzz run read fuzz/corpus/read fuzz/seeds/read -- \
+            -dict=fuzz/read.dict -max_total_time=180 -max_len=65536 \
+            -timeout=10 -rss_limit_mb=2048
+      - name: Keep the failing input
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts
+          path: crates/adapters/step/fuzz/artifacts

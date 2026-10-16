@@ -1,0 +1,26 @@
+# cargo-fuzz targets for hito-step (ADR 0022). Not a workspace member: it
+# needs a nightly toolchain and libFuzzer, so it has a workspace of its own.
+# CI runs `read` for a few minutes on every pull request; see the Fuzz job in
+# .github/workflows/ci.yml, which also shows how to run it locally.
+[package]
+name = "hito-step-fuzz"
+version = "0.0.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+hito-step = { path = ".." }
+libfuzzer-sys = "0.4"
+
+[[bin]]
+name = "read"
+path = "fuzz_targets/read.rs"
+test = false
+doc = false
+bench = false
