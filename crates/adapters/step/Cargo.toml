@@ -1,6 +1,6 @@
 [package]
 name = "hito-step"
-description = "A STEP physical file (ISO 10303-21) writer that knows the encoding and nothing about IFC."
+description = "A STEP physical file (ISO 10303-21) writer and reader that know the encoding and nothing about IFC."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,6 +8,6 @@ license.workspace = true
 repository.workspace = true
 publish.workspace = true
 
-# No dependencies on purpose (ADR 0016). The crate knows the Part 21 encoding
-# and nothing about IFC or HITO's model; the IFC export adapter builds on it.
+# No dependencies on purpose (ADRs 0016 and 0022). The crate knows the Part 21 encoding
+# and nothing about IFC or HITO's model; the IFC export and import adapters build on it.
 [dependencies]
