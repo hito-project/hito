@@ -9,10 +9,10 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use crate::element::Properties;
+use crate::change::ElementChange;
 use crate::{
-    Aspect, ClassId, ClassKind, Code, Command, Element, ElementId, Model, ModelId, SchemaRegistry,
-    Transaction, Value, Violation,
+    ChangeSet, ClassId, Code, Command, Element, ElementId, Model, ModelId, SchemaRegistry,
+    StoreView, Transaction, Value, Violation,
 };
 
 /// A session's elements and models, checked against a schema registry.
@@ -27,10 +27,10 @@ use crate::{
 /// ```
 #[derive(Debug, Clone)]
 pub struct ElementStore {
-    registry: SchemaRegistry,
-    models: HashMap<ModelId, Model>,
-    elements: HashMap<ElementId, Element>,
-    codes: HashMap<Code, ElementId>,
+    pub(crate) registry: SchemaRegistry,
+    pub(crate) models: HashMap<ModelId, Model>,
+    pub(crate) elements: HashMap<ElementId, Element>,
+    pub(crate) codes: HashMap<Code, ElementId>,
 }
 
 impl ElementStore {
@@ -45,10 +45,6 @@ impl ElementStore {
         }
     }
 
-    pub fn registry(&self) -> &SchemaRegistry {
-        &self.registry
-    }
-
     /// Starts a transaction, the only way to change the store.
     pub fn transaction(&mut self) -> Transaction<'_> {
         Transaction::new(self, None)
@@ -58,6 +54,15 @@ impl ElementStore {
     /// returned with what changed.
     pub fn transaction_for(&mut self, command: Command) -> Transaction<'_> {
         Transaction::new(self, Some(command))
+    }
+
+    /// The store as a [`StoreView`], which has every read, documented.
+    pub fn view(&self) -> StoreView<'_> {
+        StoreView::new(self, None)
+    }
+
+    pub fn registry(&self) -> &SchemaRegistry {
+        &self.registry
     }
 
     pub fn model(&self, id: ModelId) -> Option<&Model> {
@@ -78,15 +83,9 @@ impl ElementStore {
         self.elements.values()
     }
 
-    /// The value of property `name` that applies to an element: its own
-    /// value if it has one, otherwise its type's. `None` if neither has a
-    /// value, or the element doesn't exist.
+    /// See [`StoreView::property`].
     pub fn property(&self, id: ElementId, name: &str) -> Option<&Value> {
-        let element = self.elements.get(&id)?;
-        element.properties.get(name).or_else(|| {
-            let type_element = self.elements.get(&element.type_id?)?;
-            type_element.properties.get(name)
-        })
+        self.view().property(id, name)
     }
 
     /// The element with this code, if any.
@@ -94,192 +93,37 @@ impl ElementStore {
         self.codes.get(code).copied()
     }
 
-    // The changes below are made through a `Transaction`, which documents
-    // them. Each checks first and changes nothing if it fails.
-
-    pub(crate) fn insert_model(&mut self, model: Model) -> Result<ModelId, StoreError> {
-        let id = model.id();
-        if self.models.contains_key(&id) {
-            return Err(StoreError::DuplicateModel(id));
+    /// Applies a committed change set. It runs no checks and no domain
+    /// logic: the transaction checked it.
+    pub(crate) fn apply(&mut self, changes: &ChangeSet) {
+        for model in &changes.models {
+            self.models.insert(model.id(), model.clone());
         }
-        self.models.insert(id, model);
-        Ok(id)
-    }
-
-    pub(crate) fn insert(&mut self, element: Element) -> Result<ElementId, StoreError> {
-        let id = element.id;
-        if self.elements.contains_key(&id) {
-            return Err(StoreError::DuplicateElement(id));
-        }
-        if !self.models.contains_key(&element.model) {
-            return Err(StoreError::UnknownModel(element.model));
-        }
-        self.check_class(&element.class, |kind| kind == ClassKind::Element)?;
-        self.check_properties(&element.class, &element.properties)?;
-        if let Some(type_id) = element.type_id {
-            self.check_type(&element.class, type_id)?;
-        }
-        self.check_aspects(&element.aspects)?;
-        if let Some(code) = &element.code {
-            self.check_code_free(code, id)?;
-            self.codes.insert(code.clone(), id);
-        }
-        self.elements.insert(id, element);
-        Ok(id)
-    }
-
-    pub(crate) fn set_property(
-        &mut self,
-        id: ElementId,
-        name: &str,
-        value: impl Into<Value>,
-    ) -> Result<(), StoreError> {
-        let value = value.into();
-        let element = self
-            .elements
-            .get(&id)
-            .ok_or(StoreError::UnknownElement(id))?;
-        self.check_property(&element.class, name, &value)?;
-        let element = self.elements.get_mut(&id).expect("checked above");
-        element.properties.insert(name.to_owned(), value);
-        Ok(())
-    }
-
-    pub(crate) fn clear_property(
-        &mut self,
-        id: ElementId,
-        name: &str,
-    ) -> Result<Option<Value>, StoreError> {
-        let element = self
-            .elements
-            .get_mut(&id)
-            .ok_or(StoreError::UnknownElement(id))?;
-        Ok(element.properties.remove(name))
-    }
-
-    pub(crate) fn set_code(&mut self, id: ElementId, code: Option<Code>) -> Result<(), StoreError> {
-        if !self.elements.contains_key(&id) {
-            return Err(StoreError::UnknownElement(id));
-        }
-        if let Some(code) = &code {
-            self.check_code_free(code, id)?;
-        }
-        let element = self.elements.get_mut(&id).expect("checked above");
-        if let Some(old) = element.code.take() {
-            self.codes.remove(&old);
-        }
-        if let Some(code) = &code {
-            self.codes.insert(code.clone(), id);
-        }
-        element.code = code;
-        Ok(())
-    }
-
-    /// Puts elements back in the state a transaction recorded (`None` if
-    /// they didn't exist), latest first, and removes the models it added.
-    pub(crate) fn restore(
-        &mut self,
-        elements: Vec<(ElementId, Option<Element>)>,
-        models: &[ModelId],
-    ) {
-        // Free every code first: an element may get back a code that another
-        // restored element holds now.
-        for (id, _) in &elements {
-            if let Some(code) = self.elements.get(id).and_then(|e| e.code.as_ref()) {
+        // Free the codes of every changed element first: one may take a code
+        // another gives up.
+        for change in &changes.elements {
+            let element = self.elements.get(&change.id());
+            if let Some(code) = element.and_then(|e| e.code.as_ref()) {
                 self.codes.remove(code);
             }
         }
-        for (id, before) in elements.into_iter().rev() {
-            match before {
-                Some(element) => {
-                    if let Some(code) = &element.code {
-                        self.codes.insert(code.clone(), id);
-                    }
-                    self.elements.insert(id, element);
+        for change in &changes.elements {
+            let id = change.id();
+            match change {
+                ElementChange::Created(element) => {
+                    self.elements.insert(id, element.clone());
                 }
-                None => {
+                ElementChange::Modified { fields, .. } => {
+                    let element = self.elements.get_mut(&id).expect("modified elements exist");
+                    fields.iter().for_each(|field| field.apply(element));
+                }
+                ElementChange::Deleted(_) => {
                     self.elements.remove(&id);
                 }
             }
-        }
-        for id in models {
-            self.models.remove(id);
-        }
-    }
-
-    fn check_class(
-        &self,
-        class: &ClassId,
-        kind_is_valid: impl Fn(ClassKind) -> bool,
-    ) -> Result<ClassKind, StoreError> {
-        let kind = self
-            .registry
-            .class(class)
-            .ok_or_else(|| StoreError::UnknownClass(class.clone()))?
-            .kind();
-        if !kind_is_valid(kind) {
-            return Err(StoreError::WrongClassKind(class.clone()));
-        }
-        Ok(kind)
-    }
-
-    fn check_property(&self, class: &ClassId, name: &str, value: &Value) -> Result<(), StoreError> {
-        let property =
-            self.registry
-                .property(class, name)
-                .ok_or_else(|| StoreError::UnknownProperty {
-                    class: class.clone(),
-                    property: name.to_owned(),
-                })?;
-        if !property.data_type().accepts(value) {
-            return Err(StoreError::WrongValueType {
-                class: class.clone(),
-                property: name.to_owned(),
-            });
-        }
-        Ok(())
-    }
-
-    fn check_properties(&self, class: &ClassId, properties: &Properties) -> Result<(), StoreError> {
-        properties
-            .iter()
-            .try_for_each(|(name, value)| self.check_property(class, name, value))
-    }
-
-    fn check_type(&self, class: &ClassId, type_id: ElementId) -> Result<(), StoreError> {
-        let type_element = self
-            .elements
-            .get(&type_id)
-            .ok_or(StoreError::UnknownElement(type_id))?;
-        let type_class = self.registry.class(class).and_then(|c| c.type_class());
-        match type_class {
-            Some(type_class) if self.registry.is_a(&type_element.class, type_class) => Ok(()),
-            _ => Err(StoreError::InvalidType {
-                class: class.clone(),
-                type_id,
-            }),
-        }
-    }
-
-    fn check_aspects(&self, aspects: &[Aspect]) -> Result<(), StoreError> {
-        for (i, aspect) in aspects.iter().enumerate() {
-            let kind = self.check_class(aspect.class(), |kind| kind != ClassKind::Element)?;
-            let repeated = aspects[..i].iter().any(|a| a.class() == aspect.class());
-            if kind == ClassKind::UniqueAspect && repeated {
-                return Err(StoreError::DuplicateAspect(aspect.class().clone()));
+            if let Some(code) = self.elements.get(&id).and_then(|e| e.code.clone()) {
+                self.codes.insert(code, id);
             }
-            self.check_properties(aspect.class(), aspect.properties())?;
-        }
-        Ok(())
-    }
-
-    fn check_code_free(&self, code: &Code, id: ElementId) -> Result<(), StoreError> {
-        match self.codes.get(code) {
-            Some(&other) if other != id => Err(StoreError::CodeInUse {
-                code: code.clone(),
-                element: other,
-            }),
-            _ => Ok(()),
         }
     }
 }

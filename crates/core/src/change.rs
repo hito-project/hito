@@ -1,13 +1,15 @@
 //! What a committed transaction changed
 //! ([element model §9](https://github.com/hito-project/hito/blob/main/docs/architecture/element-model.md#9-change-sets-one-structure-for-undo-saving-and-collaboration)).
 //!
-//! A [`ChangeSet`] is a record of facts: element 42 was like this and is now
-//! like that. It's plain data, and applying it needs no domain logic, so it
-//! means the same in any version of HITO. Undo and redo (#19) and change sets
-//! (#21) are built on it. Its final shape is decided by the history spike
-//! (#156).
+//! A [`ChangeSet`] is a record of facts, as deltas: element 42's `Height`
+//! went from 3 m to 3.5 m. A creation carries the whole new element and a
+//! deletion the whole deleted one, since that is their delta. It's plain
+//! data, and applying it needs no domain logic, so it means the same in any
+//! version of HITO. A transaction commits by applying its change set to the
+//! store. Undo and redo (#19) and change sets (#21) are built on it. Its
+//! serialised form is decided by the history spike (#156).
 
-use crate::{Element, ElementId, Model, Properties, Value};
+use crate::{Aspect, Code, Element, ElementId, ExternalSource, Model, Properties, Value};
 
 /// The user command a transaction carries out, as plain data: a name and
 /// parameters. The UI shows it in the undo list (#19).
@@ -60,33 +62,137 @@ impl ChangeSet {
     }
 
     /// The elements the transaction created, changed or deleted, in the
-    /// order it first changed them. An element changed and then changed
-    /// back isn't included.
+    /// order it first changed them. An element whose changes cancel out
+    /// isn't included.
     pub fn elements(&self) -> &[ElementChange] {
         &self.elements
     }
 }
 
-/// One element before and after a transaction: the whole element each time,
-/// `None` before if the transaction created it, and `None` after if it
-/// deleted it.
+/// What a transaction did to one element.
 #[derive(Debug, Clone, PartialEq)]
-pub struct ElementChange {
-    pub(crate) id: ElementId,
-    pub(crate) before: Option<Element>,
-    pub(crate) after: Option<Element>,
+pub enum ElementChange {
+    Created(Element),
+    /// Only the fields that differ, each from its value before the
+    /// transaction to its value after, however many times it changed.
+    Modified {
+        id: ElementId,
+        fields: Vec<FieldChange>,
+    },
+    Deleted(Element),
 }
 
 impl ElementChange {
     pub fn id(&self) -> ElementId {
-        self.id
+        match self {
+            Self::Created(element) | Self::Deleted(element) => element.id,
+            Self::Modified { id, .. } => *id,
+        }
     }
 
-    pub fn before(&self) -> Option<&Element> {
-        self.before.as_ref()
+    /// The change between two states of an element, `None` if it's the
+    /// same. `None` before means it was created, and after that it was
+    /// deleted.
+    pub(crate) fn between(before: Option<&Element>, after: Option<&Element>) -> Option<Self> {
+        match (before, after) {
+            (None, None) => None,
+            (None, Some(after)) => Some(Self::Created(after.clone())),
+            (Some(before), None) => Some(Self::Deleted(before.clone())),
+            (Some(before), Some(after)) => {
+                let fields = FieldChange::between(before, after);
+                let id = after.id;
+                (!fields.is_empty()).then_some(Self::Modified { id, fields })
+            }
+        }
+    }
+}
+
+/// One field of an element, before and after a transaction. The class and
+/// model of an element never change.
+#[derive(Debug, Clone, PartialEq)]
+pub enum FieldChange {
+    /// One of the element's own property values; `None` means unset.
+    Property {
+        name: String,
+        before: Option<Value>,
+        after: Option<Value>,
+    },
+    Type {
+        before: Option<ElementId>,
+        after: Option<ElementId>,
+    },
+    Code {
+        before: Option<Code>,
+        after: Option<Code>,
+    },
+    Source {
+        before: Option<ExternalSource>,
+        after: Option<ExternalSource>,
+    },
+    /// Aspects have no identity of their own, so they're recorded as the
+    /// whole list.
+    Aspects {
+        before: Vec<Aspect>,
+        after: Vec<Aspect>,
+    },
+}
+
+impl FieldChange {
+    fn between(before: &Element, after: &Element) -> Vec<Self> {
+        debug_assert!(before.class == after.class && before.model == after.model);
+        let mut names: Vec<_> = before.properties.keys().collect();
+        names.extend(after.properties.keys());
+        names.sort();
+        names.dedup();
+        let mut fields: Vec<_> = names
+            .into_iter()
+            .filter_map(|name| {
+                let (b, a) = (before.properties.get(name), after.properties.get(name));
+                (b != a).then(|| Self::Property {
+                    name: name.clone(),
+                    before: b.cloned(),
+                    after: a.cloned(),
+                })
+            })
+            .collect();
+        if before.type_id != after.type_id {
+            let (before, after) = (before.type_id, after.type_id);
+            fields.push(Self::Type { before, after });
+        }
+        if before.code != after.code {
+            let (before, after) = (before.code.clone(), after.code.clone());
+            fields.push(Self::Code { before, after });
+        }
+        if before.source != after.source {
+            let (before, after) = (before.source.clone(), after.source.clone());
+            fields.push(Self::Source { before, after });
+        }
+        if before.aspects != after.aspects {
+            let (before, after) = (before.aspects.clone(), after.aspects.clone());
+            fields.push(Self::Aspects { before, after });
+        }
+        fields
     }
 
-    pub fn after(&self) -> Option<&Element> {
-        self.after.as_ref()
+    /// Sets the field to its value after the change.
+    pub(crate) fn apply(&self, element: &mut Element) {
+        match self {
+            Self::Property {
+                name,
+                after: Some(value),
+                ..
+            } => {
+                element.properties.insert(name.clone(), value.clone());
+            }
+            Self::Property {
+                name, after: None, ..
+            } => {
+                element.properties.remove(name);
+            }
+            Self::Type { after, .. } => element.type_id = *after,
+            Self::Code { after, .. } => element.code = after.clone(),
+            Self::Source { after, .. } => element.source = after.clone(),
+            Self::Aspects { after, .. } => element.aspects = after.clone(),
+        }
     }
 }

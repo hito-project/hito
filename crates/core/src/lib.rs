@@ -31,8 +31,9 @@ mod store;
 mod transaction;
 mod unit;
 mod value;
+mod view;
 
-pub use change::{ChangeSet, Command, ElementChange};
+pub use change::{ChangeSet, Command, ElementChange, FieldChange};
 pub use code::{Code, CodeSpec, EmptyCodeError};
 pub use element::{Aspect, Element, Model, ModelId, ModelKind, Properties};
 pub use id::{ElementId, ParseElementIdError};
@@ -44,3 +45,4 @@ pub use store::{ElementStore, StoreError};
 pub use transaction::Transaction;
 pub use unit::Dimension;
 pub use value::{DataType, Value};
+pub use view::StoreView;

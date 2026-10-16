@@ -2,12 +2,13 @@
 //! only the core's public API: adding a discipline needs no change to the
 //! core (stories #14 and #20).
 
+use std::mem;
 use std::panic::{self, AssertUnwindSafe};
 
 use hito_core::{
     Access, Aspect, ClassDef, ClassId, ClassKind, Code, CodeSpec, Command, DataType, Dimension,
-    Element, ElementId, ElementStore, Model, ModelId, ModelKind, Rule, Schema, SchemaError,
-    SchemaRegistry, SchemaVersion, StoreError, Transaction, Value, Violation,
+    Element, ElementChange, ElementId, ElementStore, FieldChange, Model, ModelId, ModelKind, Rule,
+    Schema, SchemaError, SchemaRegistry, SchemaVersion, StoreError, Transaction, Value, Violation,
 };
 
 const SCHEMA: &str = "TestStructural";
@@ -457,7 +458,10 @@ fn changes_apply_only_when_committed() {
     let column = tx.insert(column).unwrap();
     tx.set_property(column_type, "Width", 0.50).unwrap();
     // The transaction sees its own changes.
-    assert_eq!(tx.property(column, "Width"), Some(&Value::Real(0.50)));
+    assert_eq!(
+        tx.view().property(column, "Width"),
+        Some(&Value::Real(0.50))
+    );
     drop(tx);
 
     assert!(p.store.model(model).is_none());
@@ -639,17 +643,73 @@ fn a_commit_returns_a_record_of_what_changed() {
     let models: Vec<_> = changes.models().iter().map(Model::id).collect();
     assert_eq!(models, [model]);
 
-    // One record per element, in the order they were first changed, with
-    // whole elements before and after.
-    let [created, modified] = changes.elements() else {
-        panic!("two elements changed");
-    };
-    assert_eq!(created.id(), column);
-    assert_eq!(created.before(), None);
-    assert_eq!(created.after(), p.store.get(column));
-    assert_eq!(modified.id(), column_type);
-    assert_eq!(modified.before(), Some(&type_before));
-    assert_eq!(modified.after(), p.store.get(column_type));
+    // One record per element, in the order they were first changed: the
+    // whole new element for a creation, only what changed for a change.
+    assert_eq!(
+        changes.elements(),
+        [
+            ElementChange::Created(p.store.get(column).unwrap().clone()),
+            ElementChange::Modified {
+                id: column_type,
+                fields: vec![FieldChange::Property {
+                    name: "Width".into(),
+                    before: type_before.properties().get("Width").cloned(),
+                    after: Some(Value::Real(0.35)),
+                }],
+            },
+        ]
+    );
+}
+
+#[test]
+fn several_changes_to_a_field_collapse_into_one() {
+    let mut p = project();
+    let column_type = p.column_type();
+    let level = p.insert(Element::new(class("Level"), p.physical)).unwrap();
+    let c1 = Code::new(CodeSpec::new("TestStructural:Mark"), level, "C1").unwrap();
+
+    let mut tx = p.store.transaction();
+    tx.set_property(column_type, "Width", 0.35).unwrap();
+    tx.set_property(column_type, "Width", 0.40).unwrap();
+    tx.set_property(column_type, "Depth", 0.50).unwrap();
+    tx.set_property(column_type, "Depth", 0.40).unwrap(); // back to where it was
+    tx.set_code(column_type, Some(c1.clone())).unwrap();
+    let changes = tx.commit().unwrap();
+
+    assert_eq!(
+        changes.elements(),
+        [ElementChange::Modified {
+            id: column_type,
+            fields: vec![
+                FieldChange::Property {
+                    name: "Width".into(),
+                    before: Some(Value::Real(0.30)),
+                    after: Some(Value::Real(0.40)),
+                },
+                FieldChange::Code {
+                    before: None,
+                    after: Some(c1),
+                },
+            ],
+        }]
+    );
+}
+
+#[test]
+fn a_leaked_transaction_changes_nothing() {
+    let mut p = project();
+    let column_type = p.column_type();
+    let before = p.store.clone();
+
+    let mut tx = p.store.transaction();
+    tx.set_property(column_type, "Width", 0.45).unwrap();
+    tx.insert(Element::new(class("Column"), p.physical))
+        .unwrap();
+    tx.insert_model(Model::new(ModelKind::Drawing)).unwrap();
+    // Leaking is safe Rust: no rollback runs, yet nothing may show.
+    mem::forget(tx);
+
+    assert_same_contents(&p.store, &before);
 }
 
 #[test]

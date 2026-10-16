@@ -4,16 +4,16 @@
 use std::fmt;
 use std::sync::Arc;
 
-use crate::{ClassId, Element, ElementId, ElementStore};
+use crate::{ClassId, Element, ElementId, StoreView};
 
-type Check = dyn Fn(&ElementStore, &Element) -> Result<(), String> + Send + Sync;
+type Check = dyn Fn(&StoreView<'_>, &Element) -> Result<(), String> + Send + Sync;
 
 /// A check on the elements of one class and its subclasses.
 ///
 /// A domain adds its rules to the
 /// [`SchemaRegistry`](crate::SchemaRegistry) at startup, after its schema.
 /// When a transaction commits, each rule checks every element of its class
-/// that the transaction created or changed. The check sees the whole store as
+/// that the transaction created or changed. The check sees the whole model as
 /// the transaction left it, and returns a message if the element breaks the
 /// rule:
 ///
@@ -42,7 +42,7 @@ impl Rule {
     pub fn new(
         name: impl Into<String>,
         class: ClassId,
-        check: impl Fn(&ElementStore, &Element) -> Result<(), String> + Send + Sync + 'static,
+        check: impl Fn(&StoreView<'_>, &Element) -> Result<(), String> + Send + Sync + 'static,
     ) -> Self {
         Self {
             name: name.into(),
@@ -60,8 +60,8 @@ impl Rule {
     }
 
     /// Checks one element.
-    pub(crate) fn check(&self, store: &ElementStore, element: &Element) -> Result<(), Violation> {
-        (self.check)(store, element).map_err(|message| Violation {
+    pub(crate) fn check(&self, view: &StoreView<'_>, element: &Element) -> Result<(), Violation> {
+        (self.check)(view, element).map_err(|message| Violation {
             rule: self.name.clone(),
             element: element.id(),
             message,
