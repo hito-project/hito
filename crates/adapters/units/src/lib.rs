@@ -34,6 +34,32 @@
 //!
 //! Units are proportional to SI. Units with an offset, like degrees Celsius,
 //! don't fit yet: no M1 property needs an absolute temperature.
+//!
+//! # Alternatives considered
+//!
+//! The expression parser is our own, about 450 lines. We checked in October
+//! 2026 whether an existing crate should replace it, running this crate's
+//! tests against a numbat-backed prototype. The pull request that added this
+//! section has the full comparison.
+//!
+//! - **numbat** 1.24 (MIT OR Apache-2.0) is the closest fit, but it failed 7
+//!   of 19 test groups. It reads `1 m 20 cm` and `10' 6"` as products, not
+//!   sums. Its built-in catalogue can't be restricted, so unknown symbols
+//!   like `parsecs` are accepted. It treats angles as pure numbers and
+//!   `0 m` as a plain number. It rounds some constants (psi, lbf) to 7
+//!   digits. Typed input reaches a whole language (`random()`, `if`, the
+//!   constant `e`). It also adds 39 crates, one of which (`option-ext`,
+//!   MPL-2.0) fails `deny.toml`, makes a binary 3.3 MB larger, takes 150 ms
+//!   to load its prelude and 1.6 ms per parse. Our ICU4X number reading
+//!   would have to stay anyway, and so would a tokenizer for mixed
+//!   quantities.
+//! - **fend-core** 1.5 (MIT, no dependencies) reads mixed quantities, but it
+//!   only returns formatted strings. It gives no value, no dimension and no
+//!   error positions.
+//! - **rink-core** 0.9 is MPL-2.0, and its units database is forked from GNU
+//!   units, which is GPL-3.0-or-later (ADR 0009 rules out both).
+//! - **uom** and **dimensioned** check dimensions at compile time. HITO's
+//!   schemas declare dimensions at run time.
 
 mod catalogue;
 mod error;

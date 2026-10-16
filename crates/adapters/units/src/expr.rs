@@ -73,6 +73,7 @@ pub(crate) fn evaluate(
         chars: &chars,
         tokens: &tokens,
         next: 0,
+        depth: 0,
         catalogue,
     };
     let quantity = parser.expr()?;
@@ -289,8 +290,13 @@ struct Parser<'a> {
     chars: &'a [char],
     tokens: &'a [Token],
     next: usize,
+    /// Parentheses and signs open around the current token.
+    depth: usize,
     catalogue: &'a UnitCatalogue,
 }
+
+/// How deeply parentheses and signs may nest. Far more than anyone types.
+const MAX_DEPTH: usize = 64;
 
 impl<'a> Parser<'a> {
     fn peek(&self) -> Option<&'a Token> {
@@ -364,11 +370,27 @@ impl<'a> Parser<'a> {
         Ok(left)
     }
 
+    /// Runs `nested` one level deeper, failing past [`MAX_DEPTH`] so that
+    /// input like `((((…` can't overflow the stack.
+    fn nest<T>(
+        &mut self,
+        at: usize,
+        nested: impl FnOnce(&mut Self) -> Result<T, ParseError>,
+    ) -> Result<T, ParseError> {
+        if self.depth == MAX_DEPTH {
+            return Err(ParseError::TooDeep { at });
+        }
+        self.depth += 1;
+        let result = nested(self);
+        self.depth -= 1;
+        result
+    }
+
     fn unary(&mut self) -> Result<Quantity, ParseError> {
         match self.peek_operator(&['+', '-']) {
-            Some((_, operator)) => {
+            Some((at, operator)) => {
                 self.next += 1;
-                let q = self.unary()?;
+                let q = self.nest(at, Self::unary)?;
                 let sign = if operator == '-' { -1.0 } else { 1.0 };
                 Ok(Quantity {
                     value: sign * q.value,
@@ -411,7 +433,8 @@ impl<'a> Parser<'a> {
             }
             Kind::Unit(unit) => self.with_units(unit),
             Kind::Open => {
-                let inner = self.expr()?;
+                let at = self.tokens[self.next - 1].at;
+                let inner = self.nest(at, Self::expr)?;
                 let close = self.take()?;
                 if close.kind != Kind::Close {
                     return Err(self.unexpected(close));
