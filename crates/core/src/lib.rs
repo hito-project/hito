@@ -16,8 +16,10 @@
 //! - the [`ElementStore`], which holds [`Model`]s and [`Element`]s, checks
 //!   them against the schemas and resolves type and instance property values
 //! - [`Transaction`]s, the only way to change the store: all or nothing,
-//!   checked against the domains' validation [`Rule`]s when they commit
+//!   checked against the domains' validation [`Rule`]s when they commit, and
+//!   recorded as a [`ChangeSet`]
 
+mod change;
 mod code;
 mod element;
 mod id;
@@ -30,6 +32,7 @@ mod transaction;
 mod unit;
 mod value;
 
+pub use change::{ChangeSet, Command, ElementChange};
 pub use code::{Code, CodeSpec, EmptyCodeError};
 pub use element::{Aspect, Element, Model, ModelId, ModelKind, Properties};
 pub use id::{ElementId, ParseElementIdError};

@@ -11,7 +11,7 @@ use std::fmt;
 
 use crate::element::Properties;
 use crate::{
-    Aspect, ClassId, ClassKind, Code, Element, ElementId, Model, ModelId, SchemaRegistry,
+    Aspect, ClassId, ClassKind, Code, Command, Element, ElementId, Model, ModelId, SchemaRegistry,
     Transaction, Value, Violation,
 };
 
@@ -51,7 +51,13 @@ impl ElementStore {
 
     /// Starts a transaction, the only way to change the store.
     pub fn transaction(&mut self) -> Transaction<'_> {
-        Transaction::new(self)
+        Transaction::new(self, None)
+    }
+
+    /// Starts a transaction that carries out a user command. The command is
+    /// returned with what changed.
+    pub fn transaction_for(&mut self, command: Command) -> Transaction<'_> {
+        Transaction::new(self, Some(command))
     }
 
     pub fn model(&self, id: ModelId) -> Option<&Model> {
@@ -170,7 +176,7 @@ impl ElementStore {
     }
 
     /// Puts elements back in the state a transaction recorded (`None` if
-    /// they didn't exist) and removes the models it added.
+    /// they didn't exist), latest first, and removes the models it added.
     pub(crate) fn restore(
         &mut self,
         elements: Vec<(ElementId, Option<Element>)>,
@@ -183,7 +189,7 @@ impl ElementStore {
                 self.codes.remove(code);
             }
         }
-        for (id, before) in elements {
+        for (id, before) in elements.into_iter().rev() {
             match before {
                 Some(element) => {
                     if let Some(code) = &element.code {

@@ -5,9 +5,9 @@
 use std::panic::{self, AssertUnwindSafe};
 
 use hito_core::{
-    Access, Aspect, ClassDef, ClassId, ClassKind, Code, CodeSpec, DataType, Dimension, Element,
-    ElementId, ElementStore, Model, ModelId, ModelKind, Rule, Schema, SchemaError, SchemaRegistry,
-    SchemaVersion, StoreError, Transaction, Value, Violation,
+    Access, Aspect, ClassDef, ClassId, ClassKind, Code, CodeSpec, Command, DataType, Dimension,
+    Element, ElementId, ElementStore, Model, ModelId, ModelKind, Rule, Schema, SchemaError,
+    SchemaRegistry, SchemaVersion, StoreError, Transaction, Value, Violation,
 };
 
 const SCHEMA: &str = "TestStructural";
@@ -615,6 +615,51 @@ fn rules_are_only_added_for_registered_classes() {
         registry.add_rule(rule),
         Err(SchemaError::UnknownClass(unknown))
     );
+}
+
+#[test]
+fn a_commit_returns_a_record_of_what_changed() {
+    let mut p = project();
+    let column_type = p.column_type();
+    let level = p.insert(Element::new(class("Level"), p.physical)).unwrap();
+    let type_before = p.store.get(column_type).unwrap().clone();
+
+    let command = Command::new("PlaceColumn").with_parameter("Height", 3.0);
+    let mut tx = p.store.transaction_for(command.clone());
+    let model = tx.insert_model(Model::new(ModelKind::Analytical)).unwrap();
+    let column = Element::new(class("Column"), p.physical).with_type(column_type);
+    let column = tx.insert(column).unwrap();
+    tx.set_property(column_type, "Width", 0.35).unwrap();
+    // Changed, then changed back: not part of the record.
+    tx.set_property(level, "Elevation", 1.0).unwrap();
+    tx.clear_property(level, "Elevation").unwrap();
+    let changes = tx.commit().unwrap();
+
+    assert_eq!(changes.command(), Some(&command));
+    let models: Vec<_> = changes.models().iter().map(Model::id).collect();
+    assert_eq!(models, [model]);
+
+    // One record per element, in the order they were first changed, with
+    // whole elements before and after.
+    let [created, modified] = changes.elements() else {
+        panic!("two elements changed");
+    };
+    assert_eq!(created.id(), column);
+    assert_eq!(created.before(), None);
+    assert_eq!(created.after(), p.store.get(column));
+    assert_eq!(modified.id(), column_type);
+    assert_eq!(modified.before(), Some(&type_before));
+    assert_eq!(modified.after(), p.store.get(column_type));
+}
+
+#[test]
+fn a_transaction_without_a_command_still_records_its_changes() {
+    let mut p = project();
+    let mut tx = p.store.transaction();
+    let level = tx.insert(Element::new(class("Level"), p.physical)).unwrap();
+    let changes = tx.commit().unwrap();
+    assert_eq!(changes.command(), None);
+    assert_eq!(changes.elements()[0].id(), level);
 }
 
 /// Checks that a store holds the same models, elements and codes as another.

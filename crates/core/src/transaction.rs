@@ -6,16 +6,21 @@
 //! the transaction is dropped without committing, even by a panic, the store
 //! goes back to that state.
 //!
-//! The commit is the single point where a change becomes part of the model,
-//! so the next E04 and E03 stories hook in there: recomputing dependent
-//! elements (#16) before the rules run, and turning the recorded states into
-//! a change set (#21) that undo and redo (#19) replay.
+//! The commit is the single point where a change becomes part of the model.
+//! It returns a [`ChangeSet`]: each changed element before and after. The
+//! next stories hook in there: recomputing dependent elements (#16) before
+//! the rules run, and undo and redo (#19) and change sets (#21) built on the
+//! returned record.
 
 use std::collections::HashSet;
 use std::mem;
 use std::ops::Deref;
 
-use crate::{Code, Element, ElementId, ElementStore, Model, ModelId, StoreError, Value, Violation};
+use crate::change::ElementChange;
+use crate::{
+    ChangeSet, Code, Command, Element, ElementId, ElementStore, Model, ModelId, StoreError, Value,
+    Violation,
+};
 
 /// A group of changes to an [`ElementStore`] that apply together or not at
 /// all. Start one with [`ElementStore::transaction`].
@@ -31,7 +36,8 @@ use crate::{Code, Element, ElementId, ElementStore, Model, ModelId, StoreError, 
 /// let model = tx.insert_model(Model::new(ModelKind::Physical))?;
 /// let element = tx.insert(Element::new(ClassId::GEOMETRIC_ELEMENT_3D, model))?;
 /// assert!(tx.get(element).is_some());
-/// tx.commit()?;
+/// let changes = tx.commit()?;
+/// assert_eq!(changes.elements()[0].id(), element);
 /// # Ok(())
 /// # }
 /// ```
@@ -43,6 +49,7 @@ use crate::{Code, Element, ElementId, ElementStore, Model, ModelId, StoreError, 
 #[derive(Debug)]
 pub struct Transaction<'s> {
     store: &'s mut ElementStore,
+    command: Option<Command>,
     journal: Journal,
 }
 
@@ -57,11 +64,17 @@ struct Journal {
 }
 
 impl<'s> Transaction<'s> {
-    pub(crate) fn new(store: &'s mut ElementStore) -> Self {
+    pub(crate) fn new(store: &'s mut ElementStore, command: Option<Command>) -> Self {
         Self {
             store,
+            command,
             journal: Journal::default(),
         }
+    }
+
+    /// The command the transaction carries out, if it was given one.
+    pub fn command(&self) -> Option<&Command> {
+        self.command.as_ref()
     }
 
     /// Adds a model.
@@ -112,16 +125,26 @@ impl<'s> Transaction<'s> {
     }
 
     /// Checks every element the transaction created or changed against the
-    /// rules for its class, and keeps the changes if none is broken.
-    /// Otherwise rolls them all back and returns every
+    /// rules for its class, and keeps the changes if none is broken. Returns
+    /// what changed. Otherwise rolls them all back and returns every
     /// [violation](StoreError::Violations).
-    pub fn commit(mut self) -> Result<(), StoreError> {
+    pub fn commit(mut self) -> Result<ChangeSet, StoreError> {
         let violations = self.validate();
         if !violations.is_empty() {
             return Err(StoreError::Violations(violations));
         }
-        self.journal = Journal::default();
-        Ok(())
+        let journal = mem::take(&mut self.journal);
+        let store = &*self.store;
+        let models = journal.models.iter();
+        let elements = journal.elements.into_iter().map(|(id, before)| {
+            let after = store.get(id).cloned();
+            ElementChange { id, before, after }
+        });
+        Ok(ChangeSet {
+            command: self.command.take(),
+            models: models.filter_map(|&id| store.model(id)).cloned().collect(),
+            elements: elements.filter(|c| c.before != c.after).collect(),
+        })
     }
 
     /// Undoes every change. Dropping the transaction does the same.
