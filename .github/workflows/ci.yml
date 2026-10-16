@@ -92,10 +92,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: crates/adapters/step/fuzz
+      # The prebuilt cargo-fuzz is a static musl binary and would build for
+      # musl by default, where the sanitizer can't run; name the glibc target.
       - name: Fuzz the Part 21 reader for three minutes
         run: |
           mkdir -p fuzz/corpus/read
-          cargo +nightly fuzz run read fuzz/corpus/read fuzz/seeds/read -- \
+          cargo +nightly fuzz run --target x86_64-unknown-linux-gnu \
+            read fuzz/corpus/read fuzz/seeds/read -- \
             -dict=fuzz/read.dict -max_total_time=180 -max_len=65536 \
             -timeout=10 -rss_limit_mb=2048
       - name: Keep the failing input
