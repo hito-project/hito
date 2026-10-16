@@ -2,6 +2,7 @@
 //!
 //! It holds a session's models and elements, checks every element against
 //! the registered schemas, and resolves type and instance property values.
+//! It changes only through a [`Transaction`].
 //! Saving and loading go through a storage adapter (E10), which reads and
 //! writes what this store holds: IDs, class names, codes and property values.
 
@@ -10,10 +11,20 @@ use std::fmt;
 
 use crate::element::Properties;
 use crate::{
-    Aspect, ClassId, ClassKind, Code, Element, ElementId, Model, ModelId, SchemaRegistry, Value,
+    Aspect, ClassId, ClassKind, Code, Element, ElementId, Model, ModelId, SchemaRegistry,
+    Transaction, Value, Violation,
 };
 
 /// A session's elements and models, checked against a schema registry.
+///
+/// Every change goes through a [`Transaction`]. The store itself only reads,
+/// so this doesn't compile:
+///
+/// ```compile_fail
+/// # use hito_core::{ElementStore, Model, ModelKind, SchemaRegistry};
+/// let mut store = ElementStore::new(SchemaRegistry::new());
+/// store.insert_model(Model::new(ModelKind::Physical));
+/// ```
 #[derive(Debug, Clone)]
 pub struct ElementStore {
     registry: SchemaRegistry,
@@ -38,49 +49,18 @@ impl ElementStore {
         &self.registry
     }
 
-    /// Adds a model.
-    pub fn insert_model(&mut self, model: Model) -> Result<ModelId, StoreError> {
-        let id = model.id();
-        if self.models.contains_key(&id) {
-            return Err(StoreError::DuplicateModel(id));
-        }
-        self.models.insert(id, model);
-        Ok(id)
+    /// Starts a transaction, the only way to change the store.
+    pub fn transaction(&mut self) -> Transaction<'_> {
+        Transaction::new(self)
     }
 
     pub fn model(&self, id: ModelId) -> Option<&Model> {
         self.models.get(&id)
     }
 
-    /// Adds an element, after checking it against its class:
-    ///
-    /// - its model exists and its class is a registered element class
-    /// - each property value is declared by the class and has the right data
-    ///   type
-    /// - its type, if any, is a stored element of the class's type class
-    /// - its aspects are of registered aspect classes, with at most one of
-    ///   each unique aspect class
-    /// - its code, if any, isn't used by another element
-    pub fn insert(&mut self, element: Element) -> Result<ElementId, StoreError> {
-        let id = element.id;
-        if self.elements.contains_key(&id) {
-            return Err(StoreError::DuplicateElement(id));
-        }
-        if !self.models.contains_key(&element.model) {
-            return Err(StoreError::UnknownModel(element.model));
-        }
-        self.check_class(&element.class, |kind| kind == ClassKind::Element)?;
-        self.check_properties(&element.class, &element.properties)?;
-        if let Some(type_id) = element.type_id {
-            self.check_type(&element.class, type_id)?;
-        }
-        self.check_aspects(&element.aspects)?;
-        if let Some(code) = &element.code {
-            self.check_code_free(code, id)?;
-            self.codes.insert(code.clone(), id);
-        }
-        self.elements.insert(id, element);
-        Ok(id)
+    /// Every model, in no particular order.
+    pub fn models(&self) -> impl Iterator<Item = &Model> {
+        self.models.values()
     }
 
     pub fn get(&self, id: ElementId) -> Option<&Element> {
@@ -103,9 +83,46 @@ impl ElementStore {
         })
     }
 
-    /// Sets one of an element's own property values. On a type, the new
-    /// value applies to every instance that doesn't override it.
-    pub fn set_property(
+    /// The element with this code, if any.
+    pub fn find_by_code(&self, code: &Code) -> Option<ElementId> {
+        self.codes.get(code).copied()
+    }
+
+    // The changes below are made through a `Transaction`, which documents
+    // them. Each checks first and changes nothing if it fails.
+
+    pub(crate) fn insert_model(&mut self, model: Model) -> Result<ModelId, StoreError> {
+        let id = model.id();
+        if self.models.contains_key(&id) {
+            return Err(StoreError::DuplicateModel(id));
+        }
+        self.models.insert(id, model);
+        Ok(id)
+    }
+
+    pub(crate) fn insert(&mut self, element: Element) -> Result<ElementId, StoreError> {
+        let id = element.id;
+        if self.elements.contains_key(&id) {
+            return Err(StoreError::DuplicateElement(id));
+        }
+        if !self.models.contains_key(&element.model) {
+            return Err(StoreError::UnknownModel(element.model));
+        }
+        self.check_class(&element.class, |kind| kind == ClassKind::Element)?;
+        self.check_properties(&element.class, &element.properties)?;
+        if let Some(type_id) = element.type_id {
+            self.check_type(&element.class, type_id)?;
+        }
+        self.check_aspects(&element.aspects)?;
+        if let Some(code) = &element.code {
+            self.check_code_free(code, id)?;
+            self.codes.insert(code.clone(), id);
+        }
+        self.elements.insert(id, element);
+        Ok(id)
+    }
+
+    pub(crate) fn set_property(
         &mut self,
         id: ElementId,
         name: &str,
@@ -122,9 +139,7 @@ impl ElementStore {
         Ok(())
     }
 
-    /// Removes one of an element's own property values, so its type's value
-    /// applies again. Returns the removed value.
-    pub fn clear_property(
+    pub(crate) fn clear_property(
         &mut self,
         id: ElementId,
         name: &str,
@@ -136,9 +151,7 @@ impl ElementStore {
         Ok(element.properties.remove(name))
     }
 
-    /// Gives an element a new code, or removes it with `None`. The element
-    /// keeps its ID.
-    pub fn set_code(&mut self, id: ElementId, code: Option<Code>) -> Result<(), StoreError> {
+    pub(crate) fn set_code(&mut self, id: ElementId, code: Option<Code>) -> Result<(), StoreError> {
         if !self.elements.contains_key(&id) {
             return Err(StoreError::UnknownElement(id));
         }
@@ -156,9 +169,36 @@ impl ElementStore {
         Ok(())
     }
 
-    /// The element with this code, if any.
-    pub fn find_by_code(&self, code: &Code) -> Option<ElementId> {
-        self.codes.get(code).copied()
+    /// Puts elements back in the state a transaction recorded (`None` if
+    /// they didn't exist) and removes the models it added.
+    pub(crate) fn restore(
+        &mut self,
+        elements: Vec<(ElementId, Option<Element>)>,
+        models: &[ModelId],
+    ) {
+        // Free every code first: an element may get back a code that another
+        // restored element holds now.
+        for (id, _) in &elements {
+            if let Some(code) = self.elements.get(id).and_then(|e| e.code.as_ref()) {
+                self.codes.remove(code);
+            }
+        }
+        for (id, before) in elements {
+            match before {
+                Some(element) => {
+                    if let Some(code) = &element.code {
+                        self.codes.insert(code.clone(), id);
+                    }
+                    self.elements.insert(id, element);
+                }
+                None => {
+                    self.elements.remove(&id);
+                }
+            }
+        }
+        for id in models {
+            self.models.remove(id);
+        }
     }
 
     fn check_class(
@@ -271,6 +311,8 @@ pub enum StoreError {
         code: Code,
         element: ElementId,
     },
+    /// A transaction broke validation rules, so it was rolled back.
+    Violations(Vec<Violation>),
 }
 
 impl fmt::Display for StoreError {
@@ -294,6 +336,10 @@ impl fmt::Display for StoreError {
             Self::DuplicateAspect(class) => write!(f, "unique aspect `{class}` appears twice"),
             Self::CodeInUse { code, element } => {
                 write!(f, "code `{}` is used by element {element}", code.value())
+            }
+            Self::Violations(violations) => {
+                write!(f, "{} validation rules broken", violations.len())?;
+                violations.iter().try_for_each(|v| write!(f, "\n- {v}"))
             }
         }
     }

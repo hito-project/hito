@@ -110,8 +110,9 @@ impl Aspect {
 /// An element: an instance of an element class, in a model.
 ///
 /// Build one with [`Element::new`] and the `with_` methods, then add it to an
-/// [`ElementStore`](crate::ElementStore), which checks it against the schemas.
-/// Once stored, it changes only through the store.
+/// [`ElementStore`](crate::ElementStore) through a
+/// [`Transaction`](crate::Transaction), which checks it against the schemas.
+/// Once stored, it changes only through transactions.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Element {
     pub(crate) id: ElementId,

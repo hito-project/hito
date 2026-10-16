@@ -6,7 +6,7 @@ use std::fmt;
 use std::iter;
 
 use crate::schema::ClassDef;
-use crate::{ClassId, PropertyDef, Schema, SchemaVersion};
+use crate::{ClassId, PropertyDef, Rule, Schema, SchemaVersion};
 
 /// Whether a class describes elements or aspects. It comes from the core
 /// root the class derives from.
@@ -55,16 +55,18 @@ impl Class {
     }
 }
 
-/// Every schema and class the running program knows.
+/// Every schema, class and validation rule the running program knows.
 ///
 /// It starts with the core schema. Each domain then
 /// [registers](SchemaRegistry::register) its schema at startup, before any
-/// element is created. A schema can only use classes from schemas registered
-/// before it, so domains register in dependency order.
+/// element is created, and [adds](SchemaRegistry::add_rule) its rules. A
+/// schema can only use classes from schemas registered before it, so domains
+/// register in dependency order.
 #[derive(Debug, Clone)]
 pub struct SchemaRegistry {
     schemas: Vec<(String, SchemaVersion)>,
     classes: HashMap<ClassId, Class>,
+    rules: Vec<Rule>,
 }
 
 impl SchemaRegistry {
@@ -76,6 +78,7 @@ impl SchemaRegistry {
         let mut registry = Self {
             schemas: vec![(ClassId::CORE_SCHEMA.to_owned(), Self::CORE_VERSION)],
             classes: HashMap::new(),
+            rules: Vec::new(),
         };
         let roots = [
             (ClassId::ELEMENT, ClassKind::Element),
@@ -153,6 +156,21 @@ impl SchemaRegistry {
     /// All properties of `class`: its own, then its base classes'.
     pub fn properties(&self, class: &ClassId) -> impl Iterator<Item = &PropertyDef> {
         self.lineage(class).flat_map(|c| &c.properties)
+    }
+
+    /// Adds a validation rule. Its class must be registered.
+    pub fn add_rule(&mut self, rule: Rule) -> Result<(), SchemaError> {
+        if self.class(rule.class()).is_none() {
+            return Err(SchemaError::UnknownClass(rule.class().clone()));
+        }
+        self.rules.push(rule);
+        Ok(())
+    }
+
+    /// The rules that apply to elements of `class`: those on the class and
+    /// on its base classes, in the order they were added.
+    pub fn rules(&self, class: &ClassId) -> impl Iterator<Item = &Rule> {
+        self.rules.iter().filter(|r| self.is_a(class, r.class()))
     }
 
     /// `class` and its base classes, from the class up to its core root.

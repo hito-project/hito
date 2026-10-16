@@ -1,11 +1,13 @@
-//! A test domain that defines its element types through a schema, using only
-//! the core's public API: adding a discipline needs no change to the core
-//! (story #14).
+//! A test domain that defines its element types and validation rules, using
+//! only the core's public API: adding a discipline needs no change to the
+//! core (stories #14 and #20).
+
+use std::panic::{self, AssertUnwindSafe};
 
 use hito_core::{
     Access, Aspect, ClassDef, ClassId, ClassKind, Code, CodeSpec, DataType, Dimension, Element,
-    ElementId, ElementStore, Model, ModelId, ModelKind, Schema, SchemaError, SchemaRegistry,
-    SchemaVersion, StoreError, Value,
+    ElementId, ElementStore, Model, ModelId, ModelKind, Rule, Schema, SchemaError, SchemaRegistry,
+    SchemaVersion, StoreError, Transaction, Value, Violation,
 };
 
 const SCHEMA: &str = "TestStructural";
@@ -41,10 +43,38 @@ fn schema() -> Schema {
         .class(ClassDef::new("Note", ClassId::MULTI_ASPECT).property("Text", DataType::Text))
 }
 
-/// What the app does at startup: the core schema, then each domain's.
+/// The test domain's validation rules. Each returns a message when an
+/// element breaks it.
+fn rules() -> [Rule; 2] {
+    let positive_height = Rule::new("PositiveHeight", class("Column"), |_, column| match column
+        .properties()
+        .get("Height")
+    {
+        Some(Value::Real(height)) if *height <= 0.0 => Err(format!("height is {height} m")),
+        _ => Ok(()),
+    });
+    // Reads the value that applies, which may come from the column's type.
+    let minimum_strength = Rule::new(
+        "MinimumStrength",
+        class("Column"),
+        |store, column| match store.property(column.id(), "ConcreteStrength") {
+            Some(Value::Real(strength)) if *strength < 20e6 => {
+                Err(format!("concrete strength is {} MPa", strength / 1e6))
+            }
+            _ => Ok(()),
+        },
+    );
+    [positive_height, minimum_strength]
+}
+
+/// What the app does at startup: the core schema, then each domain's schema
+/// and rules.
 fn registry() -> SchemaRegistry {
     let mut registry = SchemaRegistry::new();
     registry.register(schema()).unwrap();
+    for rule in rules() {
+        registry.add_rule(rule).unwrap();
+    }
     registry
 }
 
@@ -56,10 +86,10 @@ struct Project {
 
 fn project() -> Project {
     let mut store = ElementStore::new(registry());
-    let physical = store.insert_model(Model::new(ModelKind::Physical)).unwrap();
-    let definitions = store
-        .insert_model(Model::new(ModelKind::Definition))
-        .unwrap();
+    let mut tx = store.transaction();
+    let physical = tx.insert_model(Model::new(ModelKind::Physical)).unwrap();
+    let definitions = tx.insert_model(Model::new(ModelKind::Definition)).unwrap();
+    tx.commit().unwrap();
     Project {
         store,
         physical,
@@ -68,6 +98,26 @@ fn project() -> Project {
 }
 
 impl Project {
+    /// Makes a change in a transaction, as a user command would: commits it
+    /// if every step succeeds, otherwise rolls it all back.
+    fn change<T>(
+        &mut self,
+        change: impl FnOnce(&mut Transaction) -> Result<T, StoreError>,
+    ) -> Result<T, StoreError> {
+        let mut tx = self.store.transaction();
+        let result = change(&mut tx)?;
+        tx.commit()?;
+        Ok(result)
+    }
+
+    fn insert(&mut self, element: Element) -> Result<ElementId, StoreError> {
+        self.change(|tx| tx.insert(element))
+    }
+
+    fn set_property(&mut self, id: ElementId, name: &str, value: f64) -> Result<(), StoreError> {
+        self.change(|tx| tx.set_property(id, name, value))
+    }
+
     /// A 30 × 40 cm column type in H-25 concrete (25 MPa).
     fn column_type(&mut self) -> ElementId {
         let column_type = Element::new(class("ColumnType"), self.definitions)
@@ -75,14 +125,14 @@ impl Project {
             .with_property("Depth", 0.40)
             .with_property("ConcreteStrength", 25e6)
             .with_property("Grade", "H-25");
-        self.store.insert(column_type).unwrap()
+        self.insert(column_type).unwrap()
     }
 
     fn column(&mut self, type_id: ElementId) -> ElementId {
         let column = Element::new(class("Column"), self.physical)
             .with_type(type_id)
             .with_property("Height", 3.0);
-        self.store.insert(column).unwrap()
+        self.insert(column).unwrap()
     }
 }
 
@@ -141,7 +191,7 @@ fn values_must_match_the_declared_data_type() {
     let mut p = project();
     let wrong = Element::new(class("Column"), p.physical).with_property("Height", "3 m");
     assert_eq!(
-        p.store.insert(wrong),
+        p.insert(wrong),
         Err(StoreError::WrongValueType {
             class: class("Column"),
             property: "Height".into()
@@ -149,12 +199,12 @@ fn values_must_match_the_declared_data_type() {
     );
     let undeclared = Element::new(class("Column"), p.physical).with_property("Colour", "red");
     assert!(matches!(
-        p.store.insert(undeclared),
+        p.insert(undeclared),
         Err(StoreError::UnknownProperty { .. })
     ));
     let aspect_as_element = Element::new(class("Note"), p.physical);
     assert_eq!(
-        p.store.insert(aspect_as_element),
+        p.insert(aspect_as_element),
         Err(StoreError::WrongClassKind(class("Note")))
     );
 }
@@ -256,7 +306,7 @@ fn instances_share_their_types_values() {
     }
 
     // Editing the type changes every instance.
-    p.store.set_property(column_type, "Width", 0.35).unwrap();
+    p.set_property(column_type, "Width", 0.35).unwrap();
     for column in [c1, c2] {
         assert_eq!(p.store.property(column, "Width"), Some(&Value::Real(0.35)));
     }
@@ -269,7 +319,7 @@ fn an_instance_value_overrides_the_types() {
     let c1 = p.column(column_type);
     let c2 = p.column(column_type);
 
-    p.store.set_property(c1, "ConcreteStrength", 30e6).unwrap();
+    p.set_property(c1, "ConcreteStrength", 30e6).unwrap();
     assert_eq!(
         p.store.property(c1, "ConcreteStrength"),
         Some(&Value::Real(30e6))
@@ -280,7 +330,8 @@ fn an_instance_value_overrides_the_types() {
     );
 
     // Removing the override brings back the type's value.
-    p.store.clear_property(c1, "ConcreteStrength").unwrap();
+    p.change(|tx| tx.clear_property(c1, "ConcreteStrength"))
+        .unwrap();
     assert_eq!(
         p.store.property(c1, "ConcreteStrength"),
         Some(&Value::Real(25e6))
@@ -293,7 +344,7 @@ fn type_only_values_cant_be_set_on_an_instance() {
     let column_type = p.column_type();
     let c1 = p.column(column_type);
     assert!(matches!(
-        p.store.set_property(c1, "Width", 0.5),
+        p.set_property(c1, "Width", 0.5),
         Err(StoreError::UnknownProperty { .. })
     ));
 }
@@ -302,17 +353,17 @@ fn type_only_values_cant_be_set_on_an_instance() {
 fn an_element_type_must_be_of_its_class_type_class() {
     let mut p = project();
     let level = Element::new(class("Level"), p.physical).with_property("Elevation", 0.0);
-    let level = p.store.insert(level).unwrap();
+    let level = p.insert(level).unwrap();
     let column_type = p.column_type();
 
     let wrong_type = Element::new(class("Column"), p.physical).with_type(level);
     assert!(matches!(
-        p.store.insert(wrong_type),
+        p.insert(wrong_type),
         Err(StoreError::InvalidType { .. })
     ));
     let untyped_class = Element::new(class("Level"), p.physical).with_type(column_type);
     assert!(matches!(
-        p.store.insert(untyped_class),
+        p.insert(untyped_class),
         Err(StoreError::InvalidType { .. })
     ));
 }
@@ -326,7 +377,7 @@ fn aspects_add_checked_data_to_elements() {
         .with_aspect(Aspect::new(class("Reinforcement")).with_property("Cover", 0.025))
         .with_aspect(Aspect::new(class("Note")).with_property("Text", "check"))
         .with_aspect(Aspect::new(class("Note")).with_property("Text", "recheck"));
-    let column = p.store.insert(column).unwrap();
+    let column = p.insert(column).unwrap();
     let element = p.store.get(column).unwrap();
     assert_eq!(element.aspects_of(&class("Note")).count(), 2);
     assert_eq!(element.aspects_of(&class("Reinforcement")).count(), 1);
@@ -335,13 +386,13 @@ fn aspects_add_checked_data_to_elements() {
         .with_aspect(Aspect::new(class("Reinforcement")))
         .with_aspect(Aspect::new(class("Reinforcement")));
     assert_eq!(
-        p.store.insert(two_unique),
+        p.insert(two_unique),
         Err(StoreError::DuplicateAspect(class("Reinforcement")))
     );
     let wrong_unit = Element::new(class("Column"), p.physical)
         .with_aspect(Aspect::new(class("Reinforcement")).with_property("Cover", "25 mm"));
     assert!(matches!(
-        p.store.insert(wrong_unit),
+        p.insert(wrong_unit),
         Err(StoreError::WrongValueType { .. })
     ));
 }
@@ -349,28 +400,26 @@ fn aspects_add_checked_data_to_elements() {
 #[test]
 fn codes_are_unique_in_their_scope_and_renaming_keeps_the_id() {
     let mut p = project();
-    let level = p
-        .store
-        .insert(Element::new(class("Level"), p.physical))
-        .unwrap();
+    let level = p.insert(Element::new(class("Level"), p.physical)).unwrap();
     let mark = CodeSpec::new("TestStructural:Mark");
     let c12 = Code::new(mark.clone(), level, "C12").unwrap();
     let c13 = Code::new(mark, level, "C13").unwrap();
 
     let column = Element::new(class("Column"), p.physical).with_code(c12.clone());
-    let column = p.store.insert(column).unwrap();
+    let column = p.insert(column).unwrap();
     assert_eq!(p.store.find_by_code(&c12), Some(column));
 
     let clash = Element::new(class("Column"), p.physical).with_code(c12.clone());
     assert_eq!(
-        p.store.insert(clash),
+        p.insert(clash),
         Err(StoreError::CodeInUse {
             code: c12.clone(),
             element: column
         })
     );
 
-    p.store.set_code(column, Some(c13.clone())).unwrap();
+    p.change(|tx| tx.set_code(column, Some(c13.clone())))
+        .unwrap();
     assert_eq!(p.store.find_by_code(&c13), Some(column));
     assert_eq!(p.store.find_by_code(&c12), None);
     assert_eq!(p.store.get(column).unwrap().id(), column);
@@ -388,7 +437,203 @@ fn every_element_lives_in_an_existing_model() {
 
     let elsewhere = Model::new(ModelKind::Physical).id();
     assert_eq!(
-        p.store.insert(Element::new(class("Column"), elsewhere)),
+        p.insert(Element::new(class("Column"), elsewhere)),
         Err(StoreError::UnknownModel(elsewhere))
     );
+}
+
+// Transactions (#20). The model can't be mutated outside a transaction: the
+// store itself has no methods that change it (see the `compile_fail` example
+// on `ElementStore`).
+
+#[test]
+fn changes_apply_only_when_committed() {
+    let mut p = project();
+    let column_type = p.column_type();
+
+    let mut tx = p.store.transaction();
+    let model = tx.insert_model(Model::new(ModelKind::Analytical)).unwrap();
+    let column = Element::new(class("Column"), p.physical).with_type(column_type);
+    let column = tx.insert(column).unwrap();
+    tx.set_property(column_type, "Width", 0.50).unwrap();
+    // The transaction sees its own changes.
+    assert_eq!(tx.property(column, "Width"), Some(&Value::Real(0.50)));
+    drop(tx);
+
+    assert!(p.store.model(model).is_none());
+    assert!(p.store.get(column).is_none());
+    assert_eq!(
+        p.store.property(column_type, "Width"),
+        Some(&Value::Real(0.30))
+    );
+
+    let mut tx = p.store.transaction();
+    let column = tx
+        .insert(Element::new(class("Column"), p.physical))
+        .unwrap();
+    tx.commit().unwrap();
+    assert!(p.store.get(column).is_some());
+}
+
+#[test]
+fn a_failed_step_rolls_back_the_whole_transaction() {
+    let mut p = project();
+    let column_type = p.column_type();
+    let before = p.store.clone();
+    let physical = p.physical;
+
+    let result = p.change(|tx| {
+        let column = Element::new(class("Column"), physical).with_type(column_type);
+        let column = tx.insert(column)?;
+        tx.set_property(column_type, "Depth", 0.60)?;
+        tx.set_property(column, "Height", "tall")?;
+        Ok(column)
+    });
+
+    assert!(matches!(result, Err(StoreError::WrongValueType { .. })));
+    assert_same_contents(&p.store, &before);
+}
+
+#[test]
+fn a_broken_rule_rolls_back_the_whole_transaction() {
+    let mut p = project();
+    let column_type = p.column_type();
+    let level = p.insert(Element::new(class("Level"), p.physical)).unwrap();
+    let mark = CodeSpec::new("TestStructural:Mark");
+    let c1 = Code::new(mark.clone(), level, "C1").unwrap();
+    let c2 = Code::new(mark, level, "C2").unwrap();
+    let column = Element::new(class("Column"), p.physical)
+        .with_type(column_type)
+        .with_code(c1.clone());
+    let column = p.insert(column).unwrap();
+    let before = p.store.clone();
+
+    let mut tx = p.store.transaction();
+    tx.set_code(column, Some(c2.clone())).unwrap();
+    tx.set_property(column, "Height", -3.0).unwrap();
+    tx.insert_model(Model::new(ModelKind::Drawing)).unwrap();
+    let error = tx.commit().unwrap_err();
+
+    assert_eq!(
+        error,
+        StoreError::Violations(vec![Violation {
+            rule: "PositiveHeight".into(),
+            element: column,
+            message: "height is -3 m".into(),
+        }])
+    );
+    assert_same_contents(&p.store, &before);
+    assert_eq!(p.store.find_by_code(&c1), Some(column));
+    assert_eq!(p.store.find_by_code(&c2), None);
+}
+
+#[test]
+fn rules_see_the_whole_store_and_every_violation_is_reported() {
+    let mut p = project();
+    let weak_type =
+        Element::new(class("ColumnType"), p.definitions).with_property("ConcreteStrength", 15e6);
+    let weak_type = p.insert(weak_type).unwrap();
+
+    let mut tx = p.store.transaction();
+    let column = Element::new(class("Column"), p.physical)
+        .with_type(weak_type)
+        .with_property("Height", 0.0);
+    let column = tx.insert(column).unwrap();
+    let Err(StoreError::Violations(violations)) = tx.commit() else {
+        panic!("the commit should fail");
+    };
+    let broken: Vec<_> = violations.iter().map(|v| v.rule.as_str()).collect();
+    assert_eq!(broken, ["PositiveHeight", "MinimumStrength"]);
+    assert!(violations.iter().all(|v| v.element == column));
+
+    // An instance value that overrides the weak type's satisfies the rule.
+    let strong = Element::new(class("Column"), p.physical)
+        .with_type(weak_type)
+        .with_property("ConcreteStrength", 25e6);
+    assert!(p.insert(strong).is_ok());
+}
+
+#[test]
+fn rules_apply_to_subclasses() {
+    let mut registry = registry();
+    let extension = Schema::new("TestPrecast", SchemaVersion::new(1, 0, 0))
+        .class(ClassDef::new("PrecastColumn", class("Column")));
+    registry.register(extension).unwrap();
+    let mut store = ElementStore::new(registry);
+
+    let mut tx = store.transaction();
+    let model = tx.insert_model(Model::new(ModelKind::Physical)).unwrap();
+    let precast = ClassId::new("TestPrecast", "PrecastColumn");
+    let column = Element::new(precast, model).with_property("Height", -1.0);
+    tx.insert(column).unwrap();
+    assert!(matches!(tx.commit(), Err(StoreError::Violations(_))));
+}
+
+#[test]
+fn a_panic_rolls_the_transaction_back() {
+    let mut p = project();
+    let column_type = p.column_type();
+    let before = p.store.clone();
+
+    let result = panic::catch_unwind(AssertUnwindSafe(|| {
+        let mut tx = p.store.transaction();
+        tx.set_property(column_type, "Width", 0.45).unwrap();
+        tx.insert(Element::new(class("Column"), p.physical))
+            .unwrap();
+        panic!("a bug in the middle of a command");
+    }));
+
+    assert!(result.is_err());
+    assert_same_contents(&p.store, &before);
+}
+
+#[test]
+fn a_panicking_rule_rolls_the_transaction_back() {
+    let mut registry = registry();
+    let buggy = Rule::new("Buggy", class("Level"), |_, _| panic!("a bug in a rule"));
+    registry.add_rule(buggy).unwrap();
+    let mut store = ElementStore::new(registry);
+    let before = store.clone();
+
+    let result = panic::catch_unwind(AssertUnwindSafe(|| {
+        let mut tx = store.transaction();
+        let model = tx.insert_model(Model::new(ModelKind::Physical)).unwrap();
+        tx.insert(Element::new(class("Level"), model)).unwrap();
+        tx.commit()
+    }));
+
+    assert!(result.is_err());
+    assert_same_contents(&store, &before);
+}
+
+#[test]
+fn rules_are_only_added_for_registered_classes() {
+    let mut registry = registry();
+    let unknown = ClassId::new("Missing", "Beam");
+    let rule = Rule::new("Orphan", unknown.clone(), |_, _| Ok(()));
+    assert_eq!(
+        registry.add_rule(rule),
+        Err(SchemaError::UnknownClass(unknown))
+    );
+}
+
+/// Checks that a store holds the same models, elements and codes as another.
+fn assert_same_contents(store: &ElementStore, expected: &ElementStore) {
+    let elements = |store: &ElementStore| {
+        let mut elements: Vec<_> = store.elements().cloned().collect();
+        elements.sort_by_key(Element::id);
+        elements
+    };
+    let models = |store: &ElementStore| {
+        let mut models: Vec<_> = store.models().map(Model::id).collect();
+        models.sort();
+        models
+    };
+    assert_eq!(elements(store), elements(expected));
+    assert_eq!(models(store), models(expected));
+    for element in expected.elements() {
+        if let Some(code) = element.code() {
+            assert_eq!(store.find_by_code(code), Some(element.id()));
+        }
+    }
 }
