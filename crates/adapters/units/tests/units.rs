@@ -257,6 +257,23 @@ fn bad_input_is_reported_with_its_position() {
 }
 
 #[test]
+fn deeply_nested_input_is_an_error_not_a_crash() {
+    let u = structural("en");
+    let deep = format!("{}1 m{}", "(".repeat(100_000), ")".repeat(100_000));
+    assert_eq!(
+        u.parse(&deep, Dimension::LENGTH),
+        Err(ParseError::TooDeep { at: 64 })
+    );
+    let signs = format!("{}1 m", "-".repeat(100_000));
+    assert_eq!(
+        u.parse(&signs, Dimension::LENGTH),
+        Err(ParseError::TooDeep { at: 64 })
+    );
+    let nested = format!("{}1 m{}", "(".repeat(60), ")".repeat(60));
+    assert_eq!(u.parse(&nested, Dimension::LENGTH), Ok(1.0));
+}
+
+#[test]
 fn the_catalogue_is_data() {
     // A vara, the old Spanish colonial unit, as a user-defined unit.
     let catalogue = UnitCatalogue::standard().with("vara", Dimension::LENGTH, 0.866);
@@ -421,5 +438,28 @@ fn typed_values_parse_in_every_locale() {
         let typed = |x: f64| u.format(x, Dimension::NONE);
         let input = format!("{} m + {} cm", typed(a), typed(b as f64));
         parses_to(&u, &input, Dimension::LENGTH, a + b as f64 / 100.0);
+    }
+}
+
+#[test]
+fn garbage_input_never_panics() {
+    const PIECES: &[&str] = &[
+        "1", "0", "9", ".", ",", "\u{202f}", "٣", "٫", " ", "+", "-", "−", "*", "×", "/", "÷", "·",
+        "(", ")", "^", "^-", "²", "⁻", "m", "cm", "kN", "kg", "°", "'", "\"", "%", "e", "$", "=",
+        "é",
+    ];
+    let mut cases = Cases(0xbad);
+    for _ in 0..20_000 {
+        let locale = *cases.pick(LOCALES);
+        let mut u = units(locale);
+        u.set_display(Dimension::LENGTH, "cm", 1).unwrap();
+        let len = cases.next() % 12;
+        let input: String = (0..len).map(|_| *cases.pick(PIECES)).collect();
+        let dimensions = [Dimension::LENGTH, Dimension::NONE, Dimension::FORCE];
+        let dimension = *cases.pick(&dimensions);
+        if let Ok(value) = u.parse(&input, dimension) {
+            assert!(value.is_finite(), "{locale}: `{input}`");
+            u.format(value, dimension);
+        }
     }
 }

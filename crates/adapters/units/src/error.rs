@@ -47,6 +47,8 @@ pub enum ParseError {
     },
     /// The result is infinite or not a number, as after a division by zero.
     NotFinite,
+    /// Parentheses or signs nested too deeply to read safely.
+    TooDeep { at: usize },
 }
 
 impl fmt::Display for ParseError {
@@ -94,6 +96,7 @@ impl fmt::Display for ParseError {
                 write!(f, "expected {}, got {found}", a_value_in(expected_unit))
             }
             Self::NotFinite => write!(f, "the result isn't a finite number"),
+            Self::TooDeep { at } => write!(f, "too many nested parentheses or signs at {at}"),
         }
     }
 }
