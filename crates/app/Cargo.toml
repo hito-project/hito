@@ -14,6 +14,16 @@ hito-structural.workspace = true
 hito-storage-sqlite.workspace = true
 
 # The UI toolkit lives in this crate only, so it can be swapped without
-# touching the core, domains or adapters. Spike #4 is reviewing the choice;
-# eframe/egui is ADR 0005's initial one.
-eframe = "0.36"
+# touching the core, domains or adapters (ADR 0015). `persistence` saves the
+# window layout between sessions in the platform's data folder.
+eframe = { version = "0.36", features = ["persistence"] }
+egui_dock = { version = "0.21", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+
+# User-facing text comes from Fluent message files, one per locale (ADR 0015).
+fluent-bundle = "0.16"
+unic-langid = { version = "0.9", features = ["macros"] }
+
+[dev-dependencies]
+# Drives the window headless through its AccessKit tree (ADR 0015).
+egui_kittest = { version = "0.36", features = ["eframe", "wgpu"] }
