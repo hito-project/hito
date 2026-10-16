@@ -33,12 +33,24 @@ type Check = dyn Fn(&StoreView<'_>, &Element) -> Result<(), String> + Send + Syn
 pub struct Rule {
     name: String,
     class: ClassId,
+    severity: Severity,
     check: Arc<Check>,
+}
+
+/// What breaking a rule does to the commit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Severity {
+    /// The transaction is refused.
+    Error,
+    /// The transaction commits, and the violation comes with its
+    /// [`ChangeSet`](crate::ChangeSet) for the UI to show.
+    Warning,
 }
 
 impl Rule {
     /// A rule called `name` on the elements of `class`. The name identifies
-    /// the rule in a [`Violation`], so the UI can explain it.
+    /// the rule in a [`Violation`], so the UI can explain it. Breaking it is
+    /// an error, unless it's made a [warning](Rule::warning).
     pub fn new(
         name: impl Into<String>,
         class: ClassId,
@@ -47,8 +59,19 @@ impl Rule {
         Self {
             name: name.into(),
             class,
+            severity: Severity::Error,
             check: Arc::new(check),
         }
+    }
+
+    /// Makes breaking the rule a warning, which doesn't block the commit.
+    pub fn warning(mut self) -> Self {
+        self.severity = Severity::Warning;
+        self
+    }
+
+    pub fn severity(&self) -> Severity {
+        self.severity
     }
 
     pub fn name(&self) -> &str {
@@ -63,6 +86,7 @@ impl Rule {
     pub(crate) fn check(&self, view: &StoreView<'_>, element: &Element) -> Result<(), Violation> {
         (self.check)(view, element).map_err(|message| Violation {
             rule: self.name.clone(),
+            severity: self.severity,
             element: element.id(),
             message,
         })
@@ -74,6 +98,7 @@ impl fmt::Debug for Rule {
         f.debug_struct("Rule")
             .field("name", &self.name)
             .field("class", &self.class)
+            .field("severity", &self.severity)
             .finish_non_exhaustive()
     }
 }
@@ -83,6 +108,7 @@ impl fmt::Debug for Rule {
 pub struct Violation {
     /// The rule's name.
     pub rule: String,
+    pub severity: Severity,
     pub element: ElementId,
     /// What the rule found, in the domain's words.
     pub message: String,
@@ -94,6 +120,7 @@ impl fmt::Display for Violation {
             rule,
             element,
             message,
+            ..
         } = self;
         write!(f, "element {element} breaks rule `{rule}`: {message}")
     }

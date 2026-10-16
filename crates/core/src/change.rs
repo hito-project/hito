@@ -9,7 +9,10 @@
 //! store. Undo and redo (#19) and change sets (#21) are built on it. Its
 //! serialised form is decided by the history spike (#156).
 
-use crate::{Aspect, Code, Element, ElementId, ExternalSource, Model, Properties, Value};
+use crate::{
+    Aspect, Code, Element, ElementId, ExternalSource, Model, Properties, Relationship, Value,
+    Violation,
+};
 
 /// The user command a transaction carries out, as plain data: a name and
 /// parameters. The UI shows it in the undo list (#19).
@@ -48,6 +51,8 @@ pub struct ChangeSet {
     pub(crate) command: Option<Command>,
     pub(crate) models: Vec<Model>,
     pub(crate) elements: Vec<ElementChange>,
+    pub(crate) relationships: Vec<RelationshipChange>,
+    pub(crate) warnings: Vec<Violation>,
 }
 
 impl ChangeSet {
@@ -67,6 +72,25 @@ impl ChangeSet {
     pub fn elements(&self) -> &[ElementChange] {
         &self.elements
     }
+
+    /// The relationships the transaction added or removed, in the order it
+    /// first changed them. Deleting an element removes its relationships.
+    pub fn relationships(&self) -> &[RelationshipChange] {
+        &self.relationships
+    }
+
+    /// The [warnings](crate::Severity::Warning) the changed elements raised.
+    /// They didn't block the commit; the UI shows them.
+    pub fn warnings(&self) -> &[Violation] {
+        &self.warnings
+    }
+}
+
+/// A relationship a transaction added or removed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RelationshipChange {
+    Added(Relationship),
+    Removed(Relationship),
 }
 
 /// What a transaction did to one element.

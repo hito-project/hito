@@ -15,16 +15,21 @@
 //!   properties, and register it in the [`SchemaRegistry`] at startup
 //! - the [`ElementStore`], which holds [`Model`]s and [`Element`]s, checks
 //!   them against the schemas and resolves type and instance property values
+//! - [`Relationship`]s between elements, of types domains declare in their
+//!   schemas; driving relationships form the dependency graph
 //! - [`Transaction`]s, the only way to change the store: all or nothing,
-//!   checked against the domains' validation [`Rule`]s when they commit, and
-//!   recorded as a [`ChangeSet`]
+//!   with dependent elements [recomputed](Recompute) and the domains'
+//!   validation [`Rule`]s checked when they commit, and recorded as a
+//!   [`ChangeSet`]
 
 mod change;
 mod code;
 mod element;
 mod id;
 mod provenance;
+mod recompute;
 mod registry;
+mod relationship;
 mod rule;
 mod schema;
 mod store;
@@ -33,13 +38,15 @@ mod unit;
 mod value;
 mod view;
 
-pub use change::{ChangeSet, Command, ElementChange, FieldChange};
+pub use change::{ChangeSet, Command, ElementChange, FieldChange, RelationshipChange};
 pub use code::{Code, CodeSpec, EmptyCodeError};
 pub use element::{Aspect, Element, Model, ModelId, ModelKind, Properties};
 pub use id::{ElementId, ParseElementIdError};
 pub use provenance::ExternalSource;
+pub use recompute::Recompute;
 pub use registry::{Class, ClassKind, SchemaError, SchemaRegistry};
-pub use rule::{Rule, Violation};
+pub use relationship::{OnDelete, Relationship, RelationshipDef};
+pub use rule::{Rule, Severity, Violation};
 pub use schema::{Access, ClassDef, ClassId, PropertyDef, Schema, SchemaVersion};
 pub use store::{ElementStore, StoreError};
 pub use transaction::Transaction;
