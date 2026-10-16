@@ -10,7 +10,9 @@
 #                check that every non-Rust dependency is justified (ADR 0005),
 #                both in tools/architecture-check.
 #   Fuzz         the STEP Part 21 reader on arbitrary bytes for a few minutes
-#                (ADR 0022). It needs nightly, so it's a separate job.
+#                (ADR 0022). It needs nightly, so it's a separate job. Pull
+#                requests that don't touch the reader or this file pass at
+#                once; pushes to main always fuzz.
 name: CI
 
 on:
@@ -83,18 +85,40 @@ jobs:
         working-directory: crates/adapters/step
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      # Fuzz is a required check, so it always runs, but it only spends three
+      # minutes when the reader or this workflow changed. The job still
+      # succeeds when it skips, which is what the required check needs.
+      - name: Check whether the reader changed
+        id: changed
+        working-directory: .
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          if [ "$EVENT" != pull_request ] || ! git diff --quiet "origin/$BASE...HEAD" -- \
+              crates/adapters/step .github/workflows/ci.yml; then
+            echo "fuzz=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "The STEP reader didn't change; nothing to fuzz."
+          fi
       # cargo-fuzz needs nightly for the sanitizer and coverage flags.
       - name: Install a nightly toolchain
+        if: steps.changed.outputs.fuzz == 'true'
         run: rustup toolchain install nightly --profile minimal
       - uses: taiki-e/install-action@v2
+        if: steps.changed.outputs.fuzz == 'true'
         with:
           tool: cargo-fuzz
       - uses: Swatinem/rust-cache@v2
+        if: steps.changed.outputs.fuzz == 'true'
         with:
           workspaces: crates/adapters/step/fuzz
       # The prebuilt cargo-fuzz is a static musl binary and would build for
       # musl by default, where the sanitizer can't run; name the glibc target.
       - name: Fuzz the Part 21 reader for three minutes
+        if: steps.changed.outputs.fuzz == 'true'
         run: |
           mkdir -p fuzz/corpus/read
           cargo +nightly fuzz run --target x86_64-unknown-linux-gnu \
