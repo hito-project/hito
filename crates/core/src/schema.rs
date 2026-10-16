@@ -27,7 +27,7 @@
 use std::borrow::Cow;
 use std::fmt;
 
-use crate::DataType;
+use crate::{DataType, RelationshipDef};
 
 /// A schema's version, as **Read.Write.Minor** (BIS's rule).
 ///
@@ -219,12 +219,13 @@ impl ClassDef {
     }
 }
 
-/// A domain's schema: its name, version and classes.
+/// A domain's schema: its name, version, classes and relationship types.
 #[derive(Debug, Clone)]
 pub struct Schema {
     pub(crate) name: String,
     pub(crate) version: SchemaVersion,
     pub(crate) classes: Vec<ClassDef>,
+    pub(crate) relationships: Vec<RelationshipDef>,
 }
 
 impl Schema {
@@ -235,6 +236,7 @@ impl Schema {
             name: name.into(),
             version,
             classes: Vec::new(),
+            relationships: Vec::new(),
         }
     }
 
@@ -242,6 +244,14 @@ impl Schema {
     /// earlier in the same schema, or in a schema registered before it.
     pub fn class(mut self, class: ClassDef) -> Self {
         self.classes.push(class);
+        self
+    }
+
+    /// Adds a relationship type. It shares the schema's names with the
+    /// classes, and links element classes of this schema or of schemas
+    /// registered before it.
+    pub fn relationship(mut self, relationship: RelationshipDef) -> Self {
+        self.relationships.push(relationship);
         self
     }
 

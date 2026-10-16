@@ -1,23 +1,25 @@
 //! Transactions: the only way to change an [`ElementStore`].
 //!
 //! A transaction stages its changes beside the store and leaves the store
-//! untouched until it commits. Committing runs the domains' validation
-//! [rules](crate::Rule) on what changed, then turns the staged changes into a
-//! [`ChangeSet`] of deltas and applies it. If a rule fails, or the
-//! transaction is dropped, panics or is leaked with [`std::mem::forget`], the
-//! staged changes are simply never applied.
+//! untouched until it commits. Committing first [recomputes](crate::Recompute)
+//! what changed and every element that depends on it, then runs the domains'
+//! validation [rules](crate::Rule) on all of those, then turns the staged
+//! changes into a [`ChangeSet`] of deltas and applies it. If a rule that is an
+//! error fails, or the transaction is dropped, panics or is leaked with
+//! [`std::mem::forget`], the staged changes are simply never applied.
 //!
 //! The commit is the single point where a change becomes part of the model,
 //! and the change set it returns is what undo and redo (#19) and change sets
 //! (#21) are built on.
 
+use std::collections::BTreeSet;
 use std::mem;
 
-use crate::change::ElementChange;
+use crate::change::{ElementChange, RelationshipChange};
 use crate::view::Staged;
 use crate::{
-    ChangeSet, Code, Command, Element, ElementId, ElementStore, Model, ModelId, StoreError,
-    StoreView, Value, Violation,
+    ChangeSet, Code, Command, Element, ElementId, ElementStore, Model, ModelId, Relationship,
+    Severity, StoreError, StoreView, Value, Violation,
 };
 
 /// A group of changes to an [`ElementStore`] that apply together or not at
@@ -97,6 +99,9 @@ impl<'s> Transaction<'s> {
         if let Some(code) = &element.code {
             self.staged.codes.insert(code.clone(), Some(id));
         }
+        if let Some(type_id) = element.type_id {
+            self.staged.instances.entry(type_id).or_default().push(id);
+        }
         if self.staged.elements.insert(id, Some(element)).is_none() {
             self.staged.order.push(id);
         }
@@ -152,23 +157,100 @@ impl<'s> Transaction<'s> {
         Ok(())
     }
 
-    /// Checks every element the transaction created or changed against the
-    /// rules for its class. If none is broken, applies the changes to the
-    /// store and returns them. Otherwise discards them and returns every
+    /// Adds a relationship. See [`OnDelete`](crate::OnDelete) for what
+    /// happens when its target is deleted.
+    ///
+    /// A driving relationship can't close a cycle: if the target already
+    /// depends on the source, directly or not, this fails with the
+    /// [cycle](StoreError::CircularDependency).
+    pub fn relate(&mut self, relationship: Relationship) -> Result<(), StoreError> {
+        self.view().check_relationship(&relationship)?;
+        let in_store = self.store.has_relationship(&relationship);
+        self.staged.set_relationship(relationship, true, in_store);
+        Ok(())
+    }
+
+    /// Removes a relationship.
+    pub fn unrelate(&mut self, relationship: &Relationship) -> Result<(), StoreError> {
+        if !self.view().has_relationship(relationship) {
+            return Err(StoreError::MissingRelationship(relationship.clone()));
+        }
+        let in_store = self.store.has_relationship(relationship);
+        self.staged
+            .set_relationship(relationship.clone(), false, in_store);
+        Ok(())
+    }
+
+    /// Deletes an element and everything
+    /// [`preview_delete`](StoreView::preview_delete) lists with it: the
+    /// instances of a deleted type, and the elements a deleted element owns
+    /// through cascading relationships. Elements that refer to a deleted
+    /// element through detaching relationships stay and lose the
+    /// relationship. A blocking relationship refuses the whole deletion.
+    ///
+    /// Returns every deleted element, the given one first. On failure,
+    /// nothing is deleted.
+    pub fn delete(&mut self, id: ElementId) -> Result<Vec<ElementId>, StoreError> {
+        let deleted = self.view().preview_delete(id)?;
+        let view = self.view();
+        let relationships: BTreeSet<_> = deleted
+            .iter()
+            .flat_map(|&e| view.relationships_from(e).chain(view.relationships_to(e)))
+            .cloned()
+            .collect();
+        for relationship in &relationships {
+            self.unrelate(relationship)?;
+        }
+        for &element in &deleted {
+            let Staged {
+                elements,
+                order,
+                codes,
+                ..
+            } = &mut self.staged;
+            let staged = elements.entry(element).or_insert_with(|| {
+                order.push(element);
+                self.store.elements.get(&element).cloned()
+            });
+            if let Some(code) = staged.take().and_then(|e| e.code) {
+                codes.insert(code, None);
+            }
+        }
+        Ok(deleted)
+    }
+
+    /// Recomputes what changed and its dependants, then checks them against
+    /// the rules for their classes. If no error rule is broken, applies the
+    /// changes to the store and returns them, with any warnings. Otherwise
+    /// discards them and returns the error, or every error
     /// [violation](StoreError::Violations).
     pub fn commit(mut self) -> Result<ChangeSet, StoreError> {
-        let violations = self.validate();
-        if !violations.is_empty() {
-            return Err(StoreError::Violations(violations));
+        let affected = self.recompute()?;
+        let (errors, warnings) = self
+            .validate(&affected)
+            .into_iter()
+            .partition::<Vec<_>, _>(|v| v.severity == Severity::Error);
+        if !errors.is_empty() {
+            return Err(StoreError::Violations(errors));
         }
         let staged = mem::take(&mut self.staged);
+        let store = &*self.store;
         let elements = staged.order.iter().filter_map(|id| {
-            let before = self.store.elements.get(id);
+            let before = store.elements.get(id);
             ElementChange::between(before, staged.elements[id].as_ref())
+        });
+        let relationships = staged.relationship_order.iter().filter_map(|r| {
+            let exists = staged.relationships[r];
+            (exists != store.has_relationship(r)).then(|| match exists {
+                true => RelationshipChange::Added(r.clone()),
+                false => RelationshipChange::Removed(r.clone()),
+            })
         });
         let changes = ChangeSet {
             command: self.command.take(),
             elements: elements.collect(),
+            relationships: relationships.collect(),
+            warnings,
             models: staged.models,
         };
         self.store.apply(&changes);
@@ -191,10 +273,36 @@ impl<'s> Transaction<'s> {
         staged.as_mut().expect("checked by the caller")
     }
 
-    fn validate(&self) -> Vec<Violation> {
+    /// Recomputes every element the transaction changed or whose
+    /// relationships it changed, and every element they drive, drivers
+    /// first. Returns all of them, in that order.
+    fn recompute(&mut self) -> Result<Vec<ElementId>, StoreError> {
+        let staged = &self.staged;
+        let elements = staged.order.iter().copied();
+        let sources = staged.relationship_order.iter().map(|r| r.source());
+        let changed: Vec<_> = elements.chain(sources).collect();
+        let order = self.view().recompute_order(changed)?;
+        for &id in &order {
+            let view = self.view();
+            let Some(element) = view.get(id) else {
+                continue; // deleted
+            };
+            let recomputes = view.registry().recomputes(element.class());
+            let values: Vec<_> = recomputes
+                .flat_map(|r| r.compute(&view, element))
+                .filter(|(name, value)| element.properties().get(name) != Some(value))
+                .collect();
+            for (name, value) in values {
+                self.set_property(id, &name, value)?;
+            }
+        }
+        Ok(order)
+    }
+
+    fn validate(&self, elements: &[ElementId]) -> Vec<Violation> {
         let view = self.view();
-        let changed = self.staged.order.iter();
-        changed
+        elements
+            .iter()
             .filter_map(|&id| view.get(id))
             .flat_map(|element| {
                 let rules = view.registry().rules(element.class());

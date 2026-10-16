@@ -1,18 +1,20 @@
 //! The in-memory element store.
 //!
-//! It holds a session's models and elements, checks every element against
-//! the registered schemas, and resolves type and instance property values.
-//! It changes only through a [`Transaction`].
+//! It holds a session's models, elements and relationships, and the indexes
+//! over them: codes, relationships both ways, and instances by type. It
+//! changes only through a [`Transaction`], which checks every change against
+//! the schemas and the domains' rules before applying it.
 //! Saving and loading go through a storage adapter (E10), which reads and
 //! writes what this store holds: IDs, class names, codes and property values.
 
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::fmt;
 
-use crate::change::ElementChange;
+use crate::change::{ElementChange, FieldChange, RelationshipChange};
 use crate::{
-    ChangeSet, ClassId, Code, Command, Element, ElementId, Model, ModelId, SchemaRegistry,
-    StoreView, Transaction, Value, Violation,
+    ChangeSet, ClassId, Code, Command, Element, ElementId, Model, ModelId, Relationship,
+    SchemaRegistry, StoreView, Transaction, Value, Violation,
 };
 
 /// A session's elements and models, checked against a schema registry.
@@ -31,6 +33,11 @@ pub struct ElementStore {
     pub(crate) models: HashMap<ModelId, Model>,
     pub(crate) elements: HashMap<ElementId, Element>,
     pub(crate) codes: HashMap<Code, ElementId>,
+    /// Relationships by source, and by target.
+    pub(crate) outgoing: HashMap<ElementId, Vec<Relationship>>,
+    pub(crate) incoming: HashMap<ElementId, Vec<Relationship>>,
+    /// Elements by their type. Internal for now: the query API is #17's.
+    pub(crate) instances: HashMap<ElementId, Vec<ElementId>>,
 }
 
 impl ElementStore {
@@ -42,6 +49,9 @@ impl ElementStore {
             models: HashMap::new(),
             elements: HashMap::new(),
             codes: HashMap::new(),
+            outgoing: HashMap::new(),
+            incoming: HashMap::new(),
+            instances: HashMap::new(),
         }
     }
 
@@ -93,6 +103,26 @@ impl ElementStore {
         self.codes.get(code).copied()
     }
 
+    /// The relationships from an element: what it depends on.
+    pub fn relationships_from(&self, source: ElementId) -> impl Iterator<Item = &Relationship> {
+        self.outgoing.get(&source).into_iter().flatten()
+    }
+
+    /// The relationships to an element: what depends on it.
+    pub fn relationships_to(&self, target: ElementId) -> impl Iterator<Item = &Relationship> {
+        self.incoming.get(&target).into_iter().flatten()
+    }
+
+    /// See [`StoreView::preview_delete`].
+    pub fn preview_delete(&self, id: ElementId) -> Result<Vec<ElementId>, StoreError> {
+        self.view().preview_delete(id)
+    }
+
+    pub(crate) fn has_relationship(&self, relationship: &Relationship) -> bool {
+        self.relationships_from(relationship.source())
+            .any(|r| r == relationship)
+    }
+
     /// Applies a committed change set. It runs no checks and no domain
     /// logic: the transaction checked it.
     pub(crate) fn apply(&mut self, changes: &ChangeSet) {
@@ -111,18 +141,65 @@ impl ElementStore {
             let id = change.id();
             match change {
                 ElementChange::Created(element) => {
+                    self.index_instance(element.type_id, None, id);
                     self.elements.insert(id, element.clone());
                 }
                 ElementChange::Modified { fields, .. } => {
                     let element = self.elements.get_mut(&id).expect("modified elements exist");
                     fields.iter().for_each(|field| field.apply(element));
+                    for field in fields {
+                        if let FieldChange::Type { before, after } = field {
+                            self.index_instance(*after, *before, id);
+                        }
+                    }
                 }
-                ElementChange::Deleted(_) => {
+                ElementChange::Deleted(element) => {
+                    self.index_instance(None, element.type_id, id);
                     self.elements.remove(&id);
                 }
             }
             if let Some(code) = self.elements.get(&id).and_then(|e| e.code.clone()) {
                 self.codes.insert(code, id);
+            }
+        }
+        for change in &changes.relationships {
+            match change {
+                RelationshipChange::Added(r) => self.link(r.clone()),
+                RelationshipChange::Removed(r) => self.unlink(r),
+            }
+        }
+    }
+
+    /// Moves an element from one type's instances to another's.
+    fn index_instance(&mut self, add: Option<ElementId>, remove: Option<ElementId>, id: ElementId) {
+        if let Some(type_id) = remove
+            && let Entry::Occupied(mut entry) = self.instances.entry(type_id)
+        {
+            entry.get_mut().retain(|&i| i != id);
+            if entry.get().is_empty() {
+                entry.remove();
+            }
+        }
+        if let Some(type_id) = add {
+            self.instances.entry(type_id).or_default().push(id);
+        }
+    }
+
+    fn link(&mut self, relationship: Relationship) {
+        let (source, target) = (relationship.source(), relationship.target());
+        let incoming = self.incoming.entry(target).or_default();
+        incoming.push(relationship.clone());
+        self.outgoing.entry(source).or_default().push(relationship);
+    }
+
+    fn unlink(&mut self, relationship: &Relationship) {
+        let (source, target) = (relationship.source(), relationship.target());
+        for (index, id) in [(&mut self.outgoing, source), (&mut self.incoming, target)] {
+            if let Entry::Occupied(mut entry) = index.entry(id) {
+                entry.get_mut().retain(|r| r != relationship);
+                if entry.get().is_empty() {
+                    entry.remove();
+                }
             }
         }
     }
@@ -161,7 +238,22 @@ pub enum StoreError {
         code: Code,
         element: ElementId,
     },
-    /// A transaction broke validation rules, so it was rolled back.
+    /// No relationship type is registered with this name.
+    UnknownRelationship(ClassId),
+    /// The relationship's elements aren't of its type's classes.
+    InvalidRelationship(Relationship),
+    DuplicateRelationship(Relationship),
+    MissingRelationship(Relationship),
+    /// The elements along a cycle of driving dependencies, starting and
+    /// ending with the same element.
+    CircularDependency(Vec<ElementId>),
+    /// A relationship to the element blocks its deletion.
+    DeleteBlocked {
+        element: ElementId,
+        relationship: Relationship,
+    },
+    /// A transaction broke validation rules that are errors, so it was
+    /// discarded. Every broken error rule is listed.
     Violations(Vec<Violation>),
 }
 
@@ -187,6 +279,43 @@ impl fmt::Display for StoreError {
             Self::CodeInUse { code, element } => {
                 write!(f, "code `{}` is used by element {element}", code.value())
             }
+            Self::UnknownRelationship(class) => {
+                write!(f, "relationship type `{class}` isn't registered")
+            }
+            Self::InvalidRelationship(r) => write!(
+                f,
+                "elements {} and {} can't be related by `{}`",
+                r.source(),
+                r.target(),
+                r.class()
+            ),
+            Self::DuplicateRelationship(r) => write!(
+                f,
+                "elements {} and {} are already related by `{}`",
+                r.source(),
+                r.target(),
+                r.class()
+            ),
+            Self::MissingRelationship(r) => write!(
+                f,
+                "elements {} and {} aren't related by `{}`",
+                r.source(),
+                r.target(),
+                r.class()
+            ),
+            Self::CircularDependency(cycle) => {
+                let cycle: Vec<_> = cycle.iter().map(ElementId::to_string).collect();
+                write!(f, "circular dependency: {}", cycle.join(" → "))
+            }
+            Self::DeleteBlocked {
+                element,
+                relationship,
+            } => write!(
+                f,
+                "element {element} can't be deleted: element {} depends on it through `{}`",
+                relationship.source(),
+                relationship.class()
+            ),
             Self::Violations(violations) => {
                 write!(f, "{} validation rules broken", violations.len())?;
                 violations.iter().try_for_each(|v| write!(f, "\n- {v}"))

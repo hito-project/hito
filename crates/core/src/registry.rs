@@ -6,7 +6,7 @@ use std::fmt;
 use std::iter;
 
 use crate::schema::ClassDef;
-use crate::{ClassId, PropertyDef, Rule, Schema, SchemaVersion};
+use crate::{ClassId, PropertyDef, Recompute, RelationshipDef, Rule, Schema, SchemaVersion};
 
 /// Whether a class describes elements or aspects. It comes from the core
 /// root the class derives from.
@@ -55,17 +55,21 @@ impl Class {
     }
 }
 
-/// Every schema, class and validation rule the running program knows.
+/// Every schema, class, relationship type, recompute function and validation
+/// rule the running program knows.
 ///
 /// It starts with the core schema. Each domain then
 /// [registers](SchemaRegistry::register) its schema at startup, before any
-/// element is created, and [adds](SchemaRegistry::add_rule) its rules. A
+/// element is created, and adds its [recompute](SchemaRegistry::add_recompute)
+/// functions and [rules](SchemaRegistry::add_rule). A
 /// schema can only use classes from schemas registered before it, so domains
 /// register in dependency order.
 #[derive(Debug, Clone)]
 pub struct SchemaRegistry {
     schemas: Vec<(String, SchemaVersion)>,
     classes: HashMap<ClassId, Class>,
+    relationships: HashMap<ClassId, RelationshipDef>,
+    recomputes: Vec<Recompute>,
     rules: Vec<Rule>,
 }
 
@@ -78,6 +82,8 @@ impl SchemaRegistry {
         let mut registry = Self {
             schemas: vec![(ClassId::CORE_SCHEMA.to_owned(), Self::CORE_VERSION)],
             classes: HashMap::new(),
+            relationships: HashMap::new(),
+            recomputes: Vec::new(),
             rules: Vec::new(),
         };
         let roots = [
@@ -109,8 +115,8 @@ impl SchemaRegistry {
         registry
     }
 
-    /// Adds a schema and all its classes, or nothing if any of it is
-    /// invalid.
+    /// Adds a schema with all its classes and relationship types, or nothing
+    /// if any of it is invalid.
     pub fn register(&mut self, schema: Schema) -> Result<(), SchemaError> {
         if self.schema_version(&schema.name).is_some() {
             return Err(SchemaError::DuplicateSchema(schema.name));
@@ -118,11 +124,19 @@ impl SchemaRegistry {
         if !is_identifier(&schema.name) {
             return Err(SchemaError::InvalidName(schema.name));
         }
-        for class in &schema.classes {
-            if let Err(error) = self.register_class(&schema.name, class) {
-                self.classes.retain(|id, _| id.schema() != schema.name);
-                return Err(error);
-            }
+        let registered = schema
+            .classes
+            .iter()
+            .try_for_each(|class| self.register_class(&schema.name, class))
+            .and_then(|()| {
+                let mut relationships = schema.relationships.iter();
+                relationships.try_for_each(|r| self.register_relationship(&schema.name, r))
+            });
+        if let Err(error) = registered {
+            self.classes.retain(|id, _| id.schema() != schema.name);
+            self.relationships
+                .retain(|id, _| id.schema() != schema.name);
+            return Err(error);
         }
         self.schemas.push((schema.name, schema.version));
         Ok(())
@@ -156,6 +170,28 @@ impl SchemaRegistry {
     /// All properties of `class`: its own, then its base classes'.
     pub fn properties(&self, class: &ClassId) -> impl Iterator<Item = &PropertyDef> {
         self.lineage(class).flat_map(|c| &c.properties)
+    }
+
+    /// A registered relationship type.
+    pub fn relationship(&self, id: &ClassId) -> Option<&RelationshipDef> {
+        self.relationships.get(id)
+    }
+
+    /// Adds a recompute function. Its class must be registered.
+    pub fn add_recompute(&mut self, recompute: Recompute) -> Result<(), SchemaError> {
+        if self.class(recompute.class()).is_none() {
+            return Err(SchemaError::UnknownClass(recompute.class().clone()));
+        }
+        self.recomputes.push(recompute);
+        Ok(())
+    }
+
+    /// The recompute functions for elements of `class`: those on the class
+    /// and on its base classes, in the order they were added.
+    pub fn recomputes(&self, class: &ClassId) -> impl Iterator<Item = &Recompute> {
+        self.recomputes
+            .iter()
+            .filter(|r| self.is_a(class, r.class()))
     }
 
     /// Adds a validation rule. Its class must be registered.
@@ -254,6 +290,30 @@ impl SchemaRegistry {
         self.check_overrides(&id)
     }
 
+    fn register_relationship(
+        &mut self,
+        schema: &str,
+        def: &RelationshipDef,
+    ) -> Result<(), SchemaError> {
+        let id = ClassId::new(schema, &def.name);
+        if !is_identifier(&def.name) {
+            return Err(SchemaError::InvalidName(def.name.clone()));
+        }
+        if self.classes.contains_key(&id) || self.relationships.contains_key(&id) {
+            return Err(SchemaError::DuplicateClass(id));
+        }
+        for end in [def.source(), def.target()] {
+            let class = self
+                .class(end)
+                .ok_or_else(|| SchemaError::UnknownClass(end.clone()))?;
+            if class.kind != ClassKind::Element {
+                return Err(SchemaError::InvalidRelationship(id));
+            }
+        }
+        self.relationships.insert(id, def.clone());
+        Ok(())
+    }
+
     /// Checks that wherever an instance property overrides a type property,
     /// both have the same data type. Runs for each new class, both as an
     /// instance class and as a possible type class.
@@ -317,6 +377,8 @@ pub enum SchemaError {
     /// element class, or the type class doesn't derive from the inherited
     /// one.
     InvalidTypeClass { class: ClassId, type_class: ClassId },
+    /// A relationship type links an aspect class.
+    InvalidRelationship(ClassId),
     /// An instance property overrides a type property of another data type.
     OverrideMismatch {
         instance_class: ClassId,
@@ -337,6 +399,9 @@ impl fmt::Display for SchemaError {
             }
             Self::InvalidTypeClass { class, type_class } => {
                 write!(f, "class `{class}` can't be typed by `{type_class}`")
+            }
+            Self::InvalidRelationship(id) => {
+                write!(f, "relationship `{id}` must link element classes")
             }
             Self::OverrideMismatch {
                 instance_class,
