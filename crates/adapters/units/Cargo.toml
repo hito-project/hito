@@ -1,0 +1,18 @@
+[package]
+name = "hito-units"
+description = "Units of measure as data: parses typed quantities and formats values in the user's display units and locale."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+hito-core.workspace = true
+# Number formatting from Unicode CLDR data, so every locale gets its own
+# decimal and grouping separators and digits, not only es-AR and en. Pure
+# Rust, Unicode-3.0 (allowed in deny.toml); the UI toolkit already pulls in
+# other ICU4X 2.3 crates.
+icu_decimal = "2.3"
+icu_locale_core = "2.3"

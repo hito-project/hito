@@ -32,3 +32,4 @@ hito-core = { path = "crates/core" }
 hito-structural = { path = "crates/domains/structural" }
 hito-storage-sqlite = { path = "crates/adapters/storage-sqlite" }
 hito-step = { path = "crates/adapters/step" }
+hito-units = { path = "crates/adapters/units" }
