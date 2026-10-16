@@ -2,9 +2,11 @@
 #
 # HITO is MIT OR Apache-2.0 (ADR 0009), so every dependency must be under a
 # license that lets us ship it in a permissively licensed program. Copyleft
-# licenses (GPL, AGPL, LGPL, MPL) are not on the list: a crate offering one of
-# them only as an alternative ("MIT OR LGPL-2.1") still passes, a crate under
-# one alone fails. Adding a license here is a decision to record in an ADR.
+# licenses (GPL, AGPL, LGPL) are not on the list: a crate offering one of them
+# only as an alternative ("MIT OR LGPL-2.1") still passes, a crate under one
+# alone fails. MPL-2.0's file-level copyleft is allowed for crates we use
+# unmodified (ADR 0023). Adding a license here is a decision to record in an
+# ADR.
 
 [graph]
 all-features = true
@@ -23,6 +25,8 @@ allow = [
     "BSL-1.0",
     "Unlicense",
     "Unicode-3.0",
+    # ADR 0023: used unmodified; changes to MPL files get published.
+    "MPL-2.0",
     # Fonts bundled by egui (epaint_default_fonts). Both allow redistribution
     # inside any program; they cover the font files, not our code.
     "OFL-1.1",
