@@ -3,7 +3,7 @@
 //!
 //! Only `the_3d_view_renders_with_wgpu` needs a graphics device. It skips
 //! itself when there's none, unless `HITO_REQUIRE_GPU` is set, as it is on
-//! the Linux CI runner, which has Mesa's software Vulkan driver (lavapipe).
+//! every CI runner (ci.yml).
 
 use std::collections::HashMap;
 
@@ -241,7 +241,7 @@ fn the_3d_view_renders_with_wgpu() {
     let Ok(render_state) =
         std::panic::catch_unwind(|| create_render_state(default_wgpu_setup(), options))
     else {
-        // CI sets this where a software Vulkan driver is installed, so a
+        // CI sets this on every runner, all of which have an adapter, so a
         // missing adapter there is a failure, not a skip.
         let required = std::env::var("HITO_REQUIRE_GPU").is_ok_and(|v| !v.is_empty());
         assert!(
