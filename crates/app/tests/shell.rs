@@ -393,7 +393,12 @@ impl Tool for Probe {
 
 /// The window with the probe tool registered as `PROBE`, alias `PR`.
 fn window_with_probe() -> Harness<'static, Shell> {
-    let mut h = window();
+    window_with_probe_in(Locale::En)
+}
+
+fn window_with_probe_in(locale: Locale) -> Harness<'static, Shell> {
+    let mut h = builder().build_eframe(move |_cc| Shell::restore(None, locale));
+    h.run_steps(2);
     let probe = Command {
         name: "PROBE",
         label: "probe",
@@ -434,6 +439,21 @@ fn commands_prompt_on_the_command_line() {
     h.get_by_role(Role::TextInput).type_text("3 m");
     h.key_press(egui::Key::Enter);
     h.run_steps(2);
+    assert_eq!(prompt(&h), None);
+    assert_eq!(h.state().project().models().count(), 1);
+}
+
+/// The command line reads numbers as AutoCAD does in every language, even
+/// where the UI writes decimals with a comma.
+#[test]
+fn input_uses_a_decimal_point_in_spanish_too() {
+    let mut h = window_with_probe_in(Locale::EsAr);
+    command_line(&mut h, "probe");
+    command_line(&mut h, "3.5,2");
+    assert_eq!(prompt(&h), Some("probe-length"));
+    command_line(&mut h, "3,5");
+    assert_eq!(prompt(&h), Some("probe-length"), "a comma isn't a decimal");
+    command_line(&mut h, "1.5 m");
     assert_eq!(prompt(&h), None);
     assert_eq!(h.state().project().models().count(), 1);
 }

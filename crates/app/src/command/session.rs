@@ -126,9 +126,7 @@ impl Session {
         let input = match format.parse(text, running.tool.prompt().wants) {
             Ok(input) => input,
             Err(error) => {
-                let separator = format.separator().to_string();
-                let message = i18n.tr_with(error.message(), "separator", separator);
-                self.message = Some(message);
+                self.message = Some(i18n.tr(error.message()));
                 return Outcome::Nothing;
             }
         };
@@ -246,7 +244,7 @@ mod tests {
             Self {
                 session: Session::new(registry),
                 i18n: I18n::new(Locale::En),
-                format: InputFormat::new(Locale::En),
+                format: InputFormat::new(),
                 store: ElementStore::new(SchemaRegistry::new()),
             }
         }

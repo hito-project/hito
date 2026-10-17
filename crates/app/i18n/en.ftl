@@ -41,7 +41,9 @@ command-not-available = { $command } is not available yet
 command-cancelled = *Cancel*
 command-failed = { $command } could not be completed
 input-empty = Type an answer, or press Esc to cancel
-input-not-a-point = Enter a point as x{ $separator } y or x{ $separator } y{ $separator } z
+# The command line reads numbers as AutoCAD does, in every language: a point
+# is the decimal separator and a comma separates coordinates.
+input-not-a-point = Enter a point as x,y or x,y,z, such as 3.5,2
 input-not-a-value = Enter a value, such as 3.5 or 350 cm
 
 ## Window actions

@@ -1,22 +1,22 @@
 //! Reading the answer to a prompt from what was typed on the command line.
 //!
-//! Quantities are read by [`hito_units`], so they can name units and add
-//! them up (`3,5 m + 20 cm`), and numbers are written as the locale writes
-//! them. A point is its coordinates, separated as in AutoCAD by a comma
-//! (`3.5,2`), or by a semicolon in locales that write decimals with a
-//! comma (`3,5;2`).
+//! The command line reads input as AutoCAD does, in every UI language: a
+//! point is the decimal separator and a comma separates a point's
+//! coordinates (`3.5,2`). Quantities are read by [`hito_units`], so they can
+//! name units and add them up (`3.5 m + 20 cm`).
 
 use hito_core::Dimension;
 use hito_units::{NumberFormat, UnitCatalogue, Units};
 
 use super::{Input, Wants};
-use crate::i18n::Locale;
+
+/// What separates a point's coordinates.
+const SEPARATOR: char = ',';
 
 /// How typed answers are read.
 #[derive(Debug)]
 pub struct InputFormat {
     units: Units,
-    separator: char,
 }
 
 /// Typed text that doesn't answer the prompt.
@@ -39,23 +39,21 @@ impl InputError {
     }
 }
 
+impl Default for InputFormat {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InputFormat {
-    /// Reads numbers as `locale` writes them, and values without units in
-    /// SI units until the project's units exist.
-    pub fn new(locale: Locale) -> Self {
-        let numbers = NumberFormat::new(locale.tag()).expect("the UI locales are valid tags");
-        Self::with_units(Units::new(UnitCatalogue::standard(), numbers))
-    }
-
-    pub fn with_units(units: Units) -> Self {
-        let decimal_comma = units.format(0.5, Dimension::NONE).contains(',');
-        let separator = if decimal_comma { ';' } else { ',' };
-        Self { units, separator }
-    }
-
-    /// What separates a point's coordinates.
-    pub fn separator(&self) -> char {
-        self.separator
+    /// Reads numbers with a decimal point, as CLDR's root locale writes
+    /// them, and values without units in SI units until the project's units
+    /// exist.
+    pub fn new() -> Self {
+        let numbers = NumberFormat::new("und").expect("the root locale is a valid tag");
+        Self {
+            units: Units::new(UnitCatalogue::standard(), numbers),
+        }
     }
 
     /// Reads `text` as the answer to a prompt that `wants` it.
@@ -64,6 +62,9 @@ impl InputFormat {
             return Err(InputError::Empty);
         }
         match wants {
+            // A comma only separates coordinates, so it never groups
+            // thousands in a value.
+            Wants::Quantity(_) if text.contains(SEPARATOR) => Err(InputError::NotAQuantity),
             Wants::Quantity(dimension) => self
                 .units
                 .parse(text, dimension)
@@ -75,7 +76,7 @@ impl InputFormat {
 
     fn point(&self, text: &str) -> Result<Input, InputError> {
         let mut point = [0.0; 3];
-        let parts: Vec<&str> = text.split(self.separator).collect();
+        let parts: Vec<&str> = text.split(SEPARATOR).collect();
         if !(2..=3).contains(&parts.len()) {
             return Err(InputError::NotAPoint);
         }
@@ -94,28 +95,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn points_as_in_autocad_or_with_semicolons_where_decimals_take_commas() {
-        let en = InputFormat::new(Locale::En);
-        assert_eq!(en.separator(), ',');
+    fn points_as_in_autocad() {
+        let input = InputFormat::new();
         assert_eq!(
-            en.parse("3.5, 2", Wants::Point),
+            input.parse("3.5, 2", Wants::Point),
             Ok(Input::Point([3.5, 2.0, 0.0]))
         );
         assert_eq!(
-            en.parse("1,2 m,300 cm", Wants::Point),
+            input.parse("1,2 m,300 cm", Wants::Point),
             Ok(Input::Point([1.0, 2.0, 3.0]))
         );
-
-        let es = InputFormat::new(Locale::EsAr);
-        assert_eq!(es.separator(), ';');
-        assert_eq!(
-            es.parse("3,5; 2", Wants::Point),
-            Ok(Input::Point([3.5, 2.0, 0.0]))
-        );
-
-        for bad in ["3", "1,2,3,4", "a,b", "1 kN,2"] {
+        for bad in ["3", "3.5", "1,2,3,4", "a,b", "1 kN,2", "3;2"] {
             assert_eq!(
-                en.parse(bad, Wants::Point),
+                input.parse(bad, Wants::Point),
                 Err(InputError::NotAPoint),
                 "{bad}"
             );
@@ -124,15 +116,22 @@ mod tests {
 
     #[test]
     fn quantities_with_or_without_units() {
-        let es = InputFormat::new(Locale::EsAr);
+        let input = InputFormat::new();
         let length = Wants::Quantity(Dimension::LENGTH);
-        let parsed = |text| match es.parse(text, length) {
+        let parsed = |text| match input.parse(text, length) {
             Ok(Input::Quantity(value)) => value,
             other => panic!("{text}: {other:?}"),
         };
-        assert!((parsed("3,5 m + 20 cm") - 3.7).abs() < 1e-12);
+        assert!((parsed("3.5 m + 20 cm") - 3.7).abs() < 1e-12);
         assert_eq!(parsed("2"), 2.0);
-        assert_eq!(es.parse("2 kN", length), Err(InputError::NotAQuantity));
-        assert_eq!(es.parse("  ", length), Err(InputError::Empty));
+        assert_eq!(parsed("1500 mm"), 1.5);
+        for bad in ["3,5", "1,000", "2 kN"] {
+            assert_eq!(
+                input.parse(bad, length),
+                Err(InputError::NotAQuantity),
+                "{bad}"
+            );
+        }
+        assert_eq!(input.parse("  ", length), Err(InputError::Empty));
     }
 }

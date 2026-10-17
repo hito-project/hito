@@ -83,7 +83,7 @@ impl Shell {
             viewports: HashMap::new(),
             commands: Session::new(registry()),
             command_line: Default::default(),
-            input: InputFormat::new(locale),
+            input: InputFormat::new(),
             project: ElementStore::new(schemas),
         }
     }
