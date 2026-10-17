@@ -36,6 +36,7 @@ So we build the shared rows once, as a core, and add each discipline as a domain
 ```
 
 - **Core:** element store with stable IDs, schema system, relationships and dependency propagation, transactions, coordinates, view generation, spatial queries, the operator framework. Kept as small as possible. The element store and schema design is in [element-model.md](element-model.md).
+- **Geometry port:** its own crate and layer (`crates/geometry`), between the core and the domains. Domains describe their elements' geometry with it, and kernel adapters such as Manifold implement it ([ADR 0014](../decisions/0014-geometry-kernel.md)). It depends on the core only. It meshes and caches each element's geometry, and the app passes it every committed change set (commands, undo, redo) so it regenerates only the affected elements.
 - **Domains:** plug-in schemas that add element types (wall, beam, pipe, alignment, bolt) on shared base classes. This follows the BisCore and domain pattern in Bentley BIS.
 - **Adapters:** solvers, importers and exporters, and renderers behind ports. Existing open-source solvers are wrapped, not rewritten, under the solver rules in [ADR 0012](../decisions/0012-suite-definition.md): for example EPANET, SWMM, MYSTRAN, Kratos, and Code_Aster as a separate program.
 - **Workspaces:** discipline-specific UI layouts, similar to Revit's discipline tabs.
