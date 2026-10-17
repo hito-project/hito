@@ -36,6 +36,10 @@ action-close-inactive-views = Close Inactive
 action-tab-views = Tab Views
 action-tile-views = Tile Views
 action-user-interface = User Interface
+ui-theme = Theme
+theme-light = Light
+theme-dark = Dark
+theme-system = Use system setting
 
 ## Panels
 

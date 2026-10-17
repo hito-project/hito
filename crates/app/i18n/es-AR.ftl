@@ -36,6 +36,10 @@ action-close-inactive-views = Cerrar inactivas
 action-tab-views = Vistas en fichas
 action-tile-views = Vistas en mosaico
 action-user-interface = Interfaz de usuario
+ui-theme = Tema
+theme-light = Claro
+theme-dark = Oscuro
+theme-system = Según el sistema
 
 ## Paneles
 

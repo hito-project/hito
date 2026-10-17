@@ -6,11 +6,13 @@
 //! The shell is built on egui and egui_dock, and is the only part of HITO
 //! that uses them
 //! ([ADR 0015](https://github.com/hito-project/hito/blob/main/docs/decisions/0015-ui-toolkit.md)).
-//! Its layout is saved through eframe's storage when the window closes.
+//! Its layout and theme are saved through eframe's storage when the window
+//! closes.
 
 mod layout;
 mod panels;
 mod ribbon;
+mod theme;
 
 use std::collections::HashMap;
 
@@ -19,18 +21,22 @@ use egui_dock::DockArea;
 
 pub use layout::{Layout, Tab, ViewId};
 pub use ribbon::Action;
+pub use theme::Theme;
 
 use crate::i18n::{I18n, Locale};
 use crate::viewport::Viewport;
 
 /// The key the layout is saved under in eframe's storage.
 const LAYOUT_KEY: &str = "layout";
+/// The key the theme is saved under, next to the layout.
+const THEME_KEY: &str = "theme";
 
 /// The main window.
 pub struct Shell {
     i18n: I18n,
     ribbon: ribbon::Ribbon,
     layout: Layout,
+    theme: Theme,
     viewports: HashMap<ViewId, Viewport>,
 }
 
@@ -52,12 +58,19 @@ impl Shell {
             i18n: I18n::new(locale),
             ribbon: Default::default(),
             layout,
+            theme: storage
+                .and_then(|s| eframe::get_value(s, THEME_KEY))
+                .unwrap_or_default(),
             viewports: HashMap::new(),
         }
     }
 
     pub fn layout(&self) -> &Layout {
         &self.layout
+    }
+
+    pub fn theme(&self) -> Theme {
+        self.theme
     }
 
     pub fn i18n(&self) -> &I18n {
@@ -80,17 +93,24 @@ impl Shell {
             Action::TabViews => layout.tab_views(),
             Action::TileViews => layout.tile_views(),
             Action::TogglePanel(panel) => layout.toggle_panel(panel),
+            Action::SetTheme(theme) => self.theme = theme,
         }
     }
 }
 
 impl eframe::App for Shell {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
-        let layout = &self.layout;
+        // egui keeps a theme of its own, which it also saves; ours wins.
+        let preference = self.theme.preference();
+        if ui.ctx().options(|o| o.theme_preference) != preference {
+            ui.ctx().set_theme(preference);
+        }
+
+        let (layout, theme) = (&self.layout, self.theme);
         let action = egui::Panel::top("ribbon")
             .show(ui, |ui| {
                 self.ribbon
-                    .ui(ui, &self.i18n, |panel| layout.is_open(panel))
+                    .ui(ui, &self.i18n, |panel| layout.is_open(panel), theme)
             })
             .inner;
         if let Some(action) = action {
@@ -129,5 +149,6 @@ impl eframe::App for Shell {
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         eframe::set_value(storage, LAYOUT_KEY, &self.layout);
+        eframe::set_value(storage, THEME_KEY, &self.theme);
     }
 }

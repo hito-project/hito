@@ -10,11 +10,13 @@ use eframe::egui_wgpu::{RenderState, wgpu};
 
 const COLOR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
-/// The background of a 3D view.
-pub const BACKGROUND: [u8; 3] = [237, 240, 245];
+/// The background of a 3D view in the light theme: white, as in Revit.
+pub const BACKGROUND: [u8; 3] = [255, 255, 255];
+/// The background of a 3D view in the dark theme.
+pub const BACKGROUND_DARK: [u8; 3] = [42, 45, 50];
 
 /// One 3D view's renderer. It renders again only when what it shows
-/// changes, which for now is only its size.
+/// changes, which for now is its size and the theme.
 #[derive(Default)]
 pub struct Viewport {
     target: Option<Target>,
@@ -24,6 +26,7 @@ pub struct Viewport {
 
 struct Target {
     size: [u32; 2],
+    background: [u8; 3],
     texture: wgpu::Texture,
     id: egui::TextureId,
 }
@@ -49,14 +52,20 @@ impl Viewport {
             (rect.width() * ppp).max(1.0) as u32,
             (rect.height() * ppp).max(1.0) as u32,
         ];
-        let id = self.render(rs, size);
+        let background = if ui.visuals().dark_mode {
+            BACKGROUND_DARK
+        } else {
+            BACKGROUND
+        };
+        let id = self.render(rs, size, background);
         let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
         ui.painter().image(id, rect, uv, egui::Color32::WHITE);
     }
 
-    fn render(&mut self, rs: &RenderState, size: [u32; 2]) -> egui::TextureId {
+    fn render(&mut self, rs: &RenderState, size: [u32; 2], background: [u8; 3]) -> egui::TextureId {
         if let Some(target) = &self.target
             && target.size == size
+            && target.background == background
         {
             return target.id;
         }
@@ -93,7 +102,7 @@ impl Viewport {
             }
         };
 
-        let [r, g, b] = BACKGROUND.map(|c| f64::from(c) / 255.0);
+        let [r, g, b] = background.map(|c| f64::from(c) / 255.0);
         let mut encoder = rs.device.create_command_encoder(&Default::default());
         encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("3D view"),
@@ -113,7 +122,12 @@ impl Viewport {
         });
         rs.queue.submit([encoder.finish()]);
         self.renders += 1;
-        self.target = Some(Target { size, texture, id });
+        self.target = Some(Target {
+            size,
+            background,
+            texture,
+            id,
+        });
         id
     }
 

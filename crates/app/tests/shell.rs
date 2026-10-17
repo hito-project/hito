@@ -12,7 +12,7 @@ use egui_kittest::kittest::{NodeT, Queryable};
 use egui_kittest::{Harness, HarnessBuilder};
 use hito::Shell;
 use hito::i18n::Locale;
-use hito::shell::{Tab, ViewId};
+use hito::shell::{Tab, Theme, ViewId};
 
 /// kittest runs one step per input event. Short steps keep the two clicks
 /// of a double-click within egui's double-click delay.
@@ -181,6 +181,27 @@ fn the_layout_is_remembered_between_sessions() {
     assert_eq!(layout.view_areas(), 2);
     assert!(!layout.is_open(Tab::ProjectBrowser));
     assert!(layout.is_open(Tab::Properties));
+}
+
+#[test]
+fn the_theme_is_light_by_default_switches_and_is_remembered() {
+    let mut h = window();
+    assert_eq!(h.state().theme(), Theme::Light);
+    assert_eq!(h.ctx.theme(), egui::Theme::Light);
+
+    ribbon_tab(&mut h, "View");
+    click(&mut h, "User Interface");
+    h.get_by_role_and_label(Role::RadioButton, "Dark").click();
+    h.run_steps(2);
+    assert_eq!(h.state().theme(), Theme::Dark);
+    assert_eq!(h.ctx.theme(), egui::Theme::Dark);
+
+    let mut storage = Storage::default();
+    eframe::App::save(h.state_mut(), &mut storage);
+    drop(h);
+    let h = window_from(Some(&storage));
+    assert_eq!(h.state().theme(), Theme::Dark);
+    assert_eq!(h.ctx.theme(), egui::Theme::Dark);
 }
 
 #[test]

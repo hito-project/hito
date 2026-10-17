@@ -8,6 +8,7 @@
 use eframe::egui;
 
 use super::layout::Tab;
+use super::theme::Theme;
 use crate::i18n::I18n;
 
 /// Something a ribbon button does to the window itself.
@@ -18,6 +19,7 @@ pub enum Action {
     TabViews,
     TileViews,
     TogglePanel(Tab),
+    SetTheme(Theme),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -25,7 +27,8 @@ enum Item {
     Action(Action, &'static str),
     /// A command from a later story, by its message key.
     Command(&'static str),
-    /// Revit's User Interface menu: turns the panels on and off.
+    /// Revit's User Interface menu: turns the panels on and off, and picks
+    /// the theme.
     UserInterface,
 }
 
@@ -107,12 +110,14 @@ const BUTTON_SIZE: egui::Vec2 = egui::vec2(64.0, 48.0);
 
 impl Ribbon {
     /// Shows the ribbon. Returns the action of the button the user pressed.
-    /// `is_open` says which panels are open, for the User Interface menu.
+    /// `is_open` says which panels are open and `theme` which theme is on,
+    /// for the User Interface menu.
     pub fn ui(
         &mut self,
         ui: &mut egui::Ui,
         i18n: &I18n,
         is_open: impl Fn(Tab) -> bool,
+        theme: Theme,
     ) -> Option<Action> {
         ui.horizontal(|ui| {
             for (index, tab) in TABS.iter().enumerate() {
@@ -126,7 +131,7 @@ impl Ribbon {
                     ui.vertical(|ui| {
                         ui.horizontal(|ui| {
                             for item in group.items {
-                                if let Some(a) = item_ui(ui, item, i18n, &is_open) {
+                                if let Some(a) = item_ui(ui, item, i18n, &is_open, theme) {
                                     action = Some(a);
                                 }
                             }
@@ -145,6 +150,7 @@ fn item_ui(
     item: &Item,
     i18n: &I18n,
     is_open: &impl Fn(Tab) -> bool,
+    theme: Theme,
 ) -> Option<Action> {
     match *item {
         Item::Action(action, label) => {
@@ -167,6 +173,13 @@ fn item_ui(
                     let mut open = is_open(panel);
                     if ui.checkbox(&mut open, i18n.tr(label)).changed() {
                         action = Some(Action::TogglePanel(panel));
+                    }
+                }
+                ui.separator();
+                ui.label(egui::RichText::new(i18n.tr("ui-theme")).small().weak());
+                for choice in Theme::ALL {
+                    if ui.radio(theme == choice, i18n.tr(choice.label())).clicked() {
+                        action = Some(Action::SetTheme(choice));
                     }
                 }
             });
