@@ -15,11 +15,11 @@
 use std::collections::BTreeSet;
 use std::mem;
 
-use crate::change::{ElementChange, RelationshipChange};
+use crate::change::{ElementChange, FieldKey, RelationshipChange};
 use crate::view::Staged;
 use crate::{
-    ChangeSet, Code, Command, Element, ElementId, ElementStore, Model, ModelId, Relationship,
-    Severity, StoreError, StoreView, Value, Violation,
+    ChangeSet, Code, Command, Element, ElementId, ElementStore, Model, ModelId, Origin,
+    Relationship, Severity, StoreError, StoreView, Value, Violation,
 };
 
 /// A group of changes to an [`ElementStore`] that apply together or not at
@@ -116,11 +116,28 @@ impl<'s> Transaction<'s> {
         name: &str,
         value: impl Into<Value>,
     ) -> Result<(), StoreError> {
-        let value = value.into();
+        self.set_property_by(Origin::User, id, name, value.into())
+    }
+
+    fn set_property_by(
+        &mut self,
+        origin: Origin,
+        id: ElementId,
+        name: &str,
+        value: Value,
+    ) -> Result<(), StoreError> {
         let element = self.view().get(id).ok_or(StoreError::UnknownElement(id))?;
         self.view().check_property(&element.class, name, &value)?;
         self.stage(id).properties.insert(name.to_owned(), value);
+        if origin == Origin::User {
+            self.by_user(id, FieldKey::Property(name.to_owned()));
+        }
         Ok(())
+    }
+
+    /// Notes that the user changed this field, rather than recompute.
+    fn by_user(&mut self, id: ElementId, field: FieldKey) {
+        self.staged.user_fields.insert((id, field));
     }
 
     /// Removes one of an element's own property values, so its type's value
@@ -134,6 +151,7 @@ impl<'s> Transaction<'s> {
         if !element.properties.contains_key(name) {
             return Ok(None);
         }
+        self.by_user(id, FieldKey::Property(name.to_owned()));
         Ok(self.stage(id).properties.remove(name))
     }
 
@@ -146,6 +164,7 @@ impl<'s> Transaction<'s> {
         if let Some(code) = &code {
             self.view().check_code_free(code, id)?;
         }
+        self.by_user(id, FieldKey::Code);
         let element = self.stage(id);
         let old = mem::replace(&mut element.code, code.clone());
         if let Some(old) = old {
@@ -166,16 +185,28 @@ impl<'s> Transaction<'s> {
     pub fn relate(&mut self, relationship: Relationship) -> Result<(), StoreError> {
         self.view().check_relationship(&relationship)?;
         let in_store = self.store.has_relationship(&relationship);
+        self.staged.user_relationships.insert(relationship.clone());
         self.staged.set_relationship(relationship, true, in_store);
         Ok(())
     }
 
     /// Removes a relationship.
     pub fn unrelate(&mut self, relationship: &Relationship) -> Result<(), StoreError> {
+        self.unrelate_by(Origin::User, relationship)
+    }
+
+    fn unrelate_by(
+        &mut self,
+        origin: Origin,
+        relationship: &Relationship,
+    ) -> Result<(), StoreError> {
         if !self.view().has_relationship(relationship) {
             return Err(StoreError::MissingRelationship(relationship.clone()));
         }
         let in_store = self.store.has_relationship(relationship);
+        if origin == Origin::User {
+            self.staged.user_relationships.insert(relationship.clone());
+        }
         self.staged
             .set_relationship(relationship.clone(), false, in_store);
         Ok(())
@@ -199,8 +230,9 @@ impl<'s> Transaction<'s> {
             .cloned()
             .collect();
         for relationship in &relationships {
-            self.unrelate(relationship)?;
+            self.unrelate_by(Origin::Propagated, relationship)?;
         }
+        self.staged.user_deleted.insert(id);
         for &element in &deleted {
             let Staged {
                 elements,
@@ -235,15 +267,30 @@ impl<'s> Transaction<'s> {
         }
         let staged = mem::take(&mut self.staged);
         let store = &*self.store;
-        let elements = staged.order.iter().filter_map(|id| {
-            let before = store.elements.get(id);
-            ElementChange::between(before, staged.elements[id].as_ref())
+        let by_user = |user: bool| match user {
+            true => Origin::User,
+            false => Origin::Propagated,
+        };
+        let elements = staged.order.iter().filter_map(|&id| {
+            let (before, after) = (store.elements.get(&id), staged.elements[&id].as_ref());
+            // Only the user creates elements; a deletion may take others.
+            let origin = by_user(after.is_some() || staged.user_deleted.contains(&id));
+            ElementChange::between(before, after, origin, |field| {
+                by_user(staged.user_fields.contains(&(id, field.clone())))
+            })
         });
         let relationships = staged.relationship_order.iter().filter_map(|r| {
             let exists = staged.relationships[r];
+            let origin = by_user(staged.user_relationships.contains(r));
             (exists != store.has_relationship(r)).then(|| match exists {
-                true => RelationshipChange::Added(r.clone()),
-                false => RelationshipChange::Removed(r.clone()),
+                true => RelationshipChange::Added {
+                    relationship: r.clone(),
+                    origin,
+                },
+                false => RelationshipChange::Removed {
+                    relationship: r.clone(),
+                    origin,
+                },
             })
         });
         let changes = ChangeSet {
@@ -293,7 +340,7 @@ impl<'s> Transaction<'s> {
                 .filter(|(name, value)| element.properties().get(name) != Some(value))
                 .collect();
             for (name, value) in values {
-                self.set_property(id, &name, value)?;
+                self.set_property_by(Origin::Propagated, id, &name, value)?;
             }
         }
         Ok(order)

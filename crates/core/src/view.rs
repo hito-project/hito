@@ -3,6 +3,7 @@
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet, VecDeque};
 
+use crate::change::FieldKey;
 use crate::element::Properties;
 use crate::{
     Aspect, ClassId, ClassKind, Code, Element, ElementId, ElementStore, Model, ModelId, OnDelete,
@@ -32,6 +33,11 @@ pub(crate) struct Staged {
     incoming: HashMap<ElementId, Vec<Relationship>>,
     /// The elements the transaction created with a type, by type.
     pub(crate) instances: HashMap<ElementId, Vec<ElementId>>,
+    /// What the user changed directly, rather than through recompute or a
+    /// deletion: fields, deleted elements and relationships.
+    pub(crate) user_fields: HashSet<(ElementId, FieldKey)>,
+    pub(crate) user_deleted: HashSet<ElementId>,
+    pub(crate) user_relationships: HashSet<Relationship>,
 }
 
 impl Staged {
@@ -458,8 +464,10 @@ impl<'a> StoreView<'a> {
     fn check_aspects(&self, aspects: &[Aspect]) -> Result<(), StoreError> {
         for (i, aspect) in aspects.iter().enumerate() {
             let kind = self.check_class(aspect.class(), |kind| kind != ClassKind::Element)?;
-            let repeated = aspects[..i].iter().any(|a| a.class() == aspect.class());
-            if kind == ClassKind::UniqueAspect && repeated {
+            let earlier = &aspects[..i];
+            let repeated = earlier.iter().any(|a| a.class() == aspect.class());
+            let same_id = earlier.iter().any(|a| a.id() == aspect.id());
+            if (kind == ClassKind::UniqueAspect && repeated) || same_id {
                 return Err(StoreError::DuplicateAspect(aspect.class().clone()));
             }
             self.check_properties(aspect.class(), aspect.properties())?;

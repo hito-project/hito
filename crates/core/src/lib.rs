@@ -20,7 +20,7 @@
 //! - [`Transaction`]s, the only way to change the store: all or nothing,
 //!   with dependent elements [recomputed](Recompute) and the domains'
 //!   validation [`Rule`]s checked when they commit, and recorded as a
-//!   [`ChangeSet`]
+//!   [`ChangeSet`] that [`ElementStore::replay`] can apply again
 
 mod change;
 mod code;
@@ -38,9 +38,11 @@ mod unit;
 mod value;
 mod view;
 
-pub use change::{ChangeSet, Command, ElementChange, FieldChange, RelationshipChange};
+pub use change::{
+    ChangeSet, ChangedField, Command, ElementChange, FieldChange, Origin, RelationshipChange,
+};
 pub use code::{Code, CodeSpec, EmptyCodeError};
-pub use element::{Aspect, Element, Model, ModelId, ModelKind, Properties};
+pub use element::{Aspect, AspectId, Element, Model, ModelId, ModelKind, Properties};
 pub use id::{ElementId, ParseElementIdError};
 pub use provenance::ExternalSource;
 pub use recompute::Recompute;
