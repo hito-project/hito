@@ -1,0 +1,25 @@
+[package]
+name = "history-spike"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.99"
+publish = false
+license = "MIT OR Apache-2.0"
+description = "Throwaway prototype for spike #156 (model history). Not part of HITO."
+
+# Standalone: not a member of any workspace.
+[workspace]
+
+[dependencies]
+hito-core = { path = "../../crates/core" }
+serde = { version = "1", features = ["derive"] }
+postcard = { version = "1", features = ["use-std"] }
+ciborium = "0.2"
+serde_json = { version = "1", features = ["float_roundtrip"] }
+blake3 = "1"
+zstd = "0.13"
+lz4_flex = "0.11"
+rusqlite = { version = "0.37", features = ["bundled"] }
+
+[profile.release]
+debug = 1

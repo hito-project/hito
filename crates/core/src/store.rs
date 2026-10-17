@@ -118,6 +118,14 @@ impl ElementStore {
         self.view().preview_delete(id)
     }
 
+    /// Applies a change set that was committed before: read from the file's
+    /// log, the inverse of one for undo, or received from another copy.
+    /// Like a commit's own apply, it runs no checks and no domain logic, so
+    /// the result is the same in any HITO version. Spike #156.
+    pub fn replay(&mut self, changes: &ChangeSet) {
+        self.apply(changes);
+    }
+
     pub(crate) fn has_relationship(&self, relationship: &Relationship) -> bool {
         self.relationships_from(relationship.source())
             .any(|r| r == relationship)

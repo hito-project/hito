@@ -56,6 +56,43 @@ pub struct ChangeSet {
 }
 
 impl ChangeSet {
+    /// A change set read back from storage or received from elsewhere, to
+    /// [replay](crate::ElementStore::replay). Warnings aren't part of it:
+    /// they're derived, not facts.
+    pub fn from_parts(
+        command: Option<Command>,
+        models: Vec<Model>,
+        elements: Vec<ElementChange>,
+        relationships: Vec<RelationshipChange>,
+    ) -> Self {
+        Self {
+            command,
+            models,
+            elements,
+            relationships,
+            warnings: Vec::new(),
+        }
+    }
+
+    /// The change set that undoes this one: creations become deletions and
+    /// back, each field goes from its after value to its before value, in
+    /// reverse order. Spike #156: models can't be removed yet, so added
+    /// models stay.
+    pub fn inverse(&self) -> Self {
+        let elements = self.elements.iter().rev().map(ElementChange::inverse);
+        let relationships = self.relationships.iter().rev().map(|r| match r {
+            RelationshipChange::Added(r) => RelationshipChange::Removed(r.clone()),
+            RelationshipChange::Removed(r) => RelationshipChange::Added(r.clone()),
+        });
+        Self {
+            command: self.command.clone(),
+            models: Vec::new(),
+            elements: elements.collect(),
+            relationships: relationships.collect(),
+            warnings: Vec::new(),
+        }
+    }
+
     /// The command the transaction carried out, if it was given one.
     pub fn command(&self) -> Option<&Command> {
         self.command.as_ref()
@@ -111,6 +148,17 @@ impl ElementChange {
         match self {
             Self::Created(element) | Self::Deleted(element) => element.id,
             Self::Modified { id, .. } => *id,
+        }
+    }
+
+    fn inverse(&self) -> Self {
+        match self {
+            Self::Created(element) => Self::Deleted(element.clone()),
+            Self::Deleted(element) => Self::Created(element.clone()),
+            Self::Modified { id, fields } => Self::Modified {
+                id: *id,
+                fields: fields.iter().rev().map(FieldChange::inverse).collect(),
+            },
         }
     }
 
@@ -196,6 +244,36 @@ impl FieldChange {
             fields.push(Self::Aspects { before, after });
         }
         fields
+    }
+
+    fn inverse(&self) -> Self {
+        match self.clone() {
+            Self::Property {
+                name,
+                before,
+                after,
+            } => Self::Property {
+                name,
+                before: after,
+                after: before,
+            },
+            Self::Type { before, after } => Self::Type {
+                before: after,
+                after: before,
+            },
+            Self::Code { before, after } => Self::Code {
+                before: after,
+                after: before,
+            },
+            Self::Source { before, after } => Self::Source {
+                before: after,
+                after: before,
+            },
+            Self::Aspects { before, after } => Self::Aspects {
+                before: after,
+                after: before,
+            },
+        }
     }
 
     /// Sets the field to its value after the change.
