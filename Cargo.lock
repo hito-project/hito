@@ -612,6 +612,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cmake"
+version = "0.1.58"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c0f78a02292a74a88ac736019ab962ece0bc380e3f977bf72e376c5d78ff0678"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "cobs"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -709,6 +718,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "crossbeam-deque"
+version = "0.8.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "622f3fc73690be383c7214310406f28a90e6edeadc3cea882f9d71e495b9711a"
+dependencies = [
+ "crossbeam-epoch",
+ "crossbeam-utils",
+]
+
+[[package]]
+name = "crossbeam-epoch"
+version = "0.9.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dc74980687109a3b14c72fd458107bf0baa1da1a1a805e178d15501ba9b86d9d"
+dependencies = [
+ "crossbeam-utils",
+]
+
+[[package]]
 name = "crossbeam-utils"
 version = "0.8.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -792,6 +820,15 @@ dependencies = [
  "heck",
  "proc-macro2",
  "proc-macro2-diagnostics",
+]
+
+[[package]]
+name = "earcut"
+version = "0.4.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9f03dd5350900133e14471c90d513eb5ba264004cd833adecab7dfa5fb5a2974"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]
@@ -1553,6 +1590,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "hito-geometry"
+version = "0.0.0"
+dependencies = [
+ "earcut",
+ "hito-core",
+ "rayon",
+]
+
+[[package]]
+name = "hito-manifold"
+version = "0.0.0"
+dependencies = [
+ "hito-core",
+ "hito-geometry",
+ "manifold-csg",
+]
+
+[[package]]
 name = "hito-step"
 version = "0.0.0"
 
@@ -2004,6 +2059,26 @@ name = "log"
 version = "0.4.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
+
+[[package]]
+name = "manifold-csg"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5ba4dd58c980405d5a23657a59106e2844a36d3c25b745ee7a0a3e0524e6bc4d"
+dependencies = [
+ "log",
+ "manifold-csg-sys",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "manifold-csg-sys"
+version = "3.5.105"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "58f034b8af43be927e7651da0c18a0205e8942acf275550acc4a8300042dee51"
+dependencies = [
+ "cmake",
+]
 
 [[package]]
 name = "memchr"
@@ -2857,6 +2932,26 @@ dependencies = [
  "objc2-core-foundation",
  "objc2-foundation 0.3.2",
  "objc2-quartz-core 0.3.2",
+]
+
+[[package]]
+name = "rayon"
+version = "1.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fb39b166781f92d482534ef4b4b1b2568f42613b53e5b6c160e24cfbfa30926d"
+dependencies = [
+ "either",
+ "rayon-core",
+]
+
+[[package]]
+name = "rayon-core"
+version = "1.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22e18b0f0062d30d4230b2e85ff77fdfe4326feb054b9783a3460d8435c8ab91"
+dependencies = [
+ "crossbeam-deque",
+ "crossbeam-utils",
 ]
 
 [[package]]

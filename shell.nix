@@ -16,6 +16,7 @@ let
   ];
 in
 pkgs.mkShell {
-  packages = with pkgs; [ rustup gcc ];
+  # git and cmake build the Manifold geometry kernel from source (hito-manifold).
+  packages = with pkgs; [ rustup gcc git cmake ];
   LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath runtimeLibs;
 }

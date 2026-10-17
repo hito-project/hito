@@ -1,0 +1,21 @@
+[package]
+name = "hito-manifold"
+description = "The HITO solid-boolean kernel adapter: Manifold behind the geometry port."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+hito-geometry.workspace = true
+# Manifold (C++, Apache-2.0) through its Rust bindings (ADR 0014). The first
+# build clones Manifold and compiles it with CMake, so it needs git, CMake and
+# a C++ compiler. Without the default `parallel` feature: the geometry cache
+# already runs elements in parallel, and leaving out oneTBB keeps the C++
+# build smaller.
+manifold-csg = { version = "0.4.1", default-features = false }
+
+[dev-dependencies]
+hito-core.workspace = true

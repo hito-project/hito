@@ -30,12 +30,22 @@ const WINDOW_SYSTEM: &str = "binds a library the operating system provides only 
 /// A new entry needs its reason here, or a link to the ADR that records it.
 pub const JUSTIFIED: &[(&str, &str)] = &[
     ("android-activity", WINDOW_SYSTEM),
+    (
+        "manifold-csg-sys",
+        "the Manifold geometry kernel (C++, Apache-2.0), for solid booleans. ADR 0014: \
+         the Rust kernels fail basic BIM booleans or are much slower; boolmesh (Rust) \
+         can replace it behind the geometry port",
+    ),
     ("khronos-egl", WINDOW_SYSTEM),
     ("objc-sys", WINDOW_SYSTEM),
     ("smithay-client-toolkit", WINDOW_SYSTEM),
     ("wayland-backend", WINDOW_SYSTEM),
     ("wayland-sys", WINDOW_SYSTEM),
     ("x11-dl", WINDOW_SYSTEM),
+    (
+        "rayon-core",
+        "pure Rust: its `links` key only stops two thread pools being linked together",
+    ),
     (
         "wasm-bindgen-shared",
         "pure Rust: its `links` key only stops two versions being linked together",
