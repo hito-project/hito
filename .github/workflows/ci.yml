@@ -8,7 +8,10 @@
 #                clippy with warnings as errors, then the build and the tests.
 #                The tests include the architecture's dependency rules and the
 #                check that every non-Rust dependency is justified (ADR 0005),
-#                both in tools/architecture-check.
+#                both in tools/architecture-check. On Linux, Mesa's software
+#                Vulkan driver (lavapipe) is installed and HITO_REQUIRE_GPU is
+#                set, so the 3D view test must render; on Windows and macOS
+#                it skips if the runner has no graphics adapter.
 #   Fuzz         the STEP Part 21 reader on arbitrary bytes for a few minutes
 #                (ADR 0022). It needs nightly, so it's a separate job. Pull
 #                requests that don't touch the reader or this file pass at
@@ -63,8 +66,16 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      # The 3D view test fails, instead of skipping, if it finds no adapter.
+      HITO_REQUIRE_GPU: ${{ matrix.os == 'ubuntu-latest' && '1' || '' }}
     steps:
       - uses: actions/checkout@v5
+      - name: Install a software Vulkan driver (lavapipe)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers libvulkan1
       - name: Install the Rust toolchain
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
@@ -74,6 +85,9 @@ jobs:
         run: cargo build --workspace --locked
       - name: Test (includes the dependency rules)
         run: cargo test --workspace --locked
+      # Shows whether the 3D view test rendered, and with which adapter.
+      - name: 3D view test output
+        run: cargo test -p hito --locked --test shell the_3d_view_renders_with_wgpu -- --nocapture
 
   fuzz:
     name: Fuzz

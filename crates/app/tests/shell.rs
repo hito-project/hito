@@ -2,7 +2,8 @@
 //! a screen reader sees (ADR 0015).
 //!
 //! Only `the_3d_view_renders_with_wgpu` needs a graphics device. It skips
-//! itself when there's none, such as on CI runners without Mesa's lavapipe.
+//! itself when there's none, unless `HITO_REQUIRE_GPU` is set, as it is on
+//! the Linux CI runner, which has Mesa's software Vulkan driver (lavapipe).
 
 use std::collections::HashMap;
 
@@ -233,11 +234,26 @@ fn text_is_in_spanish_by_default() {
 /// With a wgpu device, a view tab shows what the viewport renders off-screen.
 #[test]
 fn the_3d_view_renders_with_wgpu() {
+    use egui_kittest::wgpu::{WgpuTestRenderer, create_render_state, default_wgpu_setup};
+
     // kittest panics when it finds no adapter.
-    let Ok(renderer) = std::panic::catch_unwind(egui_kittest::wgpu::WgpuTestRenderer::new) else {
-        eprintln!("skipped: no wgpu adapter");
+    let options = eframe::egui_wgpu::RendererOptions::PREDICTABLE;
+    let Ok(render_state) =
+        std::panic::catch_unwind(|| create_render_state(default_wgpu_setup(), options))
+    else {
+        // CI sets this where a software Vulkan driver is installed, so a
+        // missing adapter there is a failure, not a skip.
+        let required = std::env::var("HITO_REQUIRE_GPU").is_ok_and(|v| !v.is_empty());
+        assert!(
+            !required,
+            "HITO_REQUIRE_GPU is set but no wgpu adapter was found"
+        );
+        println!("skipped: no wgpu adapter");
         return;
     };
+    let info = render_state.adapter.get_info();
+    println!("rendering with {} ({:?})", info.name, info.backend);
+    let renderer = WgpuTestRenderer::from_render_state(render_state);
     let mut h = builder()
         .renderer(renderer)
         .build_eframe(|_cc| Shell::restore(None, Locale::En));
