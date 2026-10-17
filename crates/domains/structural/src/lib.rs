@@ -2,4 +2,69 @@
 //! ([ADR 0011](https://github.com/hito-project/hito/blob/main/docs/decisions/0011-mvp-structural-bim.md)).
 //!
 //! A domain adds element types to the core's schema system and depends on the
-//! core only. Nothing is implemented yet.
+//! core only. The app [registers](register) it at startup:
+//!
+//! ```
+//! use hito_core::SchemaRegistry;
+//! use hito_structural::{class, level};
+//!
+//! let mut registry = SchemaRegistry::new();
+//! hito_structural::register(&mut registry)?;
+//! assert!(registry.class(&class(level::LEVEL)).is_some());
+//! # Ok::<(), hito_core::SchemaError>(())
+//! ```
+//!
+//! So far it has:
+//!
+//! - [`level`]s: named elevations that organise the building by floors, and
+//!   the elements attached to them
+//!
+//! Nothing here is specific to a country
+//! ([ADR 0008](https://github.com/hito-project/hito/blob/main/docs/decisions/0008-argentina-first-international-by-design.md)).
+
+pub mod level;
+
+use hito_core::{ClassId, Recompute, Rule, Schema, SchemaError, SchemaRegistry, SchemaVersion};
+
+/// The structural schema's name. It prefixes every class name, as in
+/// `Structural:Level`, and is stored in files.
+pub const SCHEMA: &str = "Structural";
+
+/// The structural schema's version.
+pub const VERSION: SchemaVersion = SchemaVersion::new(1, 0, 0);
+
+/// The structural class or relationship type called `name`, such as
+/// [`level::LEVEL`].
+pub fn class(name: &str) -> ClassId {
+    ClassId::new(SCHEMA, name)
+}
+
+/// The structural schema: every class and relationship type.
+pub fn schema() -> Schema {
+    let schema = Schema::new(SCHEMA, VERSION);
+    let schema = level::classes().into_iter().fold(schema, Schema::class);
+    level::relationships()
+        .into_iter()
+        .fold(schema, Schema::relationship)
+}
+
+/// The structural recompute functions: how elements follow what they
+/// depend on.
+pub fn recomputes() -> Vec<Recompute> {
+    level::recomputes()
+}
+
+/// The structural validation rules.
+pub fn rules() -> Vec<Rule> {
+    level::rules()
+}
+
+/// Registers the structural schema, its recompute functions and its rules.
+/// It needs only the core schema before it.
+pub fn register(registry: &mut SchemaRegistry) -> Result<(), SchemaError> {
+    registry.register(schema())?;
+    recomputes()
+        .into_iter()
+        .try_for_each(|r| registry.add_recompute(r))?;
+    rules().into_iter().try_for_each(|r| registry.add_rule(r))
+}
