@@ -16,7 +16,7 @@ ribbon-group-create = Create
 ribbon-group-windows = Windows
 ribbon-group-settings = Settings
 
-## Ribbon buttons for commands that don't exist yet (#24)
+## Commands
 
 command-beam = Beam
 command-wall = Wall
@@ -28,6 +28,23 @@ command-grid = Grid
 command-materials = Materials
 command-project-units = Project Units
 command-unavailable = Not available yet
+# A ribbon button's tooltip, with the command's shortcut, as in Revit.
+command-tooltip = { $command } ({ $alias })
+
+## The command line, as in AutoCAD
+
+command-line-label = Command
+command-line-hint = Type a command
+command-unknown = Unknown command: { $input }
+command-not-available = { $command } is not available yet
+# AutoCAD's message when Esc cancels a command.
+command-cancelled = *Cancel*
+command-failed = { $command } could not be completed
+input-empty = Type an answer, or press Esc to cancel
+# The command line reads numbers as AutoCAD does, in every language: a point
+# is the decimal separator and a comma separates coordinates.
+input-not-a-point = Enter a point as x,y or x,y,z, such as 3.5,2
+input-not-a-value = Enter a value, such as 3.5 or 350 cm
 
 ## Window actions
 

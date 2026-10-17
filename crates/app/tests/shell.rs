@@ -12,8 +12,10 @@ use eframe::egui::accesskit::Role;
 use egui_kittest::kittest::{NodeT, Queryable};
 use egui_kittest::{Harness, HarnessBuilder};
 use hito::Shell;
+use hito::command::{Command, Input, Next, Prompt, Run, Tool, Wants};
 use hito::i18n::Locale;
 use hito::shell::{Tab, Theme, ViewId};
+use hito_core::{Dimension, Model, ModelKind, StoreError, Transaction};
 
 /// kittest runs one step per input event. Short steps keep the two clicks
 /// of a double-click within egui's double-click delay.
@@ -75,7 +77,8 @@ fn ribbon_tab(h: &mut Harness<'_, Shell>, label: &str) {
 #[test]
 fn ribbon_has_discipline_tabs_with_groups() {
     let mut h = window();
-    // The Structure tab shows first, with the M1 commands, disabled until #24.
+    // The Structure tab shows first, with the M1 commands, disabled until
+    // their stories build them.
     let column = h.get_by_role_and_label(Role::Button, "Column");
     assert!(column.accesskit_node().is_disabled());
     assert!(shows(&h, "Datum"));
@@ -278,4 +281,199 @@ fn the_3d_view_renders_with_wgpu() {
     let background = hito::viewport::BACKGROUND;
     let close = (0..3).all(|i| pixel[i].abs_diff(background[i]) <= 8);
     assert!(close, "pixel {pixel:?}, background {background:?}");
+}
+
+/// Types `text` in the command line and presses Enter.
+fn command_line(h: &mut Harness<'_, Shell>, text: &str) {
+    h.get_by_role(Role::TextInput).focus();
+    h.run_steps(1);
+    h.get_by_role(Role::TextInput).type_text(text);
+    h.run_steps(1);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(2);
+}
+
+#[test]
+fn command_line_autocompletes_and_runs() {
+    let mut h = window();
+    // A language-neutral name.
+    command_line(&mut h, "VIEW3D");
+    assert_eq!(h.state().layout().open_views().len(), 2);
+
+    // A partial label lists the matches with their names and aliases; Tab
+    // runs the highlighted one.
+    h.get_by_role(Role::TextInput).focus();
+    h.run_steps(1);
+    h.get_by_role(Role::TextInput).type_text("tile");
+    h.run_steps(2);
+    assert!(shows(&h, "Tile Views   TILEVIEWS   WT"), "completion");
+    h.key_press(egui::Key::Tab);
+    h.run_steps(2);
+    assert_eq!(h.state().layout().view_areas(), 2);
+
+    // An alias, and a partial name that runs its first completion.
+    command_line(&mut h, "tab");
+    assert_eq!(h.state().layout().view_areas(), 1);
+    command_line(&mut h, "wt");
+    assert_eq!(h.state().layout().view_areas(), 2);
+
+    command_line(&mut h, "xyzzy");
+    assert!(h.state().commands().message().unwrap().contains("xyzzy"));
+}
+
+#[test]
+fn accent_insensitive_completion() {
+    let mut h = builder().build_eframe(|cc| Shell::new(cc));
+    h.run_steps(2);
+    command_line(&mut h, "vista 3d");
+    // Spanish labels, whatever the case and the accents.
+    h.get_by_role(Role::TextInput).focus();
+    h.run_steps(1);
+    h.get_by_role(Role::TextInput).type_text("MOSÁI");
+    h.run_steps(2);
+    let completion = "Vistas en mosaico   TILEVIEWS   WT";
+    assert!(shows(&h, completion), "completion");
+    h.key_press(egui::Key::Enter);
+    h.run_steps(2);
+    assert_eq!(h.state().layout().view_areas(), 2);
+}
+
+#[test]
+fn two_letter_shortcuts_when_nothing_has_focus() {
+    let mut h = window();
+    h.event(egui::Event::Text("P".into()));
+    h.event(egui::Event::Text("P".into()));
+    h.run_steps(2);
+    assert!(!h.state().layout().is_open(Tab::Properties), "PP");
+
+    // A command that isn't available yet says so.
+    h.event(egui::Event::Text("c".into()));
+    h.event(egui::Event::Text("l".into()));
+    h.run_steps(2);
+    let message = h.state().commands().message().unwrap_or_default();
+    assert!(message.contains("Column"), "{message:?}");
+
+    // The ribbon's tooltip names the alias.
+    ribbon_tab(&mut h, "View");
+    h.get_by_role_and_label(Role::Button, "Tile Views").hover();
+    h.run_steps(30);
+    // Fluent marks its arguments with invisible isolation characters.
+    assert!(h.query_by_label_contains("WT").is_some(), "tooltip");
+}
+
+/// A tool for the tests: asks for a point and a length, then adds a model.
+#[derive(Default)]
+struct Probe {
+    point: Option<[f64; 3]>,
+}
+
+impl Tool for Probe {
+    fn prompt(&self) -> Prompt {
+        let (message, wants) = match self.point {
+            None => ("probe-point", Wants::Point),
+            Some(_) => ("probe-length", Wants::Quantity(Dimension::LENGTH)),
+        };
+        Prompt { message, wants }
+    }
+
+    fn input(&mut self, input: Input) -> Next {
+        match input {
+            Input::Point(point) => {
+                self.point = Some(point);
+                Next::Ask
+            }
+            Input::Quantity(_) => Next::Done,
+        }
+    }
+
+    fn commit(self: Box<Self>, tx: &mut Transaction<'_>) -> Result<(), StoreError> {
+        tx.insert_model(Model::new(ModelKind::Physical)).map(drop)
+    }
+}
+
+/// The window with the probe tool registered as `PROBE`, alias `PR`.
+fn window_with_probe() -> Harness<'static, Shell> {
+    window_with_probe_in(Locale::En)
+}
+
+fn window_with_probe_in(locale: Locale) -> Harness<'static, Shell> {
+    let mut h = builder().build_eframe(move |_cc| Shell::restore(None, locale));
+    h.run_steps(2);
+    let probe = Command {
+        name: "PROBE",
+        label: "probe",
+        alias: Some("PR"),
+        run: Run::Tool(|| Box::new(Probe::default())),
+    };
+    let registry = h.state_mut().commands_mut().registry_mut();
+    registry.register(probe).unwrap();
+    h
+}
+
+/// The message key of the running command's prompt.
+fn prompt(h: &Harness<'_, Shell>) -> Option<&'static str> {
+    h.state().commands().prompt().map(|p| p.message)
+}
+
+#[test]
+fn commands_prompt_on_the_command_line() {
+    let mut h = window_with_probe();
+    // Started by its shortcut, the tool takes the command line's focus.
+    h.event(egui::Event::Text("PR".into()));
+    h.run_steps(2);
+    assert_eq!(prompt(&h), Some("probe-point"));
+    assert!(shows(&h, "⟨probe-point⟩"), "the prompt is the label");
+
+    h.get_by_role(Role::TextInput).type_text("1,2");
+    h.key_press(egui::Key::Enter);
+    h.run_steps(2);
+    assert_eq!(prompt(&h), Some("probe-length"));
+
+    // The answer must be a length.
+    h.get_by_role(Role::TextInput).type_text("2 kN");
+    h.key_press(egui::Key::Enter);
+    h.run_steps(2);
+    assert_eq!(prompt(&h), Some("probe-length"));
+    assert!(h.state().commands().message().is_some());
+
+    h.get_by_role(Role::TextInput).type_text("3 m");
+    h.key_press(egui::Key::Enter);
+    h.run_steps(2);
+    assert_eq!(prompt(&h), None);
+    assert_eq!(h.state().project().models().count(), 1);
+}
+
+/// The command line reads numbers as AutoCAD does in every language, even
+/// where the UI writes decimals with a comma.
+#[test]
+fn input_uses_a_decimal_point_in_spanish_too() {
+    let mut h = window_with_probe_in(Locale::EsAr);
+    command_line(&mut h, "probe");
+    command_line(&mut h, "3.5,2");
+    assert_eq!(prompt(&h), Some("probe-length"));
+    command_line(&mut h, "3,5");
+    assert_eq!(prompt(&h), Some("probe-length"), "a comma isn't a decimal");
+    command_line(&mut h, "1.5 m");
+    assert_eq!(prompt(&h), None);
+    assert_eq!(h.state().project().models().count(), 1);
+}
+
+#[test]
+fn esc_cancels_a_command() {
+    let mut h = window_with_probe();
+    command_line(&mut h, "probe");
+    command_line(&mut h, "1,2");
+    assert_eq!(prompt(&h), Some("probe-length"));
+    h.key_press(egui::Key::Escape);
+    h.run_steps(2);
+    assert_eq!(prompt(&h), None);
+    assert_eq!(h.state().commands().message(), Some("*Cancel*"));
+    assert_eq!(h.state().project().models().count(), 0);
+
+    // A ribbon button cancels the running command and runs its own.
+    command_line(&mut h, "probe");
+    ribbon_tab(&mut h, "View");
+    click(&mut h, "3D View");
+    assert_eq!(prompt(&h), None);
+    assert_eq!(h.state().layout().open_views().len(), 2);
 }

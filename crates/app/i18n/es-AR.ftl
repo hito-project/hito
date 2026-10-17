@@ -16,7 +16,7 @@ ribbon-group-create = Crear
 ribbon-group-windows = Ventanas
 ribbon-group-settings = Configuración
 
-## Botones de comandos que todavía no existen (#24)
+## Comandos
 
 command-beam = Viga
 command-wall = Muro
@@ -28,6 +28,23 @@ command-grid = Eje
 command-materials = Materiales
 command-project-units = Unidades de proyecto
 command-unavailable = Todavía no disponible
+# La ayuda de un botón de la cinta, con el atajo del comando, como en Revit.
+command-tooltip = { $command } ({ $alias })
+
+## La línea de comandos, como en AutoCAD
+
+command-line-label = Comando
+command-line-hint = Escribir un comando
+command-unknown = Comando desconocido: { $input }
+command-not-available = { $command } todavía no está disponible
+# El mensaje de AutoCAD cuando Esc cancela un comando.
+command-cancelled = *Cancelar*
+command-failed = No se pudo completar { $command }
+input-empty = Escribir una respuesta, o Esc para cancelar
+# La línea de comandos lee los números como AutoCAD, en todos los idiomas:
+# el punto separa los decimales y la coma, las coordenadas.
+input-not-a-point = Ingresar un punto como x,y o x,y,z, por ejemplo 3.5,2
+input-not-a-value = Ingresar un valor, como 3.5 o 350 cm
 
 ## Acciones de ventanas
 

@@ -72,8 +72,16 @@ impl I18n {
         name: &'a str,
         value: impl Into<FluentValue<'a>>,
     ) -> String {
-        let mut args = FluentArgs::new();
-        args.set(name, value);
+        self.tr_args(key, [(name, value.into())])
+    }
+
+    /// The text of message `key` with several arguments.
+    pub fn tr_args<'a>(
+        &self,
+        key: &str,
+        args: impl IntoIterator<Item = (&'a str, FluentValue<'a>)>,
+    ) -> String {
+        let args = args.into_iter().collect();
         self.format(key, Some(&args))
     }
 
