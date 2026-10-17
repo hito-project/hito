@@ -6,11 +6,12 @@
 //!
 //! ```
 //! use hito_core::SchemaRegistry;
-//! use hito_structural::{class, level};
+//! use hito_structural::{class, grid, level};
 //!
 //! let mut registry = SchemaRegistry::new();
 //! hito_structural::register(&mut registry)?;
 //! assert!(registry.class(&class(level::LEVEL)).is_some());
+//! assert!(registry.class(&class(grid::GRID)).is_some());
 //! # Ok::<(), hito_core::SchemaError>(())
 //! ```
 //!
@@ -18,10 +19,12 @@
 //!
 //! - [`level`]s: named elevations that organise the building by floors, and
 //!   the elements attached to them
+//! - [`grid`]s: labelled lines that lay out the structure in plan
 //!
 //! Nothing here is specific to a country
 //! ([ADR 0008](https://github.com/hito-project/hito/blob/main/docs/decisions/0008-argentina-first-international-by-design.md)).
 
+pub mod grid;
 pub mod level;
 
 use hito_core::{ClassId, Recompute, Rule, Schema, SchemaError, SchemaRegistry, SchemaVersion};
@@ -42,7 +45,8 @@ pub fn class(name: &str) -> ClassId {
 /// The structural schema: every class and relationship type.
 pub fn schema() -> Schema {
     let schema = Schema::new(SCHEMA, VERSION);
-    let schema = level::classes().into_iter().fold(schema, Schema::class);
+    let classes = level::classes().into_iter().chain(grid::classes());
+    let schema = classes.fold(schema, Schema::class);
     level::relationships()
         .into_iter()
         .fold(schema, Schema::relationship)
@@ -56,7 +60,7 @@ pub fn recomputes() -> Vec<Recompute> {
 
 /// The structural validation rules.
 pub fn rules() -> Vec<Rule> {
-    level::rules()
+    level::rules().into_iter().chain(grid::rules()).collect()
 }
 
 /// Registers the structural schema, its recompute functions and its rules.
