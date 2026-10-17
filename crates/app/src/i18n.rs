@@ -29,6 +29,14 @@ impl Locale {
         }
     }
 
+    /// Its BCP 47 tag, such as `es-AR`.
+    pub fn tag(self) -> &'static str {
+        match self {
+            Locale::EsAr => "es-AR",
+            Locale::En => "en",
+        }
+    }
+
     /// The locale's message file.
     pub fn messages(self) -> &'static str {
         match self {
@@ -72,8 +80,16 @@ impl I18n {
         name: &'a str,
         value: impl Into<FluentValue<'a>>,
     ) -> String {
-        let mut args = FluentArgs::new();
-        args.set(name, value);
+        self.tr_args(key, [(name, value.into())])
+    }
+
+    /// The text of message `key` with several arguments.
+    pub fn tr_args<'a>(
+        &self,
+        key: &str,
+        args: impl IntoIterator<Item = (&'a str, FluentValue<'a>)>,
+    ) -> String {
+        let args = args.into_iter().collect();
         self.format(key, Some(&args))
     }
 

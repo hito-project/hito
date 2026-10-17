@@ -1532,6 +1532,8 @@ dependencies = [
  "hito-core",
  "hito-storage-sqlite",
  "hito-structural",
+ "hito-units",
+ "icu_normalizer",
  "serde",
  "unic-langid",
 ]
