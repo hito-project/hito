@@ -29,5 +29,6 @@ Each ADR records one decision, its context and its consequences. ADRs are never 
 | [0021](0021-ifc-import-in-m1.md) | M1 includes IFC import: linked read-only references, native import of M1 elements, and Revit's IFC exports, so Revit users can switch | Accepted |
 | [0022](0022-ifc-reader.md) | IFC reader: our own STEP Part 21 reader next to the writer, IFC geometry in HITO through the geometry port; ifc-lite as a CI reference, not a dependency | Accepted |
 | [0023](0023-mpl-dependencies.md) | MPL-2.0 dependencies are allowed, used unmodified; bundled data files' licenses are checked too | Accepted |
+| [0024](0024-model-history.md) | Model history: a hash-chained log of change sets in the .hito file, undo that survives reopening, tiered compression, branches as layers that also serve as Design Options, merge first, full history kept | Accepted |
 
 Use [template.md](template.md) for new ADRs.
