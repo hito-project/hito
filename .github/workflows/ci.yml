@@ -8,10 +8,11 @@
 #                clippy with warnings as errors, then the build and the tests.
 #                The tests include the architecture's dependency rules and the
 #                check that every non-Rust dependency is justified (ADR 0005),
-#                both in tools/architecture-check. On Linux, Mesa's software
-#                Vulkan driver (lavapipe) is installed and HITO_REQUIRE_GPU is
-#                set, so the 3D view test must render; on Windows and macOS
-#                it skips if the runner has no graphics adapter.
+#                both in tools/architecture-check. HITO_REQUIRE_GPU is set on
+#                every runner, so the 3D view test must render: on Linux with
+#                Mesa's software Vulkan driver (lavapipe), installed here, on
+#                Windows with the built-in software adapter, on macOS with the
+#                runner's Metal device.
 #   Fuzz         the STEP Part 21 reader on arbitrary bytes for a few minutes
 #                (ADR 0022). It needs nightly, so it's a separate job. Pull
 #                requests that don't touch the reader or this file pass at
@@ -68,7 +69,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       # The 3D view test fails, instead of skipping, if it finds no adapter.
-      HITO_REQUIRE_GPU: ${{ matrix.os == 'ubuntu-latest' && '1' || '' }}
+      HITO_REQUIRE_GPU: "1"
     steps:
       - uses: actions/checkout@v5
       - name: Install a software Vulkan driver (lavapipe)
