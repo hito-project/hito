@@ -2,9 +2,9 @@
 //! the views come later; this is what they build on.
 
 use hito_core::{
-    ClassDef, ClassId, Command, Element, ElementChange, ElementId, ElementStore, FieldChange,
-    Model, ModelId, ModelKind, Relationship, Schema, SchemaRegistry, SchemaVersion, StoreError,
-    Value,
+    ChangedField, ClassDef, ClassId, Command, Element, ElementChange, ElementId, ElementStore,
+    FieldChange, Model, ModelId, ModelKind, Origin, Relationship, Schema, SchemaRegistry,
+    SchemaVersion, StoreError, Value,
 };
 use hito_structural::class;
 use hito_structural::level::{
@@ -195,12 +195,16 @@ fn moving_a_level_moves_its_elements_in_one_change_set() {
     let ElementChange::Modified { fields, .. } = c2_change else {
         panic!("c2 should be modified");
     };
+    // The column followed its level: the change is propagated.
     assert_eq!(
         fields,
-        &[FieldChange::Property {
-            name: BASE_ELEVATION.into(),
-            before: Some(Value::Real(3.5)),
-            after: Some(Value::Real(4.0)),
+        &[ChangedField {
+            change: FieldChange::Property {
+                name: BASE_ELEVATION.into(),
+                before: Some(Value::Real(3.5)),
+                after: Some(Value::Real(4.0)),
+            },
+            origin: Origin::Propagated,
         }]
     );
 }

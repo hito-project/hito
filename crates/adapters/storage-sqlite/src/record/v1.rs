@@ -13,10 +13,10 @@
 
 use std::collections::BTreeMap;
 
-use hito_core::{CodeSpec, ElementId, ModelId};
+use hito_core::{AspectId, CodeSpec, ElementId, ModelId};
 use serde::{Deserialize, Serialize};
 
-use super::DecodeError;
+use super::{DecodeError, EncodeError};
 
 type Id = [u8; 16];
 
@@ -98,8 +98,16 @@ struct Source {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Aspect {
+    id: Id,
     class: Class,
     properties: Properties,
+}
+
+/// Who made a change.
+#[derive(Debug, Serialize, Deserialize)]
+enum Origin {
+    User,
+    Propagated,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -116,9 +124,15 @@ struct Element {
 
 #[derive(Debug, Serialize, Deserialize)]
 enum ElementChange {
-    Created(Element),
-    Modified { id: Id, fields: Vec<FieldChange> },
-    Deleted(Element),
+    Created(Origin, Element),
+    Modified { id: Id, fields: Vec<ChangedField> },
+    Deleted(Origin, Element),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct ChangedField {
+    origin: Origin,
+    change: FieldChange,
 }
 
 /// Each field's value before, then after.
@@ -128,13 +142,17 @@ enum FieldChange {
     Type(Option<Id>, Option<Id>),
     Code(Option<Code>, Option<Code>),
     Source(Option<Source>, Option<Source>),
-    Aspects(Vec<Aspect>, Vec<Aspect>),
+    /// The aspect's ID, then the whole aspect before and after.
+    Aspect(Id, Option<Aspect>, Option<Aspect>),
+    /// The aspect's ID and the property's name, then its value before and
+    /// after.
+    AspectProperty(Id, String, Option<Value>, Option<Value>),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 enum RelationshipChange {
-    Added(Relationship),
-    Removed(Relationship),
+    Added(Origin, Relationship),
+    Removed(Origin, Relationship),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -146,10 +164,13 @@ struct Relationship {
 
 // From the core's types to the record's.
 
-impl From<&super::ChangeRecord> for Record {
-    fn from(record: &super::ChangeRecord) -> Self {
+impl TryFrom<&super::ChangeRecord> for Record {
+    type Error = EncodeError;
+
+    fn try_from(record: &super::ChangeRecord) -> Result<Self, EncodeError> {
         let changes = &record.changes;
-        Self {
+        let models = changes.models().iter().map(Model::try_from);
+        Ok(Self {
             parents: record.parents.iter().map(|p| p.0).collect(),
             author: record.author.clone(),
             time: record.time.as_millis(),
@@ -165,13 +186,22 @@ impl From<&super::ChangeRecord> for Record {
                 name: c.name().to_owned(),
                 parameters: properties(c.parameters()),
             }),
-            models: changes.models().iter().map(Model::from).collect(),
+            models: models.collect::<Result<_, _>>()?,
             elements: changes.elements().iter().map(ElementChange::from).collect(),
             relationships: changes
                 .relationships()
                 .iter()
                 .map(RelationshipChange::from)
                 .collect(),
+        })
+    }
+}
+
+impl From<hito_core::Origin> for Origin {
+    fn from(origin: hito_core::Origin) -> Self {
+        match origin {
+            hito_core::Origin::User => Self::User,
+            hito_core::Origin::Propagated => Self::Propagated,
         }
     }
 }
@@ -192,20 +222,22 @@ impl From<&hito_core::Value> for Value {
     }
 }
 
-impl From<&hito_core::Model> for Model {
-    fn from(model: &hito_core::Model) -> Self {
+impl TryFrom<&hito_core::Model> for Model {
+    type Error = EncodeError;
+
+    fn try_from(model: &hito_core::Model) -> Result<Self, EncodeError> {
         let kind = match model.kind() {
             hito_core::ModelKind::Physical => ModelKind::Physical,
             hito_core::ModelKind::Definition => ModelKind::Definition,
             hito_core::ModelKind::Drawing => ModelKind::Drawing,
             hito_core::ModelKind::Analytical => ModelKind::Analytical,
             hito_core::ModelKind::Linked => ModelKind::Linked,
-            kind => unimplemented!("the record format has no model kind {kind:?} yet"),
+            kind => return Err(EncodeError::UnknownModelKind(kind)),
         };
-        Self {
+        Ok(Self {
             id: model.id().as_u128().to_be_bytes(),
             kind,
-        }
+        })
     }
 }
 
@@ -237,6 +269,7 @@ impl From<&hito_core::ExternalSource> for Source {
 impl From<&hito_core::Aspect> for Aspect {
     fn from(aspect: &hito_core::Aspect) -> Self {
         Self {
+            id: aspect.id().as_u128().to_be_bytes(),
             class: aspect.class().into(),
             properties: properties(aspect.properties()),
         }
@@ -260,13 +293,20 @@ impl From<&hito_core::Element> for Element {
 
 impl From<&hito_core::ElementChange> for ElementChange {
     fn from(change: &hito_core::ElementChange) -> Self {
+        use hito_core::ElementChange as C;
         match change {
-            hito_core::ElementChange::Created(e) => Self::Created(e.into()),
-            hito_core::ElementChange::Modified { id, fields } => Self::Modified {
+            C::Created { element, origin } => Self::Created((*origin).into(), element.into()),
+            C::Modified { id, fields } => Self::Modified {
                 id: id.to_bytes(),
-                fields: fields.iter().map(FieldChange::from).collect(),
+                fields: fields
+                    .iter()
+                    .map(|field| ChangedField {
+                        origin: field.origin.into(),
+                        change: (&field.change).into(),
+                    })
+                    .collect(),
             },
-            hito_core::ElementChange::Deleted(e) => Self::Deleted(e.into()),
+            C::Deleted { element, origin } => Self::Deleted((*origin).into(), element.into()),
         }
     }
 }
@@ -275,17 +315,14 @@ impl From<&hito_core::FieldChange> for FieldChange {
     fn from(field: &hito_core::FieldChange) -> Self {
         use hito_core::FieldChange as F;
         let id = |id: &Option<ElementId>| id.map(ElementId::to_bytes);
-        let aspects = |a: &[hito_core::Aspect]| a.iter().map(Aspect::from).collect();
+        let aspect = |a: &Option<hito_core::Aspect>| a.as_ref().map(Aspect::from);
+        let value = |v: &Option<hito_core::Value>| v.as_ref().map(Value::from);
         match field {
             F::Property {
                 name,
                 before,
                 after,
-            } => Self::Property(
-                name.clone(),
-                before.as_ref().map(Value::from),
-                after.as_ref().map(Value::from),
-            ),
+            } => Self::Property(name.clone(), value(before), value(after)),
             F::Type { before, after } => Self::Type(id(before), id(after)),
             F::Code { before, after } => Self::Code(
                 before.as_ref().map(Code::from),
@@ -295,7 +332,20 @@ impl From<&hito_core::FieldChange> for FieldChange {
                 before.as_ref().map(Source::from),
                 after.as_ref().map(Source::from),
             ),
-            F::Aspects { before, after } => Self::Aspects(aspects(before), aspects(after)),
+            F::Aspect { id, before, after } => {
+                Self::Aspect(id.as_u128().to_be_bytes(), aspect(before), aspect(after))
+            }
+            F::AspectProperty {
+                aspect,
+                name,
+                before,
+                after,
+            } => Self::AspectProperty(
+                aspect.as_u128().to_be_bytes(),
+                name.clone(),
+                value(before),
+                value(after),
+            ),
         }
     }
 }
@@ -307,9 +357,10 @@ impl From<&hito_core::RelationshipChange> for RelationshipChange {
             source: r.source().to_bytes(),
             target: r.target().to_bytes(),
         };
+        let (r, origin) = (change.relationship(), change.origin().into());
         match change {
-            hito_core::RelationshipChange::Added(r) => Self::Added(relationship(r)),
-            hito_core::RelationshipChange::Removed(r) => Self::Removed(relationship(r)),
+            hito_core::RelationshipChange::Added { .. } => Self::Added(origin, relationship(r)),
+            hito_core::RelationshipChange::Removed { .. } => Self::Removed(origin, relationship(r)),
         }
     }
 }
@@ -404,12 +455,24 @@ impl From<Source> for hito_core::ExternalSource {
     }
 }
 
+fn aspect_id(id: Id) -> AspectId {
+    AspectId::from_u128(u128::from_be_bytes(id))
+}
+
+impl From<Origin> for hito_core::Origin {
+    fn from(origin: Origin) -> Self {
+        match origin {
+            Origin::User => Self::User,
+            Origin::Propagated => Self::Propagated,
+        }
+    }
+}
+
 impl From<Aspect> for hito_core::Aspect {
     fn from(aspect: Aspect) -> Self {
+        let new = Self::with_id(aspect_id(aspect.id), aspect.class.into());
         let properties = aspect.properties.into_iter();
-        properties.fold(Self::new(aspect.class.into()), |aspect, (name, v)| {
-            aspect.with_property(name, v)
-        })
+        properties.fold(new, |aspect, (name, v)| aspect.with_property(name, v))
     }
 }
 
@@ -441,15 +504,26 @@ impl TryFrom<ElementChange> for hito_core::ElementChange {
 
     fn try_from(change: ElementChange) -> Result<Self, DecodeError> {
         Ok(match change {
-            ElementChange::Created(e) => Self::Created(e.try_into()?),
+            ElementChange::Created(origin, e) => Self::Created {
+                element: e.try_into()?,
+                origin: origin.into(),
+            },
             ElementChange::Modified { id, fields } => Self::Modified {
                 id: element_id(id),
                 fields: fields
                     .into_iter()
-                    .map(TryInto::try_into)
-                    .collect::<Result<_, _>>()?,
+                    .map(|field| {
+                        Ok(hito_core::ChangedField {
+                            change: field.change.try_into()?,
+                            origin: field.origin.into(),
+                        })
+                    })
+                    .collect::<Result<_, DecodeError>>()?,
             },
-            ElementChange::Deleted(e) => Self::Deleted(e.try_into()?),
+            ElementChange::Deleted(origin, e) => Self::Deleted {
+                element: e.try_into()?,
+                origin: origin.into(),
+            },
         })
     }
 }
@@ -460,12 +534,12 @@ impl TryFrom<FieldChange> for hito_core::FieldChange {
     fn try_from(field: FieldChange) -> Result<Self, DecodeError> {
         let id = |id: Option<Id>| id.map(element_id);
         let code = |code: Option<Code>| code.map(TryInto::try_into).transpose();
-        let aspects = |a: Vec<Aspect>| a.into_iter().map(Into::into).collect();
+        let value = |v: Option<Value>| v.map(Into::into);
         Ok(match field {
             FieldChange::Property(name, before, after) => Self::Property {
                 name,
-                before: before.map(Into::into),
-                after: after.map(Into::into),
+                before: value(before),
+                after: value(after),
             },
             FieldChange::Type(before, after) => Self::Type {
                 before: id(before),
@@ -479,9 +553,16 @@ impl TryFrom<FieldChange> for hito_core::FieldChange {
                 before: before.map(Into::into),
                 after: after.map(Into::into),
             },
-            FieldChange::Aspects(before, after) => Self::Aspects {
-                before: aspects(before),
-                after: aspects(after),
+            FieldChange::Aspect(id, before, after) => Self::Aspect {
+                id: aspect_id(id),
+                before: before.map(Into::into),
+                after: after.map(Into::into),
+            },
+            FieldChange::AspectProperty(aspect, name, before, after) => Self::AspectProperty {
+                aspect: aspect_id(aspect),
+                name,
+                before: value(before),
+                after: value(after),
             },
         })
     }
@@ -493,8 +574,14 @@ impl From<RelationshipChange> for hito_core::RelationshipChange {
             hito_core::Relationship::new(r.class.into(), element_id(r.source), element_id(r.target))
         };
         match change {
-            RelationshipChange::Added(r) => Self::Added(relationship(r)),
-            RelationshipChange::Removed(r) => Self::Removed(relationship(r)),
+            RelationshipChange::Added(origin, r) => Self::Added {
+                relationship: relationship(r),
+                origin: origin.into(),
+            },
+            RelationshipChange::Removed(origin, r) => Self::Removed {
+                relationship: relationship(r),
+                origin: origin.into(),
+            },
         }
     }
 }

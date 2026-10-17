@@ -9,4 +9,4 @@
 
 mod record;
 
-pub use record::{ChangeRecord, DecodeError, RecordId, Target, Timestamp};
+pub use record::{ChangeRecord, DecodeError, EncodeError, RecordId, Target, Timestamp};

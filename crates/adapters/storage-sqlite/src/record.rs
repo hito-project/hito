@@ -12,8 +12,8 @@ use std::fmt;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use hito_core::{
-    Aspect, ChangeSet, ClassId, Element, ElementChange, ElementStore, FieldChange,
-    RelationshipChange, SchemaVersion,
+    Aspect, ChangeSet, ClassId, Element, ElementChange, ElementStore, FieldChange, ModelKind,
+    SchemaVersion,
 };
 
 mod v1;
@@ -63,9 +63,14 @@ impl ChangeRecord {
 
     /// The record in the file's format. Encoding the same record always
     /// gives the same bytes, so they can be hashed.
-    pub fn encode(&self) -> Vec<u8> {
-        let record = v1::Versioned::V1(v1::Record::from(self));
-        postcard::to_stdvec(&record).expect("a record always encodes")
+    ///
+    /// Fails only if the record holds something the format can't store
+    /// yet, such as a model kind newer than the format.
+    pub fn encode(&self) -> Result<Vec<u8>, EncodeError> {
+        let record = v1::Versioned::V1(v1::Record::try_from(self)?);
+        // postcard fails only on types serde can't describe up front, such
+        // as iterators of unknown length; the record has none.
+        Ok(postcard::to_stdvec(&record).expect("the record's types always encode"))
     }
 
     /// Reads a record written by [`encode`](Self::encode), by this or an
@@ -82,30 +87,41 @@ impl ChangeRecord {
     }
 }
 
-/// Every class a change set uses, with repeats. A modified element's class
-/// comes from the store.
+/// Every class a change set uses, with repeats. A modified element's class,
+/// and the class of an aspect whose properties changed, come from the store.
 fn classes<'a>(changes: &'a ChangeSet, store: &'a ElementStore) -> Vec<&'a ClassId> {
     let mut classes = Vec::new();
     for change in changes.elements() {
         match change {
-            ElementChange::Created(element) | ElementChange::Deleted(element) => {
+            ElementChange::Created { element, .. } | ElementChange::Deleted { element, .. } => {
                 classes.push(element.class());
                 classes.extend(element.aspects().iter().map(Aspect::class));
             }
             ElementChange::Modified { id, fields } => {
-                classes.extend(store.get(*id).map(Element::class));
+                let element = store.get(*id);
+                classes.extend(element.map(Element::class));
                 for field in fields {
-                    if let FieldChange::Aspects { before, after } = field {
-                        classes.extend(before.iter().chain(after).map(Aspect::class));
+                    match &field.change {
+                        FieldChange::Aspect { before, after, .. } => {
+                            classes.extend(before.iter().chain(after).map(Aspect::class));
+                        }
+                        FieldChange::AspectProperty { aspect, .. } => {
+                            let aspects = element.into_iter().flat_map(Element::aspects);
+                            let aspect = aspects.filter(|a| a.id() == *aspect);
+                            classes.extend(aspect.map(Aspect::class));
+                        }
+                        _ => {}
                     }
                 }
             }
         }
     }
-    for change in changes.relationships() {
-        let (RelationshipChange::Added(r) | RelationshipChange::Removed(r)) = change;
-        classes.push(r.class());
-    }
+    classes.extend(
+        changes
+            .relationships()
+            .iter()
+            .map(|c| c.relationship().class()),
+    );
     classes
 }
 
@@ -145,6 +161,26 @@ pub enum Target {
     /// The main model.
     Main,
 }
+
+/// Why [`ChangeRecord::encode`] couldn't write a record.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EncodeError {
+    /// A model kind added to the core after this version of the format.
+    /// The format needs a new variant for it.
+    UnknownModelKind(ModelKind),
+}
+
+impl fmt::Display for EncodeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::UnknownModelKind(kind) => {
+                write!(f, "change records can't store a {kind:?} model yet")
+            }
+        }
+    }
+}
+
+impl std::error::Error for EncodeError {}
 
 /// Why [`ChangeRecord::decode`] couldn't read a record.
 #[derive(Debug, Clone, PartialEq, Eq)]

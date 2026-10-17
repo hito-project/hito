@@ -7,13 +7,13 @@
 //! Saving and loading go through a storage adapter (E10), which reads and
 //! writes what this store holds: IDs, class names, codes and property values.
 
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 use crate::change::{ElementChange, FieldChange, RelationshipChange};
 use crate::{
-    ChangeSet, ClassId, Code, Command, Element, ElementId, Model, ModelId, Relationship,
+    AspectId, ChangeSet, ClassId, Code, Command, Element, ElementId, Model, ModelId, Relationship,
     SchemaRegistry, StoreView, Transaction, Value, Violation,
 };
 
@@ -119,15 +119,62 @@ impl ElementStore {
     }
 
     /// Applies a change set that was committed before, such as one read
-    /// back from a file's history. Like a commit, it runs no checks and no
-    /// domain logic, so a change set means the same in any version of HITO.
+    /// back from a file's history. Like a commit's own, it runs no schema
+    /// checks and no domain logic, so a change set means the same in any
+    /// version of HITO. Replaying a history's change sets in order, from an
+    /// empty store, rebuilds the model.
     ///
-    /// The change set must fit the store as it was before that commit:
-    /// replaying a history's change sets in order, from an empty store,
-    /// rebuilds the model. It panics if an element it modifies doesn't
-    /// exist.
-    pub fn replay(&mut self, changes: &ChangeSet) {
+    /// The change set must fit the store as it was before that commit.
+    /// Cheap checks catch one that doesn't, and then nothing is applied: a
+    /// created model, element, aspect or relationship must not exist yet,
+    /// and a changed or removed one must exist.
+    pub fn replay(&mut self, changes: &ChangeSet) -> Result<(), StoreError> {
+        self.check_replay(changes)?;
         self.apply(changes);
+        Ok(())
+    }
+
+    fn check_replay(&self, changes: &ChangeSet) -> Result<(), StoreError> {
+        let mut models = HashSet::new();
+        for model in &changes.models {
+            if self.models.contains_key(&model.id()) || !models.insert(model.id()) {
+                return Err(StoreError::DuplicateModel(model.id()));
+            }
+        }
+        // Whether each element exists so far, as the change set goes.
+        let mut exists: HashMap<ElementId, bool> = HashMap::new();
+        for change in &changes.elements {
+            let id = change.id();
+            let stored = self.elements.get(&id);
+            let now = exists.get(&id).copied();
+            if now.unwrap_or(stored.is_some()) == matches!(change, ElementChange::Created { .. }) {
+                return Err(match change {
+                    ElementChange::Created { .. } => StoreError::DuplicateElement(id),
+                    _ => StoreError::UnknownElement(id),
+                });
+            }
+            exists.insert(id, !matches!(change, ElementChange::Deleted { .. }));
+            // An element changed twice in one change set is checked as stored.
+            if let (ElementChange::Modified { fields, .. }, Some(element), None) =
+                (change, stored, now)
+            {
+                fields.iter().try_for_each(|f| f.change.check(element))?;
+            }
+        }
+        let mut related: HashMap<&Relationship, bool> = HashMap::new();
+        for change in &changes.relationships {
+            let r = change.relationship();
+            let added = matches!(change, RelationshipChange::Added { .. });
+            let now = related.get(r).copied();
+            if now.unwrap_or_else(|| self.has_relationship(r)) == added {
+                return Err(match added {
+                    true => StoreError::DuplicateRelationship(r.clone()),
+                    false => StoreError::MissingRelationship(r.clone()),
+                });
+            }
+            related.insert(r, added);
+        }
+        Ok(())
     }
 
     pub(crate) fn has_relationship(&self, relationship: &Relationship) -> bool {
@@ -152,20 +199,20 @@ impl ElementStore {
         for change in &changes.elements {
             let id = change.id();
             match change {
-                ElementChange::Created(element) => {
+                ElementChange::Created { element, .. } => {
                     self.index_instance(element.type_id, None, id);
                     self.elements.insert(id, element.clone());
                 }
                 ElementChange::Modified { fields, .. } => {
                     let element = self.elements.get_mut(&id).expect("modified elements exist");
-                    fields.iter().for_each(|field| field.apply(element));
+                    fields.iter().for_each(|field| field.change.apply(element));
                     for field in fields {
-                        if let FieldChange::Type { before, after } = field {
+                        if let FieldChange::Type { before, after } = &field.change {
                             self.index_instance(*after, *before, id);
                         }
                     }
                 }
-                ElementChange::Deleted(element) => {
+                ElementChange::Deleted { element, .. } => {
                     self.index_instance(None, element.type_id, id);
                     self.elements.remove(&id);
                 }
@@ -176,8 +223,8 @@ impl ElementStore {
         }
         for change in &changes.relationships {
             match change {
-                RelationshipChange::Added(r) => self.link(r.clone()),
-                RelationshipChange::Removed(r) => self.unlink(r),
+                RelationshipChange::Added { relationship, .. } => self.link(relationship.clone()),
+                RelationshipChange::Removed { relationship, .. } => self.unlink(relationship),
             }
         }
     }
@@ -224,6 +271,8 @@ pub enum StoreError {
     DuplicateElement(ElementId),
     UnknownModel(ModelId),
     UnknownElement(ElementId),
+    /// The element has no aspect with this ID.
+    UnknownAspect(AspectId),
     UnknownClass(ClassId),
     /// An aspect class was used for an element, or an element class for an
     /// aspect.
@@ -243,7 +292,8 @@ pub enum StoreError {
         class: ClassId,
         type_id: ElementId,
     },
-    /// The element has two aspects of the same unique aspect class.
+    /// The element has two aspects of the same unique aspect class, or two
+    /// with the same ID.
     DuplicateAspect(ClassId),
     /// Another element already has this code.
     CodeInUse {
@@ -276,6 +326,7 @@ impl fmt::Display for StoreError {
             Self::DuplicateElement(id) => write!(f, "element {id} already exists"),
             Self::UnknownModel(id) => write!(f, "model {id:?} doesn't exist"),
             Self::UnknownElement(id) => write!(f, "element {id} doesn't exist"),
+            Self::UnknownAspect(id) => write!(f, "aspect {id:?} doesn't exist"),
             Self::UnknownClass(class) => write!(f, "class `{class}` isn't registered"),
             Self::WrongClassKind(class) => write!(f, "class `{class}` is the wrong kind here"),
             Self::UnknownProperty { class, property } => {
@@ -287,7 +338,7 @@ impl fmt::Display for StoreError {
             Self::InvalidType { class, type_id } => {
                 write!(f, "element {type_id} can't be the type of a `{class}`")
             }
-            Self::DuplicateAspect(class) => write!(f, "unique aspect `{class}` appears twice"),
+            Self::DuplicateAspect(class) => write!(f, "aspect `{class}` appears twice"),
             Self::CodeInUse { code, element } => {
                 write!(f, "code `{}` is used by element {element}", code.value())
             }

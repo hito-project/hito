@@ -73,23 +73,60 @@ impl Model {
 /// Property values by property name.
 pub type Properties = BTreeMap<String, Value>;
 
+/// The identity of an [`Aspect`]. Like an [`ElementId`], it is a 128-bit
+/// UUID generated locally, and it never changes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct AspectId(ElementId);
+
+impl AspectId {
+    /// Generates a new, globally unique ID.
+    pub fn generate() -> Self {
+        Self(ElementId::generate())
+    }
+
+    /// The aspect ID with this 128-bit value.
+    pub const fn from_u128(value: u128) -> Self {
+        Self(ElementId::from_u128(value))
+    }
+
+    /// The ID's 128-bit value.
+    pub const fn as_u128(self) -> u128 {
+        self.0.as_u128()
+    }
+}
+
 /// A group of properties of an aspect class, owned by one element.
 ///
 /// Aspects let one domain add data to another domain's elements, such as
 /// structural properties on an architectural wall.
+///
+/// Every aspect has its own [`AspectId`], as in BIS, so a change set can
+/// record a change to one aspect of several of the same class.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Aspect {
-    class: ClassId,
-    properties: Properties,
+    pub(crate) id: AspectId,
+    pub(crate) class: ClassId,
+    pub(crate) properties: Properties,
 }
 
 impl Aspect {
-    /// An aspect of class `class`, with no property values yet.
+    /// An aspect of class `class` with a new ID, with no property values
+    /// yet.
     pub fn new(class: ClassId) -> Self {
+        Self::with_id(AspectId::generate(), class)
+    }
+
+    /// An aspect with an existing ID, such as one read from a file.
+    pub fn with_id(id: AspectId, class: ClassId) -> Self {
         Self {
+            id,
             class,
             properties: Properties::new(),
         }
+    }
+
+    pub fn id(&self) -> AspectId {
+        self.id
     }
 
     /// Sets a property value.
@@ -170,8 +207,15 @@ impl Element {
     }
 
     pub fn with_aspect(mut self, aspect: Aspect) -> Self {
-        self.aspects.push(aspect);
+        self.add_aspect(aspect);
         self
+    }
+
+    /// Adds an aspect where [`aspects`](Self::aspects) keeps it, in ID
+    /// order.
+    pub(crate) fn add_aspect(&mut self, aspect: Aspect) {
+        let at = self.aspects.partition_point(|a| a.id <= aspect.id);
+        self.aspects.insert(at, aspect);
     }
 
     pub fn id(&self) -> ElementId {
@@ -207,7 +251,9 @@ impl Element {
         &self.properties
     }
 
-    /// All the element's aspects.
+    /// All the element's aspects, in ID order. New IDs increase, so that is
+    /// the order they were created in. Keeping one order means replaying,
+    /// undoing or merging changes always gives the same list.
     pub fn aspects(&self) -> &[Aspect] {
         &self.aspects
     }

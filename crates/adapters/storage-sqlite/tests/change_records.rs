@@ -4,10 +4,10 @@
 use std::collections::BTreeMap;
 
 use hito_core::{
-    Aspect, ClassDef, ClassId, Code, CodeSpec, Command, DataType, Dimension, Element,
-    ElementChange, ElementId, ElementStore, ExternalSource, FieldChange, Model, ModelKind,
-    Properties, Recompute, Relationship, RelationshipChange, RelationshipDef, Rule, Schema,
-    SchemaRegistry, SchemaVersion, Transaction, Value,
+    Aspect, AspectId, ChangeSet, ChangedField, ClassDef, ClassId, Code, CodeSpec, Command,
+    DataType, Dimension, Element, ElementChange, ElementId, ElementStore, ExternalSource,
+    FieldChange, Model, ModelKind, Origin, Properties, Recompute, Relationship, RelationshipChange,
+    RelationshipDef, Rule, Schema, SchemaRegistry, SchemaVersion, StoreError, Transaction, Value,
 };
 use hito_storage_sqlite::{ChangeRecord, DecodeError, RecordId, Target, Timestamp};
 
@@ -80,7 +80,7 @@ impl History {
         change(&mut tx);
         let changes = tx.commit().unwrap();
         let record = ChangeRecord::new(changes, &self.store, "Ana");
-        self.records.push(record.encode());
+        self.records.push(record.encode().unwrap());
         record
     }
 }
@@ -158,41 +158,83 @@ fn every_commit_records_its_changes_with_before_and_after_values() {
     assert_eq!(moved.author, "Ana");
     assert_eq!(moved.target, Target::Main);
     assert!(moved.parents.is_empty());
-    // The level, and the two columns that follow it.
-    let base = |id| ElementChange::Modified {
-        id,
-        fields: vec![FieldChange::Property {
-            name: "BaseElevation".into(),
+    // The user moved the level, and the two columns followed it.
+    let elevation = |name: &str, origin| ChangedField {
+        change: FieldChange::Property {
+            name: name.into(),
             before: Some(Value::Real(0.0)),
             after: Some(Value::Real(3.05)),
-        }],
+        },
+        origin,
     };
-    let level_moved = ElementChange::Modified {
-        id: level,
-        fields: vec![FieldChange::Property {
-            name: "Elevation".into(),
-            before: Some(Value::Real(0.0)),
-            after: Some(Value::Real(3.05)),
-        }],
+    let modified = |id, name, origin| ElementChange::Modified {
+        id,
+        fields: vec![elevation(name, origin)],
     };
     assert_eq!(
         moved.changes.elements(),
-        [level_moved, base(column), base(other)]
+        [
+            modified(level, "Elevation", Origin::User),
+            modified(column, "BaseElevation", Origin::Propagated),
+            modified(other, "BaseElevation", Origin::Propagated),
+        ]
     );
 
     let deleted = &records[4];
     assert!(matches!(
         deleted.changes.elements(),
-        [ElementChange::Deleted(e)] if e.id() == column && e.aspects().len() == 3
+        [ElementChange::Deleted { element, origin: Origin::User }]
+            if element.id() == column && element.aspects().len() == 3
     ));
     assert_eq!(
         deleted.changes.relationships(),
-        [RelationshipChange::Removed(Relationship::new(
-            class("AttachedToLevel"),
-            column,
-            level
-        ))]
+        [RelationshipChange::Removed {
+            relationship: Relationship::new(class("AttachedToLevel"), column, level),
+            origin: Origin::Propagated,
+        }]
     );
+}
+
+#[test]
+fn aspect_changes_are_recorded_one_by_one() {
+    let (mut h, [.., other]) = edits();
+    let note = Aspect::new(class("Note")).with_property("Text", "check");
+    let fields = vec![
+        ChangedField {
+            change: FieldChange::Aspect {
+                id: note.id(),
+                before: None,
+                after: Some(note.clone()),
+            },
+            origin: Origin::User,
+        },
+        ChangedField {
+            change: FieldChange::AspectProperty {
+                aspect: AspectId::generate(),
+                name: "Cover".into(),
+                before: Some(Value::Real(0.02)),
+                after: None,
+            },
+            origin: Origin::Propagated,
+        },
+    ];
+    let modified = ElementChange::Modified { id: other, fields };
+    let changes = ChangeSet::from_parts(None, Vec::new(), vec![modified], Vec::new());
+    let record = ChangeRecord::new(changes, &h.store, "Ana");
+    let read = decode(&record.encode().unwrap());
+    assert_eq!(read, record);
+    // The aspect property names an aspect the column doesn't have.
+    let missing = h.store.replay(&read.changes);
+    assert!(matches!(missing, Err(StoreError::UnknownAspect(_))));
+
+    let mut changes = read.changes.elements().to_vec();
+    let ElementChange::Modified { fields, .. } = &mut changes[0] else {
+        panic!("modified");
+    };
+    fields.pop();
+    let changes = ChangeSet::from_parts(None, Vec::new(), changes, Vec::new());
+    h.store.replay(&changes).unwrap();
+    assert_eq!(h.store.get(other).unwrap().aspects(), [note]);
 }
 
 #[test]
@@ -217,17 +259,21 @@ fn records_read_back_exactly() {
     record.parents = vec![RecordId([7; 32]), RecordId([0xff; 32])];
     record.author = "Bruno Pérez".into();
     record.time = Timestamp::from_millis(-1);
-    let bytes = record.encode();
+    let bytes = record.encode().unwrap();
     assert_eq!(ChangeRecord::decode(&bytes), Ok(record.clone()));
 
     for bytes in &h.records {
         let record = decode(bytes);
         // The same bytes again, so a record's hash never changes.
-        assert_eq!(&record.encode(), bytes);
-        assert_eq!(decode(&record.encode()), record);
+        let again = record.encode().unwrap();
+        assert_eq!(&again, bytes);
+        assert_eq!(decode(&again), record);
     }
     let created = decode(&h.records[1]);
-    let ElementChange::Created(column) = &created.changes.elements()[0] else {
+    let ElementChange::Created {
+        element: column, ..
+    } = &created.changes.elements()[0]
+    else {
         panic!("the column was created");
     };
     let real = |name| match column.properties()[name] {
@@ -235,7 +281,7 @@ fn records_read_back_exactly() {
         _ => panic!("a real"),
     };
     assert_eq!(real("Ratio"), (0.1_f64 + 0.2).to_bits());
-    let ElementChange::Created(other) = &created.changes.elements()[1] else {
+    let ElementChange::Created { element: other, .. } = &created.changes.elements()[1] else {
         panic!("the other column was created");
     };
     assert!(matches!(other.properties()["Height"], Value::Real(x) if x.is_sign_negative()));
@@ -248,7 +294,7 @@ fn warnings_are_not_recorded() {
         tx.set_property(other, "Height", 12.0).unwrap();
     });
     assert_eq!(record.changes.warnings().len(), 1);
-    let read = decode(&record.encode());
+    let read = decode(&record.encode().unwrap());
     assert!(read.changes.warnings().is_empty());
     assert_eq!(read.changes.elements(), record.changes.elements());
 }
@@ -271,7 +317,7 @@ fn replaying_the_records_rebuilds_the_model() {
     let (h, [_, _, column, other]) = edits();
     let mut rebuilt = ElementStore::new(registry());
     for bytes in &h.records {
-        rebuilt.replay(&decode(bytes).changes);
+        rebuilt.replay(&decode(bytes).changes).unwrap();
     }
     assert_same_contents(&rebuilt, &h.store);
     assert!(rebuilt.get(column).is_none());

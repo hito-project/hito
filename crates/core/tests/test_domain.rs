@@ -8,11 +8,11 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use hito_core::{
-    Access, Aspect, ClassDef, ClassId, ClassKind, Code, CodeSpec, Command, DataType, Dimension,
-    Element, ElementChange, ElementId, ElementStore, FieldChange, Model, ModelId, ModelKind,
-    OnDelete, Properties, Recompute, Relationship, RelationshipChange, RelationshipDef, Rule,
-    Schema, SchemaError, SchemaRegistry, SchemaVersion, Severity, StoreError, StoreView,
-    Transaction, Value, Violation,
+    Access, Aspect, ChangeSet, ChangedField, ClassDef, ClassId, ClassKind, Code, CodeSpec, Command,
+    DataType, Dimension, Element, ElementChange, ElementId, ElementStore, FieldChange, Model,
+    ModelId, ModelKind, OnDelete, Origin, Properties, Recompute, Relationship, RelationshipChange,
+    RelationshipDef, Rule, Schema, SchemaError, SchemaRegistry, SchemaVersion, Severity,
+    StoreError, StoreView, Transaction, Value, Violation,
 };
 
 const SCHEMA: &str = "TestStructural";
@@ -736,17 +736,30 @@ fn a_commit_returns_a_record_of_what_changed() {
     assert_eq!(
         changes.elements(),
         [
-            ElementChange::Created(p.store.get(column).unwrap().clone()),
+            ElementChange::Created {
+                element: p.store.get(column).unwrap().clone(),
+                origin: Origin::User,
+            },
             ElementChange::Modified {
                 id: column_type,
-                fields: vec![FieldChange::Property {
+                fields: vec![by_user(FieldChange::Property {
                     name: "Width".into(),
                     before: type_before.properties().get("Width").cloned(),
                     after: Some(Value::Real(0.35)),
-                }],
+                })],
             },
         ]
     );
+}
+
+fn by_user(change: FieldChange) -> ChangedField {
+    let origin = Origin::User;
+    ChangedField { change, origin }
+}
+
+fn propagated(change: FieldChange) -> ChangedField {
+    let origin = Origin::Propagated;
+    ChangedField { change, origin }
 }
 
 #[test]
@@ -769,15 +782,15 @@ fn several_changes_to_a_field_collapse_into_one() {
         [ElementChange::Modified {
             id: column_type,
             fields: vec![
-                FieldChange::Property {
+                by_user(FieldChange::Property {
                     name: "Width".into(),
                     before: Some(Value::Real(0.30)),
                     after: Some(Value::Real(0.40)),
-                },
-                FieldChange::Code {
+                }),
+                by_user(FieldChange::Code {
                     before: None,
                     after: Some(c1),
-                },
+                }),
             ],
         }]
     );
@@ -1231,20 +1244,89 @@ fn propagated_changes_are_part_of_the_change_set() {
     let changes = tx.commit().unwrap();
     let changed: Vec<_> = changes.elements().iter().map(|c| c.id()).collect();
     assert_eq!(changed, [level, column, beam]);
+    // Only the level's elevation is the user's; the rest followed it.
+    let origins: Vec<_> = changes
+        .elements()
+        .iter()
+        .flat_map(|c| match c {
+            ElementChange::Modified { fields, .. } => fields.iter().map(|f| f.origin),
+            _ => panic!("only modified"),
+        })
+        .collect();
+    assert_eq!(
+        origins,
+        [Origin::User, Origin::Propagated, Origin::Propagated]
+    );
+
+    // A field the user set stays the user's, even if recompute set it too.
+    let mut tx = p.store.transaction();
+    tx.set_property(column, "BaseElevation", 9.0).unwrap();
+    tx.set_property(level, "Elevation", 0.0).unwrap();
+    let changes = tx.commit().unwrap();
+    let ElementChange::Modified { id, fields } = &changes.elements()[0] else {
+        panic!("the column is modified");
+    };
+    assert_eq!(*id, column);
+    assert_eq!(fields[0].origin, Origin::User);
+    assert_eq!(
+        p.store.property(column, "BaseElevation"),
+        Some(&Value::Real(0.0))
+    );
+    p.set_property(level, "Elevation", 3.0).unwrap();
 
     let mut tx = p.store.transaction();
     tx.delete(column).unwrap();
     let changes = tx.commit().unwrap();
-    // A deletion carries the whole element, as it was before.
+    // A deletion carries the whole element, as it was before. The user
+    // deleted it, and its relationships went with it.
     let deleted = before.with_property("BaseElevation", 3.0);
-    assert_eq!(changes.elements(), [ElementChange::Deleted(deleted)]);
+    assert_eq!(
+        changes.elements(),
+        [ElementChange::Deleted {
+            element: deleted,
+            origin: Origin::User,
+        }]
+    );
+    let removed = |relationship| RelationshipChange::Removed {
+        relationship,
+        origin: Origin::Propagated,
+    };
     assert_eq!(
         changes.relationships(),
         [
-            RelationshipChange::Removed(Relationship::new(class("AttachedToLevel"), column, level)),
-            RelationshipChange::Removed(Relationship::new(class("FramesInto"), beam, column)),
+            removed(Relationship::new(class("AttachedToLevel"), column, level)),
+            removed(Relationship::new(class("FramesInto"), beam, column)),
         ]
     );
+
+    // What a deletion takes with it is propagated.
+    let slab = p.insert(Element::new(class("Slab"), p.physical)).unwrap();
+    let physical = p.physical;
+    let opening = p
+        .change(|tx| {
+            let opening = tx.insert(Element::new(class("Opening"), physical))?;
+            tx.relate(Relationship::new(class("HostedBy"), opening, slab))?;
+            Ok(opening)
+        })
+        .unwrap();
+    let mut tx = p.store.transaction();
+    tx.delete(slab).unwrap();
+    let changes = tx.commit().unwrap();
+    let origin = |id| match changes.elements().iter().find(|c| c.id() == id) {
+        Some(ElementChange::Deleted { origin, .. }) => *origin,
+        _ => panic!("deleted"),
+    };
+    assert_eq!(origin(slab), Origin::User);
+    assert_eq!(origin(opening), Origin::Propagated);
+    assert_eq!(changes.relationships()[0].origin(), Origin::Propagated);
+    // What the user relates or unrelates is the user's.
+    let support = p.beam_on(&[]);
+    let relationship = Relationship::new(class("FramesInto"), beam, support);
+    p.change(|tx| tx.relate(relationship.clone())).unwrap();
+    let mut tx = p.store.transaction();
+    tx.unrelate(&relationship).unwrap();
+    let changes = tx.commit().unwrap();
+    assert_eq!(changes.relationships()[0].origin(), Origin::User);
 }
 
 // Change sets (#21).
@@ -1320,7 +1402,7 @@ fn replaying_every_change_set_rebuilds_the_model() {
 
     let mut rebuilt = ElementStore::new(registry());
     for changes in &history {
-        rebuilt.replay(changes);
+        rebuilt.replay(changes).unwrap();
     }
     assert_same_contents(&rebuilt, &store);
     assert_eq!(rebuilt.find_by_code(&mark("C1")), Some(other_id));
@@ -1329,10 +1411,161 @@ fn replaying_every_change_set_rebuilds_the_model() {
     // Replaying part of the history gives the model as it was then.
     let mut partial = ElementStore::new(registry());
     for changes in &history[..2] {
-        partial.replay(changes);
+        partial.replay(changes).unwrap();
     }
     assert_eq!(partial.find_by_code(&mark("C1")), Some(column_id));
     assert!(partial.get(opening_id).is_some());
+}
+
+#[test]
+fn a_change_set_that_doesnt_fit_the_store_is_refused_whole() {
+    let mut p = project();
+    let level = p.level(0.0);
+    let column = p.column_on(level);
+    let before = p.store.clone();
+    let element = p.store.get(column).unwrap().clone();
+    let attached = Relationship::new(class("AttachedToLevel"), column, level);
+    let user = Origin::User;
+    let changes =
+        |elements, relationships| ChangeSet::from_parts(None, Vec::new(), elements, relationships);
+    let height = by_user(FieldChange::Property {
+        name: "Height".into(),
+        before: Some(Value::Real(3.0)),
+        after: Some(Value::Real(4.0)),
+    });
+    let modified = |id| ElementChange::Modified {
+        id,
+        fields: vec![height.clone()],
+    };
+    let unknown = ElementId::generate();
+    let note = Aspect::new(class("Note"));
+    let cases = [
+        (
+            changes(vec![modified(column), modified(unknown)], vec![]),
+            StoreError::UnknownElement(unknown),
+        ),
+        (
+            changes(
+                vec![ElementChange::Created {
+                    element,
+                    origin: user,
+                }],
+                vec![],
+            ),
+            StoreError::DuplicateElement(column),
+        ),
+        (
+            changes(
+                vec![],
+                vec![RelationshipChange::Added {
+                    relationship: attached.clone(),
+                    origin: user,
+                }],
+            ),
+            StoreError::DuplicateRelationship(attached.clone()),
+        ),
+        (
+            changes(
+                vec![],
+                vec![
+                    RelationshipChange::Removed {
+                        relationship: attached.clone(),
+                        origin: user,
+                    },
+                    RelationshipChange::Removed {
+                        relationship: attached.clone(),
+                        origin: user,
+                    },
+                ],
+            ),
+            StoreError::MissingRelationship(attached),
+        ),
+        (
+            changes(
+                vec![ElementChange::Modified {
+                    id: column,
+                    fields: vec![by_user(FieldChange::AspectProperty {
+                        aspect: note.id(),
+                        name: "Text".into(),
+                        before: None,
+                        after: Some("check".into()),
+                    })],
+                }],
+                vec![],
+            ),
+            StoreError::UnknownAspect(note.id()),
+        ),
+    ];
+    for (changes, error) in cases {
+        assert_eq!(p.store.replay(&changes), Err(error));
+        assert_same_contents(&p.store, &before);
+    }
+    let model = p.store.model(p.physical).unwrap().clone();
+    let again = ChangeSet::from_parts(None, vec![model], Vec::new(), Vec::new());
+    let duplicate = StoreError::DuplicateModel(p.physical);
+    assert_eq!(p.store.replay(&again), Err(duplicate));
+}
+
+#[test]
+fn each_aspect_changes_on_its_own() {
+    let mut p = project();
+    let first = Aspect::new(class("Note")).with_property("Text", "check");
+    let second = Aspect::new(class("Note")).with_property("Text", "recheck");
+    let element = Element::new(class("Column"), p.physical)
+        .with_aspect(second.clone())
+        .with_aspect(first.clone());
+    // Aspects keep their ID order, whatever order they were added in.
+    let ids: Vec<_> = element.aspects().iter().map(Aspect::id).collect();
+    assert_eq!(ids, [first.id(), second.id()]);
+    let column = p.insert(element).unwrap();
+
+    // Edit the first note, remove the second and add a third.
+    let third = Aspect::new(class("Reinforcement")).with_property("Cover", 0.03);
+    let fields = vec![
+        by_user(FieldChange::AspectProperty {
+            aspect: first.id(),
+            name: "Text".into(),
+            before: Some("check".into()),
+            after: Some("checked".into()),
+        }),
+        by_user(FieldChange::Aspect {
+            id: second.id(),
+            before: Some(second.clone()),
+            after: None,
+        }),
+        propagated(FieldChange::Aspect {
+            id: third.id(),
+            before: None,
+            after: Some(third.clone()),
+        }),
+    ];
+    let modified = ElementChange::Modified { id: column, fields };
+    let changes = ChangeSet::from_parts(None, Vec::new(), vec![modified], Vec::new());
+    p.store.replay(&changes).unwrap();
+    let edited = p.store.get(column).unwrap();
+    let first = first.with_property("Text", "checked");
+    assert_eq!(edited.aspects(), [first, third.clone()]);
+
+    // Adding an aspect it already has is refused.
+    let again = ElementChange::Modified {
+        id: column,
+        fields: vec![by_user(FieldChange::Aspect {
+            id: third.id(),
+            before: None,
+            after: Some(third),
+        })],
+    };
+    let changes = ChangeSet::from_parts(None, Vec::new(), vec![again], Vec::new());
+    let duplicate = StoreError::DuplicateAspect(class("Reinforcement"));
+    assert_eq!(p.store.replay(&changes), Err(duplicate));
+
+    // Two aspects with one ID are refused.
+    let note = Aspect::new(class("Note"));
+    let twice = Element::new(class("Column"), p.physical)
+        .with_aspect(note.clone())
+        .with_aspect(note);
+    let duplicate = StoreError::DuplicateAspect(class("Note"));
+    assert_eq!(p.insert(twice), Err(duplicate));
 }
 
 /// Checks that a store holds the same models, elements, codes and
