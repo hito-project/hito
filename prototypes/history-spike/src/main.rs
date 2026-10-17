@@ -647,6 +647,10 @@ fn real(ifc: &str, floors: usize, edits: usize, days: usize) {
 }
 
 fn main() {
+    if std::env::args().nth(1).as_deref() == Some("batching") {
+        let path = std::env::args().nth(2).expect("a year file");
+        return compress::batching(Path::new(&path));
+    }
     if std::env::args().nth(1).as_deref() == Some("real") {
         let args: Vec<String> = std::env::args().collect();
         let n = |i: usize, d| args.get(i).and_then(|a| a.parse().ok()).unwrap_or(d);

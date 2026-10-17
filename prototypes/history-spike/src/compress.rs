@@ -201,15 +201,19 @@ pub fn study(path: &std::path::Path) {
 
     let mut measure =
         |name: String, note, encode: &dyn Fn() -> Vec<Vec<u8>>, decode: &dyn Fn(&[Vec<u8>])| {
+            let encode_start = Instant::now();
             let blobs = encode();
+            let encode_s = encode_start.elapsed().as_secs_f64();
             let start = Instant::now();
             decode(&blobs);
-            rows.push(Row {
+            let row = Row {
                 name,
                 bytes: blobs.iter().map(Vec::len).sum(),
                 decode_ms: start.elapsed().as_secs_f64() * 1e3,
                 note,
-            });
+            };
+            eprintln!("progress: {} = {} (encode {:.1} s, decode {:.0} ms)", row.name, mb(row.bytes), encode_s, row.decode_ms);
+            rows.push(row);
         };
 
     measure("uncompressed postcard".into(), "", &|| raw.clone(), &|_| {});
@@ -218,9 +222,9 @@ pub fn study(path: &std::path::Path) {
             format!("each change set alone, zstd {level}"),
             "what a log row holds today",
             &|| {
-                raw.iter()
-                    .map(|r| zstd::encode_all(&r[..], level).unwrap())
-                    .collect()
+                // One compressor reused for every row, as the app would.
+                let mut c = zstd::bulk::Compressor::new(level).unwrap();
+                raw.iter().map(|r| c.compress(r).unwrap()).collect()
             },
             &|b| {
                 b.iter()
@@ -291,15 +295,15 @@ pub fn study(path: &std::path::Path) {
         );
     }
     // Other compressors on the same packs.
-    for size in [10_000, 100_000] {
+    for size in [10_000] {
         measure(
-            format!("packed by {size}, brotli 11 (window 2^24)"),
+            format!("packed by {size}, brotli 9 (window 2^22)"),
             "pure Rust (brotli crate)",
             &|| {
                 raw.chunks(size)
                     .map(|c| {
                         let mut out = Vec::new();
-                        let mut w = brotli::CompressorWriter::new(&mut out, 1 << 16, 11, 24);
+                        let mut w = brotli::CompressorWriter::new(&mut out, 1 << 16, 9, 22);
                         std::io::Write::write_all(&mut w, &pack(c)).unwrap();
                         drop(w);
                         out
@@ -314,12 +318,12 @@ pub fn study(path: &std::path::Path) {
             },
         );
         measure(
-            format!("packed by {size}, xz 9 extreme"),
+            format!("packed by {size}, xz 6"),
             "liblzma (C)",
             &|| {
                 raw.chunks(size)
                     .map(|c| {
-                        let mut w = xz2::write::XzEncoder::new(Vec::new(), 9 | 0x8000_0000);
+                        let mut w = xz2::write::XzEncoder::new(Vec::new(), 6);
                         std::io::Write::write_all(&mut w, &pack(c)).unwrap();
                         w.finish().unwrap()
                     })
@@ -368,6 +372,7 @@ pub fn study(path: &std::path::Path) {
             })
             .sum();
         let _ = start;
+        eprintln!("progress: {name} = {} (encode {:.0} s)", mb(bytes), start.elapsed().as_secs_f64());
         rows.push(Row {
             name,
             bytes,
@@ -448,4 +453,123 @@ pub fn study(path: &std::path::Path) {
         mb(zstd::encode_all(&all[..], 19).unwrap().len()),
         state_raw as f64 / zstd::encode_all(&all[..], 19).unwrap().len() as f64
     );
+}
+
+/// How old history is cut into batches, and ordered inside each: by count
+/// or by raw size, in time order or sorted so similar records sit
+/// together (git sorts objects by type and name before packing). A sorted
+/// batch also stores the permutation that restores time order.
+pub fn batching(path: &std::path::Path) {
+    let db = Connection::open(path).unwrap();
+    let raw: Vec<Vec<u8>> = {
+        let mut stmt = db.prepare("SELECT payload FROM change ORDER BY seq").unwrap();
+        stmt.query_map([], |r| r.get::<_, Vec<u8>>(0))
+            .unwrap()
+            .map(|p| zstd::decode_all(&p.unwrap()[..]).unwrap())
+            .collect()
+    };
+    let records: Vec<ChangeRecord> = raw.iter().map(|r| postcard::from_bytes(r).unwrap()).collect();
+    // What makes two records alike: the command, the kind of their first
+    // change, and its first property name or class.
+    let keys: Vec<String> = records
+        .iter()
+        .map(|r| {
+            let command = r.command.as_ref().map_or("", |c| c.name.as_str());
+            let first = match r.elements.first() {
+                Some(ElementChangeRec::Modified(_, fields)) => match fields.first() {
+                    Some(FieldRec::Property(name, ..)) => format!("M {name}"),
+                    _ => "M".into(),
+                },
+                Some(ElementChangeRec::Created(e)) => format!("C {}", e.class.1),
+                Some(ElementChangeRec::Deleted(e)) => format!("D {}", e.class.1),
+                None => String::new(),
+            };
+            format!("{command}|{first}")
+        })
+        .collect();
+
+    // Batches as ranges of record indexes, in time order.
+    let by_count = |n: usize| -> Vec<std::ops::Range<usize>> {
+        (0..raw.len()).step_by(n).map(|s| s..(s + n).min(raw.len())).collect()
+    };
+    let by_size = |target: usize| -> Vec<std::ops::Range<usize>> {
+        let mut out = Vec::new();
+        let (mut start, mut size) = (0, 0);
+        for (i, r) in raw.iter().enumerate() {
+            size += r.len();
+            if size >= target {
+                out.push(start..i + 1);
+                (start, size) = (i + 1, 0);
+            }
+        }
+        if start < raw.len() {
+            out.push(start..raw.len());
+        }
+        out
+    };
+
+    let pack = |batches: &[std::ops::Range<usize>], sorted: bool| -> (usize, usize, f64, f64, usize) {
+        let start = Instant::now();
+        let mut data = 0;
+        let mut index = 0;
+        let mut largest = 0;
+        let mut packed = Vec::new();
+        for range in batches {
+            let mut order: Vec<usize> = range.clone().collect();
+            if sorted {
+                order.sort_by(|&a, &b| keys[a].cmp(&keys[b]));
+                // The permutation back to time order: positions as varints.
+                let mut perm = Vec::new();
+                for &i in &order {
+                    Columns::varint(&mut perm, (i - range.start) as u64);
+                }
+                index += zstd::encode_all(&perm[..], 19).unwrap().len();
+            }
+            let mut batch = Vec::new();
+            for &i in &order {
+                batch.extend_from_slice(&(raw[i].len() as u32).to_le_bytes());
+                batch.extend_from_slice(&raw[i]);
+            }
+            largest = largest.max(batch.len());
+            let compressed = zstd::encode_all(&batch[..], 19).unwrap();
+            data += compressed.len();
+            packed.push(compressed);
+        }
+        let encode = start.elapsed().as_secs_f64();
+        let start = Instant::now();
+        for p in &packed {
+            drop(zstd::decode_all(&p[..]).unwrap());
+        }
+        let decode = start.elapsed().as_secs_f64() / packed.len() as f64 * 1e3;
+        (data, index, encode, decode, largest)
+    };
+
+    println!("# Choosing the batches\n");
+    println!("{} change sets, {} uncompressed, all zstd 19.\n", raw.len(), mb(raw.iter().map(Vec::len).sum()));
+    println!("| Batches | count | sorted inside | data | order index | **total** | encode | read one batch | largest batch (raw) |");
+    println!("|---|---|---|---|---|---|---|---|---|");
+    let variants: Vec<(String, Vec<std::ops::Range<usize>>, bool)> = vec![
+        ("10,000 records, time order".into(), by_count(10_000), false),
+        ("10,000 records".into(), by_count(10_000), true),
+        ("~13 MB raw, time order".into(), by_size(13_000_000), false),
+        ("~4 MB raw, time order".into(), by_size(4_000_000), false),
+        ("~13 MB raw".into(), by_size(13_000_000), true),
+        ("~4 MB raw".into(), by_size(4_000_000), true),
+    ];
+    for (name, batches, sorted) in variants {
+        let (data, index, encode, decode, largest) = pack(&batches, sorted);
+        let line = format!(
+            "| {name} | {} | {} | {} | {} | **{}** | {:.0} s | {:.1} ms | {} |",
+            batches.len(),
+            if sorted { "yes" } else { "no" },
+            mb(data),
+            if sorted { mb(index) } else { "–".into() },
+            mb(data + index),
+            encode,
+            decode,
+            mb(largest)
+        );
+        eprintln!("progress: {line}");
+        println!("{line}");
+    }
 }
