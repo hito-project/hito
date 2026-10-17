@@ -2,3 +2,9 @@
 # without the Visual C++ redistributable (ADR 0017).
 [target.x86_64-pc-windows-msvc]
 rustflags = ["-C", "target-feature=+crt-static"]
+
+# CMake builds (the Manifold kernel in hito-manifold) read this toolchain
+# file, so on Windows they use the same static C runtime. A
+# CMAKE_TOOLCHAIN_FILE already set in the environment wins.
+[env]
+CMAKE_TOOLCHAIN_FILE = { value = ".cargo/msvc-static-crt.cmake", relative = true }
