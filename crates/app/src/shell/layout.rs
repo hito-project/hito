@@ -156,22 +156,30 @@ impl Layout {
     }
 
     /// Splits the views' area into a grid with one view in each tile, as
-    /// close to square as it can.
+    /// close to square as it can, in the order the views were made. The
+    /// active view stays active.
     pub fn tile_views(&mut self) {
         let Some((anchor, others)) = self.gather_views() else {
             return;
         };
-        let views: Vec<ViewId> = [anchor].into_iter().chain(others).collect();
+        let mut views: Vec<ViewId> = [anchor].into_iter().chain(others).collect();
+        views.sort();
         let columns = views.len().isqrt() + usize::from(views.len().isqrt().pow(2) < views.len());
         let rows: Vec<&[ViewId]> = views.chunks(columns).collect();
 
+        // The first tile is the anchor's area, now showing the first view.
         let path = self
             .dock
             .find_tab(&Tab::View(anchor))
             .expect("the anchor view is open");
+        let leaf = self
+            .dock
+            .leaf_mut(path.node_path())
+            .expect("a tab is in a leaf");
+        leaf.tabs_mut()[path.tab.0] = Tab::View(views[0]);
         let surface = path.surface;
-        // The first tile keeps the anchor. Splitting a leaf moves it into a
-        // new child node and leaves every other node where it is.
+        // Splitting a leaf moves it into a new child node and leaves every
+        // other node where it is.
         let mut row_nodes = Vec::with_capacity(rows.len());
         let mut rest = path.node;
         for (i, row) in rows.iter().enumerate().skip(1) {
@@ -188,6 +196,8 @@ impl Layout {
                 rest = self.split(surface, rest, Split::Right, share, view)[1];
             }
         }
+        // Splitting focuses the new tile; give the focus back.
+        self.focus(Tab::View(anchor));
     }
 
     /// Opens a closed panel, or closes an open one. Panels reopen where

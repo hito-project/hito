@@ -112,12 +112,19 @@ fn several_views_open_as_tabs_or_tiles() {
     let mut h = window();
     ribbon_tab(&mut h, "View");
     click(&mut h, "3D View");
+    assert_eq!(
+        h.state().layout().active_view(),
+        Some(ViewId(1)),
+        "a new view is active"
+    );
     click(&mut h, "3D View");
     assert_eq!(h.state().layout().open_views().len(), 3);
     assert_eq!(h.state().layout().view_areas(), 1);
 
     click(&mut h, "Tile Views");
     assert_eq!(h.state().layout().view_areas(), 3);
+    let active = h.state().layout().active_view();
+    assert_eq!(active, Some(ViewId(2)), "tiling keeps the active view");
     click(&mut h, "Tab Views");
     assert_eq!(h.state().layout().view_areas(), 1);
 
@@ -189,7 +196,15 @@ fn an_unreadable_saved_layout_falls_back_to_the_default() {
 fn text_is_in_spanish_by_default() {
     let mut h = builder().build_eframe(|cc| Shell::new(cc));
     h.run_steps(2);
-    for label in ["Estructura", "Vista", "Gestionar", "Pilar", "Niveles"] {
+    for label in [
+        "Estructura",
+        "Vista",
+        "Gestionar",
+        "Columna",
+        "Fundaciones",
+        "Base aislada",
+        "Niveles",
+    ] {
         assert!(shows(&h, label), "{label:?}");
     }
 }

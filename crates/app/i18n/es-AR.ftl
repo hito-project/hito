@@ -1,6 +1,6 @@
 # Texto del programa HITO, en español de Argentina.
-# Todos los idiomas tienen los mismos mensajes; los nombres siguen la
-# interfaz de Revit en español (ADR 0007).
+# Todos los idiomas tienen los mismos mensajes. La estructura sigue a Revit
+# (ADR 0007) y los términos, el uso de la ingeniería argentina (ADR 0008).
 
 app-title = HITO
 
@@ -10,7 +10,7 @@ ribbon-tab-structure = Estructura
 ribbon-tab-view = Vista
 ribbon-tab-manage = Gestionar
 ribbon-group-structure = Estructura
-ribbon-group-foundation = Cimentación
+ribbon-group-foundation = Fundaciones
 ribbon-group-datum = Referencia
 ribbon-group-create = Crear
 ribbon-group-windows = Ventanas
@@ -20,9 +20,9 @@ ribbon-group-settings = Configuración
 
 command-beam = Viga
 command-wall = Muro
-command-column = Pilar
+command-column = Columna
 command-slab = Losa
-command-isolated-footing = Aislada
+command-isolated-footing = Base aislada
 command-level = Nivel
 command-grid = Eje
 command-materials = Materiales
