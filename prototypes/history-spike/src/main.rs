@@ -4,7 +4,9 @@
 //! Run with `cargo run --release -- [levels]` (default 20 levels, about
 //! 100k elements).
 
+mod compress;
 mod domain;
+mod ifc;
 mod merge;
 mod record;
 
@@ -83,15 +85,16 @@ fn edit(project: &mut Project, rng: &mut Rng, kind: usize) -> ChangeSet {
             project.members[level].extend(ids);
             changes
         }
-        // Delete one element.
+        // Delete a selection of 10 elements, so the model keeps its size
+        // over a year: placing and deleting balance out.
         _ => {
-            let index = rng.below(members.len());
-            let id = members[index];
             let mut tx = project.store.transaction_for(Command::new("Delete"));
-            tx.delete(id).unwrap();
-            let changes = tx.commit().unwrap();
-            project.members[level].swap_remove(index);
-            changes
+            for _ in 0..10 {
+                let members = &mut project.members[level];
+                let id = members.swap_remove(rng.below(members.len()));
+                tx.delete(id).unwrap();
+            }
+            tx.commit().unwrap()
         }
     }
 }
@@ -101,7 +104,7 @@ fn day_kind(rng: &mut Rng) -> usize {
     match rng.below(100) {
         0..70 => 0,
         70..90 => 1,
-        90..97 => 2,
+        90..95 => 2,
         _ => 3,
     }
 }
@@ -356,7 +359,9 @@ fn percentile(times: &mut [Duration], p: f64) -> Duration {
 /// file, then packed (old change sets compressed together in batches, as git
 /// packfiles do) and condensed (history dropped, state kept).
 fn year(levels: usize, edits: usize, days: usize) {
-    let dir = std::env::temp_dir().join("history-spike");
+    let dir = std::env::var_os("HISTORY_SPIKE_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::env::temp_dir().join("history-spike"));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("year.hito");
     let mut rng = Rng::new(0x5eed_1234_abcd_ef01);
@@ -593,7 +598,64 @@ fn overlay(levels: usize, size: usize) {
 
 const COLUMN_BEAM: usize = domain::COLUMNS;
 
+/// The compression study on a real model: an IFC file repeated on
+/// `floors` floors, then `days` × `edits` realistic edits.
+fn real(ifc: &str, floors: usize, edits: usize, days: usize) {
+    let dir = std::env::var_os("HISTORY_SPIKE_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::env::temp_dir().join("history-spike"));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("real.hito");
+    let ((mut model, build, per_floor), t) = time(|| ifc::build(Path::new(ifc), floors));
+    println!(
+        "# A real model\n\n{per_floor} elements per floor from `{ifc}`, {floors} floors: {} elements, imported in {}.\n",
+        model.store.elements().count(),
+        ms(t)
+    );
+    let mut file = HitoFile::create(&path, Encoding::PostcardZstd);
+    for changes in &build {
+        file.commit(changes);
+    }
+    file.db
+        .execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
+        .unwrap();
+    println!(
+        "| after day | file | elements |\n|---|---|---|\n| 0 | {:.1} MB | {} |",
+        file_size(&path) as f64 / 1e6,
+        model.store.elements().count()
+    );
+    let mut rng = Rng::new(0x5eed_1234_abcd_ef01);
+    for day in 1..=days {
+        for _ in 0..edits {
+            let changes = model.edit(&mut rng);
+            file.commit(&changes);
+        }
+        if day.is_power_of_two() || day == days {
+            file.db
+                .execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
+                .unwrap();
+            println!(
+                "| {day} | {:.1} MB | {} |",
+                file_size(&path) as f64 / 1e6,
+                model.store.elements().count()
+            );
+        }
+    }
+    drop(file);
+    println!();
+    compress::study(&path);
+}
+
 fn main() {
+    if std::env::args().nth(1).as_deref() == Some("real") {
+        let args: Vec<String> = std::env::args().collect();
+        let n = |i: usize, d| args.get(i).and_then(|a| a.parse().ok()).unwrap_or(d);
+        return real(&args[2], n(3, 24), n(4, 1000), n(5, 250));
+    }
+    if std::env::args().nth(1).as_deref() == Some("compress") {
+        let path = std::env::args().nth(2).expect("a year file");
+        return compress::study(std::path::Path::new(&path));
+    }
     if std::env::args().nth(1).as_deref() == Some("merge") {
         return merge_demo(20, 500);
     }
@@ -617,7 +679,9 @@ fn main() {
         .nth(2)
         .and_then(|a| a.parse().ok())
         .unwrap_or(2000);
-    let dir = std::env::temp_dir().join("history-spike");
+    let dir = std::env::var_os("HISTORY_SPIKE_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::env::temp_dir().join("history-spike"));
     std::fs::create_dir_all(&dir).unwrap();
     let mut rng = Rng::new(0x5eed_1234_abcd_ef01);
 

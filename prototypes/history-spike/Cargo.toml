@@ -12,6 +12,9 @@ description = "Throwaway prototype for spike #156 (model history). Not part of H
 
 [dependencies]
 hito-core = { path = "../../crates/core" }
+hito-step = { path = "../../crates/adapters/step" }
+brotli = "8"
+xz2 = "0.1"
 serde = { version = "1", features = ["derive"] }
 postcard = { version = "1", features = ["use-std"] }
 ciborium = "0.2"
