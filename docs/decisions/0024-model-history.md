@@ -1,6 +1,6 @@
 # 0024. Model history: a hash-chained log of change sets, branches as layers, merge first
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-17
 
 ## Context
