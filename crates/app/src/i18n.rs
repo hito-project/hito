@@ -29,14 +29,6 @@ impl Locale {
         }
     }
 
-    /// Its BCP 47 tag, such as `es-AR`.
-    pub fn tag(self) -> &'static str {
-        match self {
-            Locale::EsAr => "es-AR",
-            Locale::En => "en",
-        }
-    }
-
     /// The locale's message file.
     pub fn messages(self) -> &'static str {
         match self {
