@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use hito_core::{ChangeSet, ClassId, ElementId, ElementStore, RelationshipChange, StoreView};
+use hito_core::{ChangeSet, ClassId, ElementId, ElementStore, StoreView};
 use rayon::prelude::*;
 
 use crate::{CHORD_TOLERANCE, Generator, GeometryError, Kernel, Mesh};
@@ -91,7 +91,7 @@ impl GeometryCache {
     pub fn update(&mut self, store: &ElementStore, changes: &ChangeSet) -> Regenerated {
         let mut changed: HashSet<ElementId> = changes.elements().iter().map(|c| c.id()).collect();
         for change in changes.relationships() {
-            let (RelationshipChange::Added(r) | RelationshipChange::Removed(r)) = change;
+            let r = change.relationship();
             changed.extend([r.source(), r.target()]);
         }
         let mut affected = changed.clone();
