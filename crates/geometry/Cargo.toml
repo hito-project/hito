@@ -1,0 +1,20 @@
+[package]
+name = "hito-geometry"
+description = "The HITO geometry port: solids described by their parameters, meshed and cached per element."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+# The geometry port depends on the core only. Domains describe their
+# elements' geometry with it, and kernel adapters implement its `Kernel`.
+[dependencies]
+hito-core.workspace = true
+# Triangulates profile faces, holes included. A port of Mapbox's earcut,
+# maintained by georust. Pure Rust, MIT OR Apache-2.0.
+earcut = "0.4"
+# Generates elements' geometry in parallel (principle 5). Pure Rust,
+# MIT OR Apache-2.0.
+rayon = "1.12"

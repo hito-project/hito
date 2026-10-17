@@ -2,8 +2,10 @@
 //! ([ADR 0004](https://github.com/hito-project/hito/blob/main/docs/decisions/0004-unified-core-ports-and-adapters.md)):
 //!
 //! - The core depends on no other HITO crate.
-//! - A domain depends on the core and other domains only.
-//! - An adapter depends on the core, domains and other adapters only.
+//! - The geometry port depends on the core only.
+//! - A domain depends on the core, the geometry port and other domains only.
+//! - An adapter depends on the core, the geometry port, domains and other
+//!   adapters only.
 //! - Nothing depends on the app or on the tools.
 //! - Only the app may use a UI toolkit, directly or through any dependency.
 //!
@@ -49,6 +51,9 @@ pub const UI_CRATES: &[&str] = &[
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Layer {
     Core,
+    /// The geometry port (ADR 0014): what domains describe geometry with,
+    /// and what kernel adapters implement.
+    Geometry,
     Domain,
     Adapter,
     App,
@@ -65,6 +70,7 @@ impl Layer {
         let parts: Vec<&str> = parts.iter().map(String::as_str).collect();
         match parts.as_slice() {
             ["crates", "core", ..] => Some(Layer::Core),
+            ["crates", "geometry", ..] => Some(Layer::Geometry),
             ["crates", "domains", ..] => Some(Layer::Domain),
             ["crates", "adapters", ..] => Some(Layer::Adapter),
             ["crates", "app", ..] => Some(Layer::App),
@@ -78,9 +84,10 @@ impl Layer {
         use Layer::*;
         match self {
             Core => false,
-            Domain => matches!(other, Core | Domain),
-            Adapter => matches!(other, Core | Domain | Adapter),
-            App => matches!(other, Core | Domain | Adapter),
+            Geometry => matches!(other, Core),
+            Domain => matches!(other, Core | Geometry | Domain),
+            Adapter => matches!(other, Core | Geometry | Domain | Adapter),
+            App => matches!(other, Core | Geometry | Domain | Adapter),
             Tool => true,
         }
     }
@@ -129,7 +136,8 @@ pub fn check(metadata: &Value) -> Result<Vec<Violation>, String> {
             let layer = Layer::of(relative).ok_or_else(|| {
                 format!(
                     "crate `{name}` at {} is outside every layer. Put it under \
-                     crates/core, crates/domains, crates/adapters, crates/app or tools.",
+                     crates/core, crates/geometry, crates/domains, crates/adapters, crates/app \
+                     or tools.",
                     relative.display()
                 )
             })?;
@@ -229,8 +237,13 @@ mod tests {
     fn the_intended_structure_passes() {
         let m = metadata(&[
             ("hito-core", Some("crates/core"), &[]),
-            ("dom", Some("crates/domains/dom"), &["hito-core"]),
-            ("ad", Some("crates/adapters/ad"), &["hito-core", "dom"]),
+            ("geo", Some("crates/geometry"), &["hito-core"]),
+            ("dom", Some("crates/domains/dom"), &["hito-core", "geo"]),
+            (
+                "ad",
+                Some("crates/adapters/ad"),
+                &["hito-core", "geo", "dom"],
+            ),
             (
                 "hito",
                 Some("crates/app"),
@@ -251,6 +264,19 @@ mod tests {
         assert_eq!(
             rules(&m),
             ["Core must not depend on Domain: hito-core -> dom"]
+        );
+    }
+
+    #[test]
+    fn the_geometry_port_depending_on_a_domain_fails() {
+        let m = metadata(&[
+            ("hito-core", Some("crates/core"), &[]),
+            ("geo", Some("crates/geometry"), &["hito-core", "dom"]),
+            ("dom", Some("crates/domains/dom"), &["hito-core"]),
+        ]);
+        assert_eq!(
+            rules(&m),
+            ["Geometry must not depend on Domain: geo -> dom"]
         );
     }
 
