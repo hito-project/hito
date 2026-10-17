@@ -6,8 +6,13 @@
 //! deletion the whole deleted one, since that is their delta. It's plain
 //! data, and applying it needs no domain logic, so it means the same in any
 //! version of HITO. A transaction commits by applying its change set to the
-//! store. Undo and redo (#19) and change sets (#21) are built on it. Its
-//! serialised form is decided by the history spike (#156).
+//! store, and [`ElementStore::replay`](crate::ElementStore::replay) applies
+//! one again later.
+//!
+//! Change sets are the model's history
+//! ([ADR 0024](https://github.com/hito-project/hito/blob/main/docs/decisions/0024-model-history.md)).
+//! The core gives them no serialised form: the storage adapter keeps its
+//! own versioned record type and converts to and from it.
 
 use crate::{
     Aspect, Code, Element, ElementId, ExternalSource, Model, Properties, Relationship, Value,
@@ -56,6 +61,24 @@ pub struct ChangeSet {
 }
 
 impl ChangeSet {
+    /// A change set built from its parts, such as one read back from a file
+    /// to [replay](crate::ElementStore::replay). It has no warnings: they
+    /// are derived from the model, not facts about the change.
+    pub fn from_parts(
+        command: Option<Command>,
+        models: Vec<Model>,
+        elements: Vec<ElementChange>,
+        relationships: Vec<RelationshipChange>,
+    ) -> Self {
+        Self {
+            command,
+            models,
+            elements,
+            relationships,
+            warnings: Vec::new(),
+        }
+    }
+
     /// The command the transaction carried out, if it was given one.
     pub fn command(&self) -> Option<&Command> {
         self.command.as_ref()

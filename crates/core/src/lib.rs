@@ -20,7 +20,7 @@
 //! - [`Transaction`]s, the only way to change the store: all or nothing,
 //!   with dependent elements [recomputed](Recompute) and the domains'
 //!   validation [`Rule`]s checked when they commit, and recorded as a
-//!   [`ChangeSet`]
+//!   [`ChangeSet`] that [`ElementStore::replay`] can apply again
 
 mod change;
 mod code;

@@ -1247,6 +1247,94 @@ fn propagated_changes_are_part_of_the_change_set() {
     );
 }
 
+// Change sets (#21).
+
+#[test]
+fn replaying_every_change_set_rebuilds_the_model() {
+    let mut store = ElementStore::new(registry());
+    let mut history = Vec::new();
+    let mut commit = |store: &mut ElementStore, change: &dyn Fn(&mut Transaction)| {
+        let mut tx = store.transaction_for(Command::new("Test"));
+        change(&mut tx);
+        history.push(tx.commit().unwrap());
+    };
+
+    let physical = Model::new(ModelKind::Physical);
+    let definitions = Model::new(ModelKind::Definition);
+    let (p, d) = (physical.id(), definitions.id());
+    let level = Element::new(class("Level"), p).with_property("Elevation", 0.0);
+    let level_id = level.id();
+    let mark = |value| Code::new(CodeSpec::new("TestStructural:Mark"), level_id, value).unwrap();
+    let column_type = Element::new(class("ColumnType"), d).with_property("Width", 0.30);
+    let column = Element::new(class("Column"), p)
+        .with_type(column_type.id())
+        .with_code(mark("C1"))
+        .with_property("Height", 3.0)
+        .with_aspect(Aspect::new(class("Note")).with_property("Text", "check"));
+    let other = Element::new(class("Column"), p)
+        .with_code(mark("C2"))
+        .with_property("Height", 3.0);
+    let (slab, opening) = (
+        Element::new(class("Slab"), p),
+        Element::new(class("Opening"), p),
+    );
+    let ids = [column.id(), other.id(), slab.id(), opening.id()];
+    let [column_id, other_id, slab_id, opening_id] = ids;
+    let attached = |column| Relationship::new(class("AttachedToLevel"), column, level_id);
+
+    commit(&mut store, &|tx| {
+        tx.insert_model(physical.clone()).unwrap();
+        tx.insert_model(definitions.clone()).unwrap();
+        tx.insert(level.clone()).unwrap();
+    });
+    commit(&mut store, &|tx| {
+        tx.insert(column_type.clone()).unwrap();
+        for element in [&column, &other, &slab, &opening] {
+            tx.insert(element.clone()).unwrap();
+        }
+        tx.relate(attached(column_id)).unwrap();
+        tx.relate(attached(other_id)).unwrap();
+        tx.relate(Relationship::new(class("HostedBy"), opening_id, slab_id))
+            .unwrap();
+    });
+    // Moving the level recomputes both columns.
+    commit(&mut store, &|tx| {
+        tx.set_property(level_id, "Elevation", 3.0).unwrap()
+    });
+    // The two columns swap codes.
+    commit(&mut store, &|tx| {
+        tx.set_code(column_id, None).unwrap();
+        tx.set_code(other_id, Some(mark("C1"))).unwrap();
+        tx.set_code(column_id, Some(mark("C2"))).unwrap();
+    });
+    commit(&mut store, &|tx| {
+        tx.set_property(column_id, "ConcreteStrength", 30e6)
+            .unwrap();
+        tx.clear_property(other_id, "Height").unwrap();
+        tx.unrelate(&attached(other_id)).unwrap();
+    });
+    // Deleting the slab deletes its opening.
+    commit(&mut store, &|tx| {
+        tx.delete(slab_id).unwrap();
+    });
+
+    let mut rebuilt = ElementStore::new(registry());
+    for changes in &history {
+        rebuilt.replay(changes);
+    }
+    assert_same_contents(&rebuilt, &store);
+    assert_eq!(rebuilt.find_by_code(&mark("C1")), Some(other_id));
+    assert!(rebuilt.get(opening_id).is_none());
+
+    // Replaying part of the history gives the model as it was then.
+    let mut partial = ElementStore::new(registry());
+    for changes in &history[..2] {
+        partial.replay(changes);
+    }
+    assert_eq!(partial.find_by_code(&mark("C1")), Some(column_id));
+    assert!(partial.get(opening_id).is_some());
+}
+
 /// Checks that a store holds the same models, elements, codes and
 /// relationships as another.
 fn assert_same_contents(store: &ElementStore, expected: &ElementStore) {

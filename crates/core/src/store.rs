@@ -118,6 +118,18 @@ impl ElementStore {
         self.view().preview_delete(id)
     }
 
+    /// Applies a change set that was committed before, such as one read
+    /// back from a file's history. Like a commit, it runs no checks and no
+    /// domain logic, so a change set means the same in any version of HITO.
+    ///
+    /// The change set must fit the store as it was before that commit:
+    /// replaying a history's change sets in order, from an empty store,
+    /// rebuilds the model. It panics if an element it modifies doesn't
+    /// exist.
+    pub fn replay(&mut self, changes: &ChangeSet) {
+        self.apply(changes);
+    }
+
     pub(crate) fn has_relationship(&self, relationship: &Relationship) -> bool {
         self.relationships_from(relationship.source())
             .any(|r| r == relationship)
