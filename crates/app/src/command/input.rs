@@ -74,6 +74,12 @@ impl InputFormat {
         }
     }
 
+    /// Shows a quantity of `dimension`, given in SI units, the way
+    /// [`parse`](Self::parse) reads it back, such as `3.2 m`.
+    pub fn format(&self, value: f64, dimension: Dimension) -> String {
+        self.units.format(value, dimension)
+    }
+
     fn point(&self, text: &str) -> Result<Input, InputError> {
         let mut point = [0.0; 3];
         let parts: Vec<&str> = text.split(SEPARATOR).collect();
@@ -133,5 +139,20 @@ mod tests {
             );
         }
         assert_eq!(input.parse("  ", length), Err(InputError::Empty));
+    }
+
+    #[test]
+    fn quantities_show_as_they_are_read_back() {
+        let input = InputFormat::new();
+        let length = Dimension::LENGTH;
+        for value in [3.2, -0.15, 0.0, 12.345] {
+            let shown = input.format(value, length);
+            assert_eq!(
+                input.parse(&shown, Wants::Quantity(length)),
+                Ok(Input::Quantity(value)),
+                "{shown}"
+            );
+        }
+        assert_eq!(input.format(3.2, length), "3.2 m");
     }
 }

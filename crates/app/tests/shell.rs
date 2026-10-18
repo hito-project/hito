@@ -440,7 +440,11 @@ fn commands_prompt_on_the_command_line() {
     h.key_press(egui::Key::Enter);
     h.run_steps(2);
     assert_eq!(prompt(&h), None);
-    assert_eq!(h.state().project().models().count(), 1);
+    assert_eq!(
+        h.state().project().models().count(),
+        2,
+        "the probe added a model"
+    );
 }
 
 /// The command line reads numbers as AutoCAD does in every language, even
@@ -455,7 +459,11 @@ fn input_uses_a_decimal_point_in_spanish_too() {
     assert_eq!(prompt(&h), Some("probe-length"), "a comma isn't a decimal");
     command_line(&mut h, "1.5 m");
     assert_eq!(prompt(&h), None);
-    assert_eq!(h.state().project().models().count(), 1);
+    assert_eq!(
+        h.state().project().models().count(),
+        2,
+        "the probe added a model"
+    );
 }
 
 #[test]
@@ -468,7 +476,11 @@ fn esc_cancels_a_command() {
     h.run_steps(2);
     assert_eq!(prompt(&h), None);
     assert_eq!(h.state().commands().message(), Some("*Cancel*"));
-    assert_eq!(h.state().project().models().count(), 0);
+    assert_eq!(
+        h.state().project().models().count(),
+        1,
+        "only the new project's"
+    );
 
     // A ribbon button cancels the running command and runs its own.
     command_line(&mut h, "probe");
@@ -476,4 +488,105 @@ fn esc_cancels_a_command() {
     click(&mut h, "3D View");
     assert_eq!(prompt(&h), None);
     assert_eq!(h.state().layout().open_views().len(), 2);
+}
+
+/// The elevation of the level called `name`, if there is one.
+fn level(h: &Harness<'_, Shell>, name: &str) -> Option<f64> {
+    use hito_core::Value;
+    use hito_structural::level::{ELEVATION, NAME};
+    let project = h.state().project();
+    let name = Value::Text(name.into());
+    let level = project
+        .elements()
+        .find(|e| e.properties().get(NAME) == Some(&name))?;
+    match project.property(level.id(), ELEVATION) {
+        Some(Value::Real(elevation)) => Some(*elevation),
+        other => panic!("elevation {other:?}"),
+    }
+}
+
+/// Replaces the text of the property field labelled `label` and presses
+/// Enter.
+fn set_property(h: &mut Harness<'_, Shell>, label: &str, text: &str) {
+    h.get_by_role_and_label(Role::TextInput, label).focus();
+    h.run_steps(1);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    h.get_by_role_and_label(Role::TextInput, label)
+        .type_text(text);
+    h.run_steps(1);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(2);
+}
+
+#[test]
+fn a_new_project_starts_with_two_levels() {
+    let h = window();
+    assert_eq!(level(&h, "Level 1"), Some(0.0));
+    assert_eq!(level(&h, "Level 2"), Some(3.0));
+    for name in ["Level 1", "Level 2"] {
+        assert!(shows(&h, name), "{name} in the browser");
+    }
+}
+
+#[test]
+fn levels_are_renamed_and_moved_in_the_properties() {
+    let mut h = window();
+    h.get_by_label("Level 2").click();
+    h.run_steps(2);
+    let elevation = h.get_by_role_and_label(Role::TextInput, "Elevation");
+    assert_eq!(elevation.value().as_deref(), Some("3 m"));
+
+    set_property(&mut h, "Elevation", "320 cm");
+    assert_eq!(level(&h, "Level 2"), Some(3.2));
+    set_property(&mut h, "Elevation", "three");
+    assert_eq!(level(&h, "Level 2"), Some(3.2), "not a length");
+
+    // Names are unique, as in Revit.
+    set_property(&mut h, "Name", "Level 1");
+    assert!(shows(
+        &h,
+        "Another level is already called \u{2068}Level 1\u{2069}"
+    ));
+    assert_eq!(level(&h, "Level 2"), Some(3.2));
+    set_property(&mut h, "Name", "Primer piso");
+    assert_eq!(level(&h, "Primer piso"), Some(3.2));
+    assert!(shows(&h, "Primer piso"), "the browser shows the new name");
+}
+
+#[test]
+fn levels_are_added_with_their_command_until_esc() {
+    let mut h = window();
+    h.event(egui::Event::Text("LL".into()));
+    h.run_steps(2);
+    assert_eq!(prompt(&h), Some("level-prompt-elevation"));
+    h.get_by_role(Role::TextInput).type_text("6");
+    h.key_press(egui::Key::Enter);
+    h.run_steps(2);
+    h.get_by_role(Role::TextInput).type_text("9 m");
+    h.key_press(egui::Key::Enter);
+    h.run_steps(2);
+    assert_eq!(prompt(&h), Some("level-prompt-elevation"), "still active");
+    h.key_press(egui::Key::Escape);
+    h.run_steps(2);
+    assert_eq!(prompt(&h), None);
+    assert_eq!(level(&h, "Level 3"), Some(6.0));
+    assert_eq!(level(&h, "Level 4"), Some(9.0));
+    assert!(shows(&h, "Level 4"), "listed in the browser");
+}
+
+#[test]
+fn levels_are_deleted_with_the_delete_key_or_their_menu() {
+    let mut h = window();
+    h.get_by_label("Level 2").click();
+    h.run_steps(2);
+    h.key_press(egui::Key::Delete);
+    h.run_steps(2);
+    assert_eq!(level(&h, "Level 2"), None);
+    assert!(!shows(&h, "Level 2"));
+
+    h.get_by_label("Level 1").click_secondary();
+    h.run_steps(2);
+    click(&mut h, "Delete");
+    assert_eq!(level(&h, "Level 1"), None);
+    assert!(shows(&h, "(none)"), "no levels left");
 }

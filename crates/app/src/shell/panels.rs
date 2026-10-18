@@ -6,13 +6,18 @@ use std::collections::HashMap;
 use eframe::egui;
 use eframe::egui_wgpu::RenderState;
 
+use hito_core::ElementStore;
+
+use super::elements::{self, Edit, Elements};
 use super::layout::{Tab, ViewId};
+use crate::command::InputFormat;
 use crate::i18n::I18n;
 use crate::viewport::Viewport;
 
 /// Draws the dock tabs. The dock borrows the layout while it draws, so
 /// `Tabs` gets copies of what it needs from it, and records in `open` a view
-/// the user asked to open.
+/// the user asked to open, and in `edits` the changes to the model the user
+/// asked for.
 pub(super) struct Tabs<'a> {
     pub i18n: &'a I18n,
     pub views: Vec<ViewId>,
@@ -20,6 +25,10 @@ pub(super) struct Tabs<'a> {
     pub viewports: &'a mut HashMap<ViewId, Viewport>,
     pub render_state: Option<&'a RenderState>,
     pub open: Option<ViewId>,
+    pub project: &'a ElementStore,
+    pub input: &'a InputFormat,
+    pub elements: &'a mut Elements,
+    pub edits: Vec<Edit>,
 }
 
 /// A view's name, as the project browser and its tab show it.
@@ -33,8 +42,8 @@ pub fn view_name(i18n: &I18n, view: ViewId) -> String {
 
 impl Tabs<'_> {
     /// Revit's project browser: the views, then the levels and element
-    /// types. Double-clicking a view opens it. Levels come with #33 and
-    /// element types with the structural elements (#36 to #41).
+    /// types. Double-clicking a view opens it; clicking a level picks it.
+    /// Element types come with the structural elements (#36 to #41).
     fn project_browser(&mut self, ui: &mut egui::Ui) {
         let tr = |key| self.i18n.tr(key);
         egui::CollapsingHeader::new(tr("browser-views"))
@@ -54,16 +63,25 @@ impl Tabs<'_> {
                         }
                     });
             });
-        for key in ["browser-levels", "browser-element-types"] {
-            egui::CollapsingHeader::new(tr(key))
-                .id_salt(key)
-                .show(ui, |ui| ui.weak(tr("browser-none")));
-        }
+        egui::CollapsingHeader::new(tr("browser-levels"))
+            .id_salt("browser-levels")
+            .default_open(true)
+            .show(ui, |ui| {
+                let (store, edits) = (self.project, &mut self.edits);
+                elements::browser_levels(ui, self.i18n, store, self.elements, edits);
+            });
+        egui::CollapsingHeader::new(tr("browser-element-types"))
+            .id_salt("browser-element-types")
+            .show(ui, |ui| ui.weak(tr("browser-none")));
     }
 
-    /// With nothing selected, Revit's properties show the active view's.
-    /// Editing them comes with #26.
+    /// The picked element's properties, or with nothing picked the active
+    /// view's, as in Revit. Editing the view's comes with #26.
     fn properties(&mut self, ui: &mut egui::Ui) {
+        let (store, edits) = (self.project, &mut self.edits);
+        if elements::properties(ui, self.i18n, self.input, store, self.elements, edits) {
+            return;
+        }
         let Some(view) = self.active_view else {
             ui.weak(self.i18n.tr("properties-no-view"));
             return;
