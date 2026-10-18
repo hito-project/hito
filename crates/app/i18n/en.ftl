@@ -46,6 +46,15 @@ input-empty = Type an answer, or press Esc to cancel
 input-not-a-point = Enter a point as x,y or x,y,z, such as 3.5,2
 input-not-a-value = Enter a value, such as 3.5 or 350 cm
 
+## Levels
+
+# New levels are named this word and a number, such as "Level 3". Names are
+# data: they don't change when the language does.
+level-name = Level
+level-prompt-elevation = Enter the new level's elevation, such as 3.5 or 350 cm
+level-name-empty = A level needs a name
+level-name-taken = Another level is already called { $name }
+
 ## Window actions
 
 action-new-3d-view = 3D View
@@ -71,6 +80,20 @@ browser-none = (none)
 
 properties-no-view = No view is open
 properties-view-name = View Name
+properties-kind-level = Level
+properties-name = Name
+properties-elevation = Elevation
+properties-edit-failed = The change could not be made
+
+## Deleting elements
+
+action-delete = Delete
+action-cancel = Cancel
+# Revit warns before deleting elements that others depend on.
+delete-also = { $count ->
+    [one] Deleting { $name } also deletes 1 element attached to it.
+   *[other] Deleting { $name } also deletes { $count } elements attached to it.
+}
 
 ## Views
 
