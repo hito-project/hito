@@ -1,11 +1,15 @@
 # Concrete grades of CIRSOC 201-2005, the Argentine concrete code, as
 # structural materials (#36).
 #
+# NOT REVIEWED. No engineer has reviewed this table yet. The values were
+# read from the published codes and are checked by the tests, but they need
+# an engineer's review before anyone relies on them.
+#
 # This table is engineering data. Every value names its source and its
 # status. The tests in tests/concrete.rs recompute each derived value from
-# the code's formula, and a snapshot test locks the whole table as it was
-# reviewed: any change here fails CI until an engineer reviews it again and
-# the snapshot is re-approved (see that test for how).
+# the code's formula, and a snapshot test locks the whole table: any change
+# here fails CI until the snapshot is approved again (see that test for
+# how).
 #
 # Values are written with their units and read through hito-units, so any
 # unit the catalogue knows works. Numbers use a decimal point.
@@ -18,11 +22,12 @@
 #               engineer's review
 #   unverified  not yet checked against the primary source
 
-# The engineer who last reviewed the table, and when. A change to the table
-# resets both to "pending" until the next review.
+# The engineer who last reviewed the table, and when. Both stay
+# "not reviewed" until an engineer has reviewed it, and a change to the
+# table sets them back to "not reviewed".
 [review]
-reviewer = "pending"
-date = "pending"
+reviewer = "not reviewed"
+date = "not reviewed"
 
 # The primary sources, as published free of charge by INTI-CIRSOC. The hash
 # identifies the exact file that was read.

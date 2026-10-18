@@ -2,7 +2,7 @@
 source: crates/adapters/pack-ar/tests/concrete.rs
 expression: render(&table())
 ---
-reviewed by pending on pending
+NOT REVIEWED: no engineer has reviewed this table yet
 source cirsoc-101-2005: Reglamento CIRSOC 101, Reglamento Argentino de Cargas Permanentes y Sobrecargas Mínimas de Diseño para Edificios y otras Estructuras
   edition: Julio 2005
   url: https://www.inti.gob.ar/assets/uploads/files/cirsoc/vigencia-2013/area100/Reglamento-cirsoc101-completo.pdf

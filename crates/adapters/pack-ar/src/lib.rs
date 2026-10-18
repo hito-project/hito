@@ -6,11 +6,11 @@
 //! country means adding a pack. This one has, so far:
 //!
 //! - [`concrete`]: the concrete grades of CIRSOC 201-2005 (H-15 to H-60), as
-//!   structural materials
+//!   structural materials. **No engineer has reviewed this table yet.**
 //!
 //! Engineering values live in data files under `data/`, one value per line,
 //! each with its source clause, so an engineer can review them. Tests
 //! recompute every derived value from the code's formulas, and snapshot
-//! tests lock each reviewed table.
+//! tests lock each table, so no change to it goes unnoticed.
 
 pub mod concrete;

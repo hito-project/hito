@@ -1,6 +1,6 @@
 //! The CIRSOC 201-2005 concrete table (#36): every derived value is
-//! recomputed from the code's formulas, and the reviewed table is locked by
-//! a snapshot.
+//! recomputed from the code's formulas, and the table is locked by a
+//! snapshot. No engineer has reviewed the table yet.
 
 use std::fmt::Write;
 
@@ -146,15 +146,16 @@ fn a_table_with_mistakes_doesnt_read() {
     assert!(error("status = \"derived\"", "status = \"guessed\"").contains("guessed"));
 }
 
-/// **The reviewed table, locked.** The snapshot in
-/// `tests/snapshots/concrete__cirsoc_201_2005_concrete.snap` is the table as
-/// an engineer reviewed it, value by value, with sources and statuses.
+/// **The table, locked.** The snapshot in
+/// `tests/snapshots/concrete__cirsoc_201_2005_concrete.snap` is the table,
+/// value by value, with sources and statuses. Its first line says whether an
+/// engineer has reviewed it. **None has yet.**
 ///
 /// Any change to the data file that changes what HITO reads fails here. To
 /// change the table:
 ///
 /// 1. Edit `data/cirsoc-201-2005-concrete.toml`, citing the source of every
-///    new value, and set its `[review]` back to `pending`.
+///    new value, and set its `[review]` back to `not reviewed`.
 /// 2. Run `cargo insta test -p hito-pack-ar --review` (or `cargo test`, then
 ///    rename the `.snap.new` file over the `.snap` one) and commit the new
 ///    snapshot.
@@ -162,10 +163,10 @@ fn a_table_with_mistakes_doesnt_read() {
 ///    put their name and the date in `[review]`, update the snapshot again,
 ///    and only then mark the pull request ready.
 ///
-/// The pull request that added the table (#36) followed the same steps.
-/// Comments in the data file aren't part of the snapshot.
+/// The pull request that added the table (#36) did steps 1 and 2. Step 3 is
+/// still to do. Comments in the data file aren't part of the snapshot.
 #[test]
-fn the_reviewed_table_is_unchanged() {
+fn the_table_is_unchanged() {
     insta::assert_snapshot!("cirsoc_201_2005_concrete", render(&table()));
 }
 
@@ -185,7 +186,11 @@ fn render(table: &ConcreteTable) -> String {
 
     let mut out = String::new();
     let review = &table.review;
-    writeln!(out, "reviewed by {} on {}", review.reviewer, review.date).unwrap();
+    if review.is_reviewed() {
+        writeln!(out, "reviewed by {} on {}", review.reviewer, review.date).unwrap();
+    } else {
+        writeln!(out, "NOT REVIEWED: no engineer has reviewed this table yet").unwrap();
+    }
     for (key, source) in &table.sources {
         writeln!(out, "source {key}: {}", source.title).unwrap();
         for (field, value) in [

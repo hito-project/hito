@@ -2,8 +2,8 @@
 //!
 //! The grades and their values are in
 //! [`data/cirsoc-201-2005-concrete.toml`](https://github.com/hito-project/hito/blob/main/crates/adapters/pack-ar/data/cirsoc-201-2005-concrete.toml),
-//! built into the program. Every value there names the clause it comes
-//! from:
+//! built into the program. **No engineer has reviewed the table yet.** Every
+//! value there names the clause it comes from:
 //!
 //! - the classes and their specified compressive strength f'c: article
 //!   2.3.2, Tabla 2.7
@@ -44,7 +44,7 @@ use hito_structural::{class, material};
 use hito_units::{NumberFormat, UnitCatalogue, Units};
 use serde::Deserialize;
 
-/// The reviewed table, as built into the program.
+/// The table, as built into the program. It isn't reviewed yet.
 const CIRSOC_201: &str = include_str!("../data/cirsoc-201-2005-concrete.toml");
 
 /// Standard gravity, g<sub>n</sub> = 9.806 65 m/s², exact by definition
@@ -142,12 +142,23 @@ impl ConcreteGrade {
     }
 }
 
-/// Who last reviewed a table, and when: `pending` until an engineer has.
+/// Who last reviewed a table, and when. Both are [`Review::NOT_REVIEWED`]
+/// until an engineer has.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Review {
     pub reviewer: String,
     pub date: String,
+}
+
+impl Review {
+    /// What the data file says while no engineer has reviewed the table.
+    pub const NOT_REVIEWED: &str = "not reviewed";
+
+    /// Whether an engineer has reviewed the table.
+    pub fn is_reviewed(&self) -> bool {
+        self.reviewer != Self::NOT_REVIEWED
+    }
 }
 
 /// A table of concrete grades and the sources it cites.
@@ -160,8 +171,9 @@ pub struct ConcreteTable {
 }
 
 impl ConcreteTable {
-    /// The CIRSOC 201-2005 grades, from the reviewed table built into the
-    /// program. The tests check it always reads.
+    /// The CIRSOC 201-2005 grades, from the table built into the program.
+    /// No engineer has reviewed it yet (see [`Review::is_reviewed`]). The
+    /// tests check it always reads.
     pub fn cirsoc_201() -> Result<Self, DataError> {
         Self::parse(CIRSOC_201)
     }
