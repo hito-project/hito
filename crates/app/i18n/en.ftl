@@ -62,6 +62,14 @@ wall-same-point = The next point must differ from the last one
 # The wall type every new project starts with. It's data from then on.
 wall-type-generic = Generic - 200 mm
 
+## Grids
+
+grid-prompt-start = Enter the grid's start point, such as 0,0
+grid-prompt-end = Enter the grid's end point, such as 0,10
+grid-points-differ = The end point must differ from the start point
+grid-name-empty = A grid needs a label
+grid-name-taken = Another grid is already labelled { $name }
+
 ## Window actions
 
 action-new-3d-view = 3D View
@@ -86,12 +94,15 @@ panel-properties = Properties
 browser-views = Views (all)
 browser-3d-views = 3D Views
 browser-levels = Levels
+browser-grids = Grids
 browser-element-types = Element types
 browser-none = (none)
 
 properties-no-view = No view is open
 properties-view-name = View Name
 properties-kind-level = Level
+properties-kind-grid = Grid
+properties-label = Label
 properties-name = Name
 properties-elevation = Elevation
 properties-edit-failed = The change could not be made

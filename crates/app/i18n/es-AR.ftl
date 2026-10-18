@@ -62,6 +62,14 @@ wall-same-point = El punto siguiente tiene que ser distinto del anterior
 # El tipo de muro con el que empieza todo proyecto nuevo. Desde ahí es un dato.
 wall-type-generic = Genérico - 200 mm
 
+## Ejes
+
+grid-prompt-start = Ingresar el punto inicial del eje, como 0,0
+grid-prompt-end = Ingresar el punto final del eje, como 0,10
+grid-points-differ = El punto final debe ser distinto del inicial
+grid-name-empty = El eje necesita un rótulo
+grid-name-taken = Ya hay otro eje con el rótulo { $name }
+
 ## Acciones de ventanas
 
 action-new-3d-view = Vista 3D
@@ -86,12 +94,15 @@ panel-properties = Propiedades
 browser-views = Vistas (todas)
 browser-3d-views = Vistas 3D
 browser-levels = Niveles
+browser-grids = Ejes
 browser-element-types = Tipos de elemento
 browser-none = (ninguno)
 
 properties-no-view = No hay ninguna vista abierta
 properties-view-name = Nombre de vista
 properties-kind-level = Nivel
+properties-kind-grid = Eje
+properties-label = Rótulo
 properties-name = Nombre
 properties-elevation = Elevación
 properties-edit-failed = No se pudo hacer el cambio

@@ -18,7 +18,7 @@ const COMMANDS: &[Command] = &[
     unavailable("SLAB", "command-slab", Some("SB")),
     unavailable("ISOLATEDFOOTING", "command-isolated-footing", None),
     tool("LEVEL", "command-level", Some("LL"), tools::level::start),
-    unavailable("GRID", "command-grid", Some("GR")),
+    tool("GRID", "command-grid", Some("GR"), tools::grid::start),
     unavailable("MATERIALS", "command-materials", None),
     unavailable("UNITS", "command-project-units", Some("UN")),
     window("VIEW3D", "action-new-3d-view", None, Action::New3dView),

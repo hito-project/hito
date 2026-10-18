@@ -43,8 +43,9 @@ pub fn view_name(i18n: &I18n, view: ViewId) -> String {
 }
 
 impl Tabs<'_> {
-    /// Revit's project browser: the views, then the levels and element
-    /// types. Double-clicking a view opens it; clicking a level picks it.
+    /// Revit's project browser: the views, then the levels,
+    /// grids and element types. Double-clicking a view opens it; clicking a
+    /// level or a grid picks it.
     /// Element types come with the structural elements (#36 to #41).
     fn project_browser(&mut self, ui: &mut egui::Ui) {
         let tr = |key| self.i18n.tr(key);
@@ -71,6 +72,13 @@ impl Tabs<'_> {
             .show(ui, |ui| {
                 let (store, edits) = (self.project, &mut self.edits);
                 elements::browser_levels(ui, self.i18n, store, self.elements, edits);
+            });
+        egui::CollapsingHeader::new(tr("browser-grids"))
+            .id_salt("browser-grids")
+            .default_open(true)
+            .show(ui, |ui| {
+                let (store, edits) = (self.project, &mut self.edits);
+                elements::browser_grids(ui, self.i18n, store, self.elements, edits);
             });
         egui::CollapsingHeader::new(tr("browser-element-types"))
             .id_salt("browser-element-types")

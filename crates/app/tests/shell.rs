@@ -660,7 +660,74 @@ fn levels_are_deleted_with_the_delete_key_or_their_menu() {
     h.run_steps(2);
     click(&mut h, "Delete");
     assert_eq!(level(&h, "Level 1"), None);
-    assert!(shows(&h, "(none)"), "no levels left");
+    let empty = h.query_all_by_label("(none)").count();
+    assert_eq!(empty, 2, "no levels left, and no grids");
+}
+
+/// The line of the grid labelled `label`, if there is one.
+fn grid(h: &Harness<'_, Shell>, label: &str) -> Option<hito_structural::grid::GridLine> {
+    let project = h.state().project();
+    let id = hito_structural::grid::find(&project.view(), label)?;
+    hito_structural::grid::GridLine::of(&project.view(), id)
+}
+
+/// Types `text` in the focused command line and presses Enter.
+fn answer(h: &mut Harness<'_, Shell>, text: &str) {
+    h.get_by_role(Role::TextInput).type_text(text);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(2);
+}
+
+#[test]
+fn grids_are_drawn_with_their_command_and_labelled_automatically() {
+    use hito_structural::grid::GridLine;
+    let mut h = window();
+    assert!(shows(&h, "Grids"), "the browser lists grids");
+    h.event(egui::Event::Text("GR".into()));
+    h.run_steps(2);
+    assert_eq!(prompt(&h), Some("grid-prompt-start"));
+    answer(&mut h, "0,0");
+    assert_eq!(prompt(&h), Some("grid-prompt-end"));
+    answer(&mut h, "0,10");
+    answer(&mut h, "6,0");
+    answer(&mut h, "6,10");
+    assert_eq!(prompt(&h), Some("grid-prompt-start"), "still active");
+    h.key_press(egui::Key::Escape);
+    h.run_steps(2);
+
+    assert_eq!(grid(&h, "1"), Some(GridLine::new([0.0, 0.0], [0.0, 10.0])));
+    assert_eq!(grid(&h, "2"), Some(GridLine::new([6.0, 0.0], [6.0, 10.0])));
+}
+
+#[test]
+fn grid_labels_are_edited_in_the_properties_and_grids_deleted() {
+    let mut h = window();
+    command_line(&mut h, "GR");
+    for point in ["0,0", "0,10", "6,0", "6,10"] {
+        answer(&mut h, point);
+    }
+    h.key_press(egui::Key::Escape);
+    h.run_steps(2);
+
+    h.get_by_label("1").click();
+    h.run_steps(2);
+    assert!(shows(&h, "Grid"), "the properties show a grid");
+    set_property(&mut h, "Label", "A");
+    assert!(grid(&h, "A").is_some() && grid(&h, "1").is_none());
+    // Labels are unique, as in Revit.
+    h.get_by_label("2").click();
+    h.run_steps(2);
+    set_property(&mut h, "Label", "A");
+    assert!(shows(
+        &h,
+        "Another grid is already labelled \u{2068}A\u{2069}"
+    ));
+    assert!(grid(&h, "2").is_some());
+
+    h.key_press(egui::Key::Delete);
+    h.run_steps(2);
+    assert!(grid(&h, "2").is_none());
+    assert!(grid(&h, "A").is_some());
 }
 
 /// The walls in the project, oldest first.
