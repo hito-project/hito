@@ -35,6 +35,10 @@
 //! Deleting a level deletes the elements attached to it, as in Revit. The UI
 //! lists them first with
 //! [`preview_delete`](hito_core::StoreView::preview_delete) and asks.
+//!
+//! Slabs (#39), and later roofs and ceilings, derive from
+//! [`HORIZONTAL_ELEMENT`]: level-based elements with a top and a bottom
+//! face, which walls attach their top or base to (#193).
 
 use hito_core::{
     ClassDef, ClassId, DataType, Dimension, ElementId, OnDelete, Properties, Recompute,
@@ -51,6 +55,11 @@ pub const LEVEL_BASED_ELEMENT: &str = "LevelBasedElement";
 /// From a level-based element to its level, which drives it. Deleting the
 /// level deletes the element.
 pub const ATTACHED_TO_LEVEL: &str = "AttachedToLevel";
+/// The base class of slabs (#39), and later roofs and ceilings: level-based
+/// elements with a top and a bottom face that walls attach to, as in Revit.
+/// Each subclass keeps [`TOP_ELEVATION`] and [`BOTTOM_ELEVATION`] up to
+/// date.
+pub const HORIZONTAL_ELEMENT: &str = "HorizontalElement";
 
 /// A level's name, unique among levels, such as `Planta baja`. It's data,
 /// not interface text, so it isn't translated.
@@ -64,18 +73,27 @@ pub const LEVEL_OFFSET: &str = "LevelOffset";
 /// level's elevation plus its offset. It's recomputed, so setting it has no
 /// lasting effect.
 pub const BASE_ELEVATION: &str = "BaseElevation";
+/// A horizontal element's top face, above the project's origin. A wall
+/// whose base is attached to it stands on it.
+pub const TOP_ELEVATION: &str = "TopElevation";
+/// A horizontal element's bottom face, above the project's origin. A wall
+/// whose top is attached to it stops under it.
+pub const BOTTOM_ELEVATION: &str = "BottomElevation";
 
 const LENGTH: DataType = DataType::Quantity(Dimension::LENGTH);
 
 /// The level classes.
-pub(crate) fn classes() -> [ClassDef; 2] {
+pub(crate) fn classes() -> [ClassDef; 3] {
     let level = ClassDef::new(LEVEL, ClassId::SPATIAL_LOCATION_ELEMENT)
         .property(NAME, DataType::Text)
         .property(ELEVATION, LENGTH);
     let level_based = ClassDef::new(LEVEL_BASED_ELEMENT, ClassId::GEOMETRIC_ELEMENT_3D)
         .property(LEVEL_OFFSET, LENGTH)
         .property(BASE_ELEVATION, LENGTH);
-    [level, level_based]
+    let horizontal = ClassDef::new(HORIZONTAL_ELEMENT, class(LEVEL_BASED_ELEMENT))
+        .property(TOP_ELEVATION, LENGTH)
+        .property(BOTTOM_ELEVATION, LENGTH);
+    [level, level_based, horizontal]
 }
 
 pub(crate) fn relationships() -> [RelationshipDef; 1] {
