@@ -103,9 +103,9 @@ impl Shell {
                 .and_then(|s| eframe::get_value(s, NAVIGATION_KEY))
                 .unwrap_or_default(),
             viewports: HashMap::new(),
-            // The domains' generators come with their elements (#193, #37
-            // to #41).
-            geometry: GeometryCache::new(Arc::new(Manifold), Vec::new()),
+            // The structural generators come with their elements (#37 to
+            // #41).
+            geometry: GeometryCache::new(Arc::new(Manifold), hito_architectural::generators()),
             scene: Scene::default(),
             commands: Session::new(registry()),
             command_line: Default::default(),
