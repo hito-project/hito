@@ -11,6 +11,7 @@ use super::layout::Tab;
 use super::theme::Theme;
 use crate::command::{Registry, Run};
 use crate::i18n::I18n;
+use crate::viewport::Navigation;
 
 /// Something a ribbon button does to the window itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -21,6 +22,9 @@ pub enum Action {
     TileViews,
     TogglePanel(Tab),
     SetTheme(Theme),
+    SetNavigation(Navigation),
+    /// Zooms the active view to fit the model.
+    ZoomToFit,
 }
 
 /// What the user pressed in the ribbon.
@@ -37,7 +41,7 @@ enum Item {
     /// A command's button, by the command's name.
     Command(&'static str),
     /// Revit's User Interface menu: turns the panels on and off, and picks
-    /// the theme.
+    /// the theme and how the mouse wheel moves 3D views.
     UserInterface,
 }
 
@@ -118,6 +122,7 @@ pub(super) struct State<'a, F> {
     /// Which panels are open, for the User Interface menu.
     pub is_open: F,
     pub theme: Theme,
+    pub navigation: Navigation,
 }
 
 impl Ribbon {
@@ -207,6 +212,16 @@ fn item_ui<F: Fn(Tab) -> bool>(
                         .clicked()
                     {
                         pressed = Some(Pressed::Action(Action::SetTheme(choice)));
+                    }
+                }
+                ui.separator();
+                ui.label(egui::RichText::new(i18n.tr("ui-navigation")).small().weak());
+                for choice in Navigation::ALL {
+                    if ui
+                        .radio(state.navigation == choice, i18n.tr(choice.label()))
+                        .clicked()
+                    {
+                        pressed = Some(Pressed::Action(Action::SetNavigation(choice)));
                     }
                 }
             });

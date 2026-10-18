@@ -21,10 +21,13 @@ mod ribbon;
 mod theme;
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use eframe::egui;
 use egui_dock::DockArea;
 use hito_core::{ElementStore, SchemaRegistry};
+use hito_geometry::GeometryCache;
+use hito_manifold::Manifold;
 
 pub use commands::registry;
 pub use layout::{Layout, Tab, ViewId};
@@ -33,7 +36,7 @@ pub use theme::Theme;
 
 use crate::command::{InputFormat, Outcome, Session};
 use crate::i18n::{I18n, Locale};
-use crate::viewport::Viewport;
+use crate::viewport::{Navigation, Scene, Viewport};
 use command_line::{CommandLine, Request};
 use ribbon::Pressed;
 
@@ -41,6 +44,8 @@ use ribbon::Pressed;
 const LAYOUT_KEY: &str = "layout";
 /// The key the theme is saved under, next to the layout.
 const THEME_KEY: &str = "theme";
+/// The key the 3D navigation setting is saved under.
+const NAVIGATION_KEY: &str = "navigation";
 
 /// The main window.
 pub struct Shell {
@@ -48,7 +53,11 @@ pub struct Shell {
     ribbon: ribbon::Ribbon,
     layout: Layout,
     theme: Theme,
+    navigation: Navigation,
     viewports: HashMap<ViewId, Viewport>,
+    /// Every element's mesh, and what the 3D views show of them.
+    geometry: GeometryCache,
+    scene: Scene,
     commands: Session,
     command_line: CommandLine,
     input: InputFormat,
@@ -80,7 +89,14 @@ impl Shell {
             theme: storage
                 .and_then(|s| eframe::get_value(s, THEME_KEY))
                 .unwrap_or_default(),
+            navigation: storage
+                .and_then(|s| eframe::get_value(s, NAVIGATION_KEY))
+                .unwrap_or_default(),
             viewports: HashMap::new(),
+            // The domains' generators come with their elements (#193, #37
+            // to #41).
+            geometry: GeometryCache::new(Arc::new(Manifold), Vec::new()),
+            scene: Scene::default(),
             commands: Session::new(registry()),
             command_line: Default::default(),
             input: InputFormat::new(),
@@ -94,6 +110,16 @@ impl Shell {
 
     pub fn theme(&self) -> Theme {
         self.theme
+    }
+
+    /// What dragging with the mouse wheel does in 3D views.
+    pub fn navigation(&self) -> Navigation {
+        self.navigation
+    }
+
+    /// What the 3D views show.
+    pub fn scene(&self) -> &Scene {
+        &self.scene
     }
 
     pub fn i18n(&self) -> &I18n {
@@ -145,6 +171,15 @@ impl Shell {
             Action::TileViews => layout.tile_views(),
             Action::TogglePanel(panel) => layout.toggle_panel(panel),
             Action::SetTheme(theme) => self.theme = theme,
+            Action::SetNavigation(navigation) => self.navigation = navigation,
+            Action::ZoomToFit => {
+                let viewport = layout
+                    .active_view()
+                    .and_then(|v| self.viewports.get_mut(&v));
+                if let Some(viewport) = viewport {
+                    viewport.zoom_to_fit(&self.scene);
+                }
+            }
         }
     }
 
@@ -160,7 +195,10 @@ impl Shell {
             Outcome::Nothing => {}
             Outcome::Window(action) => self.apply(action),
             // Undo and redo (#19) will keep the change set as one step.
-            Outcome::Committed(_changes) => {}
+            Outcome::Committed(changes) => {
+                let regenerated = self.geometry.update(&self.project, &changes);
+                self.scene.update(&self.geometry, &regenerated);
+            }
         }
     }
 }
@@ -190,6 +228,7 @@ impl eframe::App for Shell {
             commands: self.commands.registry(),
             is_open: |panel| layout.is_open(panel),
             theme,
+            navigation: self.navigation,
         };
         let pressed = egui::Panel::top("ribbon")
             .show(ui, |ui| self.ribbon.ui(ui, &state))
@@ -217,6 +256,8 @@ impl eframe::App for Shell {
             views: self.layout.views().to_vec(),
             active_view: self.layout.active_view(),
             viewports: &mut self.viewports,
+            scene: &mut self.scene,
+            navigation: self.navigation,
             render_state,
             open: None,
         };
@@ -244,5 +285,6 @@ impl eframe::App for Shell {
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         eframe::set_value(storage, LAYOUT_KEY, &self.layout);
         eframe::set_value(storage, THEME_KEY, &self.theme);
+        eframe::set_value(storage, NAVIGATION_KEY, &self.navigation);
     }
 }
