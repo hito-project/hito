@@ -518,19 +518,26 @@ fn set_property(h: &mut Harness<'_, Shell>, label: &str, text: &str) {
     h.run_steps(2);
 }
 
+/// Adds a level at `elevation` with the Level command, then ends it.
+fn add_level(h: &mut Harness<'_, Shell>, elevation: &str) {
+    command_line(h, "LL");
+    command_line(h, elevation);
+    h.key_press(egui::Key::Escape);
+    h.run_steps(2);
+}
+
 #[test]
-fn a_new_project_starts_with_two_levels() {
+fn a_new_project_starts_with_one_level() {
     let h = window();
     assert_eq!(level(&h, "Level 1"), Some(0.0));
-    assert_eq!(level(&h, "Level 2"), Some(3.0));
-    for name in ["Level 1", "Level 2"] {
-        assert!(shows(&h, name), "{name} in the browser");
-    }
+    assert_eq!(level(&h, "Level 2"), None);
+    assert!(shows(&h, "Level 1"), "in the browser");
 }
 
 #[test]
 fn levels_are_renamed_and_moved_in_the_properties() {
     let mut h = window();
+    add_level(&mut h, "3");
     h.get_by_label("Level 2").click();
     h.run_steps(2);
     let elevation = h.get_by_role_and_label(Role::TextInput, "Elevation");
@@ -559,24 +566,26 @@ fn levels_are_added_with_their_command_until_esc() {
     h.event(egui::Event::Text("LL".into()));
     h.run_steps(2);
     assert_eq!(prompt(&h), Some("level-prompt-elevation"));
-    h.get_by_role(Role::TextInput).type_text("6");
+    h.get_by_role(Role::TextInput).type_text("3");
     h.key_press(egui::Key::Enter);
     h.run_steps(2);
-    h.get_by_role(Role::TextInput).type_text("9 m");
+    h.get_by_role(Role::TextInput).type_text("6 m");
     h.key_press(egui::Key::Enter);
     h.run_steps(2);
     assert_eq!(prompt(&h), Some("level-prompt-elevation"), "still active");
     h.key_press(egui::Key::Escape);
     h.run_steps(2);
     assert_eq!(prompt(&h), None);
+    // The first new level after the default one is Level 2.
+    assert_eq!(level(&h, "Level 2"), Some(3.0));
     assert_eq!(level(&h, "Level 3"), Some(6.0));
-    assert_eq!(level(&h, "Level 4"), Some(9.0));
-    assert!(shows(&h, "Level 4"), "listed in the browser");
+    assert!(shows(&h, "Level 3"), "listed in the browser");
 }
 
 #[test]
 fn levels_are_deleted_with_the_delete_key_or_their_menu() {
     let mut h = window();
+    add_level(&mut h, "3");
     h.get_by_label("Level 2").click();
     h.run_steps(2);
     h.key_press(egui::Key::Delete);

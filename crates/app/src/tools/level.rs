@@ -140,22 +140,18 @@ mod tests {
             |session: &mut Session, text| session.enter(text, &i18n, &format, &mut store);
 
         enter(&mut session, "LL");
-        let Outcome::Committed(changes) = enter(&mut session, "6 m") else {
+        let Outcome::Committed(changes) = enter(&mut session, "3 m") else {
             panic!("committed");
         };
         assert_eq!(changes.command().map(|c| c.name()), Some("LEVEL"));
         assert!(matches!(
-            enter(&mut session, "600 cm + 3 m"),
+            enter(&mut session, "300 cm + 3 m"),
             Outcome::Committed(_)
         ));
         assert_eq!(session.running().map(|c| c.name), Some("LEVEL"));
         session.cancel(&i18n);
-        let expected = [
-            ("Nivel 1", 0.0),
-            ("Nivel 2", 3.0),
-            ("Nivel 3", 6.0),
-            ("Nivel 4", 9.0),
-        ];
+        // The first new level after the default one is "Nivel 2".
+        let expected = [("Nivel 1", 0.0), ("Nivel 2", 3.0), ("Nivel 3", 6.0)];
         let expected: Vec<_> = expected.iter().map(|(n, e)| (n.to_string(), *e)).collect();
         assert_eq!(level_names(&store), expected);
     }
@@ -163,6 +159,14 @@ mod tests {
     #[test]
     fn new_names_count_up_from_the_newest_numbered_level() {
         let mut store = project::tests::structural(&I18n::new(Locale::En));
+        assert_eq!(next_level_name(&store.view(), "Level"), "Level 2");
+        let mut tx = store.transaction();
+        let model = project::physical_model(&mut tx).unwrap();
+        let second = Element::new(class(level::LEVEL), model)
+            .with_property(level::NAME, "Level 2")
+            .with_property(level::ELEVATION, 3.0);
+        tx.insert(second).unwrap();
+        tx.commit().unwrap();
         assert_eq!(next_level_name(&store.view(), "Level"), "Level 3");
 
         // Renamed levels without a number don't count; taken names are

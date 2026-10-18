@@ -9,26 +9,20 @@ use hito_structural::{class, level};
 
 use crate::i18n::I18n;
 
-/// The default levels of a new project: their numbers and elevations, in
-/// metres. Revit's templates start with two levels, so the first walls and
-/// columns have a level to stand on and one to reach (ADR 0007).
-const DEFAULT_LEVELS: [(u32, f64); 2] = [(1, 0.0), (2, 3.0)];
-
-/// A new project: a physical model with the default levels, named in the
-/// user's language ("Nivel 1", "Nivel 2"), in a store with `schemas`, which
-/// must include the structural schema. Names are data from then on, so they
-/// don't change with the language.
+/// A new project: a physical model with one level at 0.00 m, named in the
+/// user's language ("Nivel 1"), so the first elements have a level to stand
+/// on. More levels are added with the Level command. The store has
+/// `schemas`, which must include the structural schema. Names are data from
+/// then on, so they don't change with the language.
 pub fn new_project(schemas: SchemaRegistry, i18n: &I18n) -> ElementStore {
     let mut store = ElementStore::new(schemas);
     let mut tx = store.transaction();
     let model = physical_model(&mut tx).expect("a new store takes a model");
-    for (number, elevation) in DEFAULT_LEVELS {
-        let level = Element::new(class(level::LEVEL), model)
-            .with_property(level::NAME, level_name(i18n, number))
-            .with_property(level::ELEVATION, elevation);
-        tx.insert(level).expect("the default levels are valid");
-    }
-    tx.commit().expect("the default levels are valid");
+    let level = Element::new(class(level::LEVEL), model)
+        .with_property(level::NAME, level_name(i18n, 1))
+        .with_property(level::ELEVATION, 0.0);
+    tx.insert(level).expect("the default level is valid");
+    tx.commit().expect("the default level is valid");
     store
 }
 
@@ -69,7 +63,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn a_new_project_has_two_levels_named_in_the_users_language() {
+    fn a_new_project_has_one_level_named_in_the_users_language() {
         let store = structural(&I18n::new(Locale::EsAr));
         let view = store.view();
         let levels = level::levels(&view);
@@ -78,9 +72,9 @@ pub(crate) mod tests {
             .map(|(id, _)| store.property(*id, level::NAME).cloned())
             .collect();
         let name = |s: &str| Some(Value::Text(s.into()));
-        assert_eq!(names, [name("Nivel 1"), name("Nivel 2")]);
+        assert_eq!(names, [name("Nivel 1")]);
         let elevations: Vec<_> = levels.iter().map(|(_, e)| *e).collect();
-        assert_eq!(elevations, [0.0, 3.0]);
+        assert_eq!(elevations, [0.0]);
         assert_eq!(store.models().count(), 1);
     }
 
