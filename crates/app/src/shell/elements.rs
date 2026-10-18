@@ -1,14 +1,16 @@
-//! Elements in the project browser and the properties panel (#33): the
-//! browser lists the levels, and the properties panel edits the one picked
-//! there. Each edit is one transaction, so one undo step (#19).
+//! Elements in the project browser and the properties panel (#33, #34):
+//! the browser lists the levels and grids, and the properties panel edits
+//! the one picked there. Each edit is one transaction, so one undo step
+//! (#19).
 //!
-//! Revit edits levels in elevation views, which HITO doesn't have yet
-//! (#197), so the browser is where levels are picked for now. Picking in
-//! the views comes with #30, which will share this selection.
+//! Revit edits levels in elevation views and grids in plan views, which
+//! HITO doesn't have yet (#197, #183), so the browser is where they're
+//! picked for now. Picking in the views comes with #30, which will share
+//! this selection.
 
 use eframe::egui;
 use hito_core::{Dimension, ElementId, ElementStore, StoreView, Value};
-use hito_structural::{class, level};
+use hito_structural::{class, grid, level};
 
 use crate::command::{Input, InputFormat, Wants};
 use crate::i18n::I18n;
@@ -77,18 +79,57 @@ impl Elements {
     }
 }
 
-/// A level's name, or an empty string if it has none.
+/// The kinds of element the browser lists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    Level,
+    Grid,
+}
+
+impl Kind {
+    fn of(view: &StoreView<'_>, id: ElementId) -> Option<Kind> {
+        let registry = view.registry();
+        let class_of = view.get(id)?.class();
+        [(Kind::Level, level::LEVEL), (Kind::Grid, grid::GRID)]
+            .into_iter()
+            .find(|(_, name)| registry.is_a(class_of, &class(name)))
+            .map(|(kind, _)| kind)
+    }
+
+    /// Every element of this kind, in the browser's order: levels lowest
+    /// first, grids in the order they were drawn.
+    fn all(self, view: &StoreView<'_>) -> Vec<ElementId> {
+        match self {
+            Kind::Level => level::levels(view).into_iter().map(|(id, _)| id).collect(),
+            Kind::Grid => {
+                let mut grids: Vec<_> = view
+                    .elements()
+                    .map(|e| e.id())
+                    .filter(|&id| Kind::of(view, id) == Some(Kind::Grid))
+                    .collect();
+                grids.sort();
+                grids
+            }
+        }
+    }
+
+    /// The message keys of an empty and of a taken name.
+    fn name_problems(self) -> (&'static str, &'static str) {
+        match self {
+            Kind::Level => ("level-name-empty", "level-name-taken"),
+            Kind::Grid => ("grid-name-empty", "grid-name-taken"),
+        }
+    }
+}
+
+/// A level's name or a grid's label, or an empty string if it has none.
+/// Both are the `Name` property.
 fn name<'a>(view: &StoreView<'a>, id: ElementId) -> &'a str {
+    debug_assert_eq!(level::NAME, grid::NAME);
     match view.property(id, level::NAME) {
         Some(Value::Text(name)) => name,
         _ => "",
     }
-}
-
-fn is_level(view: &StoreView<'_>, id: ElementId) -> bool {
-    let registry = view.registry();
-    view.get(id)
-        .is_some_and(|e| registry.is_a(e.class(), &class(level::LEVEL)))
 }
 
 /// The project browser's levels, lowest first. Clicking one picks it;
@@ -100,12 +141,35 @@ pub(super) fn browser_levels(
     elements: &mut Elements,
     edits: &mut Vec<Edit>,
 ) {
+    browser_list(ui, i18n, store, Kind::Level, elements, edits);
+}
+
+/// The project browser's grids, in the order they were drawn, picked and
+/// deleted as levels are.
+pub(super) fn browser_grids(
+    ui: &mut egui::Ui,
+    i18n: &I18n,
+    store: &ElementStore,
+    elements: &mut Elements,
+    edits: &mut Vec<Edit>,
+) {
+    browser_list(ui, i18n, store, Kind::Grid, elements, edits);
+}
+
+fn browser_list(
+    ui: &mut egui::Ui,
+    i18n: &I18n,
+    store: &ElementStore,
+    kind: Kind,
+    elements: &mut Elements,
+    edits: &mut Vec<Edit>,
+) {
     let view = store.view();
-    let levels = level::levels(&view);
-    if levels.is_empty() {
+    let all = kind.all(&view);
+    if all.is_empty() {
         ui.weak(i18n.tr("browser-none"));
     }
-    for (id, _) in levels {
+    for id in all {
         let picked = elements.selected == Some(id);
         let response = ui.selectable_label(picked, name(&view, id));
         if response.clicked() {
@@ -130,22 +194,25 @@ pub(super) fn properties(
     edits: &mut Vec<Edit>,
 ) -> bool {
     let view = store.view();
-    let Some(id) = elements.selected.filter(|&id| is_level(&view, id)) else {
+    let Some((id, kind)) = elements
+        .selected
+        .and_then(|id| Some((id, Kind::of(&view, id)?)))
+    else {
         return false;
     };
-    ui.strong(i18n.tr("properties-kind-level"));
-    let current_name = name(&view, id);
-    let elevation = match view.property(id, level::ELEVATION) {
-        Some(Value::Real(e)) => *e,
-        _ => 0.0,
+    let (title, name_label) = match kind {
+        Kind::Level => ("properties-kind-level", "properties-name"),
+        Kind::Grid => ("properties-kind-grid", "properties-label"),
     };
+    ui.strong(i18n.tr(title));
+    let current_name = name(&view, id);
     egui::Grid::new("properties")
         .num_columns(2)
         .striped(true)
         .show(ui, |ui| {
-            let label = i18n.tr("properties-name");
-            if let Some(text) = text_row(ui, &label, ("level-name", id), current_name) {
-                match rename(&view, id, &text) {
+            let label = i18n.tr(name_label);
+            if let Some(text) = text_row(ui, &label, ("name", id), current_name) {
+                match rename(&view, kind, id, &text) {
                     Ok(value) => edits.push(Edit::Set {
                         element: id,
                         property: level::NAME,
@@ -154,6 +221,13 @@ pub(super) fn properties(
                     Err((key, name)) => elements.fail(i18n.tr_with(key, "name", name)),
                 }
             }
+            if kind != Kind::Level {
+                return;
+            }
+            let elevation = match view.property(id, level::ELEVATION) {
+                Some(Value::Real(e)) => *e,
+                _ => 0.0,
+            };
             let label = i18n.tr("properties-elevation");
             let shown = input.format(elevation, Dimension::LENGTH);
             if let Some(text) = text_row(ui, &label, ("level-elevation", id), &shown) {
@@ -174,23 +248,26 @@ pub(super) fn properties(
     true
 }
 
-/// Checks a new name for level `id`: not empty, and no other level's.
-/// Returns the trimmed name, or the message key of the problem with the
-/// name it's about.
+/// Checks a new name for element `id`: not empty, and not another
+/// element's of the same kind, as in Revit. Returns the trimmed name, or
+/// the message key of the problem with the name it's about.
 fn rename(
     view: &StoreView<'_>,
+    kind: Kind,
     id: ElementId,
     text: &str,
 ) -> Result<Value, (&'static str, String)> {
+    let (empty, taken_key) = kind.name_problems();
     let text = text.trim();
     if text.is_empty() {
-        return Err(("level-name-empty", String::new()));
+        return Err((empty, String::new()));
     }
-    let taken = level::levels(view)
+    let taken = kind
+        .all(view)
         .into_iter()
-        .any(|(other, _)| other != id && name(view, other) == text);
+        .any(|other| other != id && name(view, other) == text);
     if taken {
-        return Err(("level-name-taken", text.to_owned()));
+        return Err((taken_key, text.to_owned()));
     }
     Ok(Value::Text(text.to_owned()))
 }
