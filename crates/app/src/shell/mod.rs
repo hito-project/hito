@@ -15,6 +15,7 @@
 
 mod command_line;
 mod commands;
+mod elements;
 mod layout;
 mod panels;
 mod ribbon;
@@ -24,7 +25,7 @@ use std::collections::HashMap;
 
 use eframe::egui;
 use egui_dock::DockArea;
-use hito_core::{ElementStore, SchemaRegistry};
+use hito_core::{Command, ElementId, ElementStore, SchemaRegistry};
 
 pub use commands::registry;
 pub use layout::{Layout, Tab, ViewId};
@@ -33,8 +34,10 @@ pub use theme::Theme;
 
 use crate::command::{InputFormat, Outcome, Session};
 use crate::i18n::{I18n, Locale};
+use crate::project;
 use crate::viewport::Viewport;
 use command_line::{CommandLine, Request};
+use elements::{Edit, Elements};
 use ribbon::Pressed;
 
 /// The key the layout is saved under in eframe's storage.
@@ -55,6 +58,8 @@ pub struct Shell {
     /// The model being edited. Opening and saving files comes with E10
     /// (#46).
     project: ElementStore,
+    /// The element picked in the project browser, and edits in progress.
+    elements: Elements,
 }
 
 impl Shell {
@@ -73,8 +78,10 @@ impl Shell {
             .unwrap_or_default();
         let mut schemas = SchemaRegistry::new();
         hito_structural::register(&mut schemas).expect("the structural schema registers");
+        let i18n = I18n::new(locale);
+        let project = project::new_project(schemas, &i18n);
         Self {
-            i18n: I18n::new(locale),
+            i18n,
             ribbon: Default::default(),
             layout,
             theme: storage
@@ -84,7 +91,8 @@ impl Shell {
             commands: Session::new(registry()),
             command_line: Default::default(),
             input: InputFormat::new(),
-            project: ElementStore::new(schemas),
+            project,
+            elements: Elements::default(),
         }
     }
 
@@ -163,6 +171,42 @@ impl Shell {
             Outcome::Committed(_changes) => {}
         }
     }
+
+    /// Makes a change the user asked for in the browser or the properties,
+    /// in one transaction.
+    fn edit(&mut self, edit: Edit) {
+        self.elements.clear_error();
+        match edit {
+            Edit::Set {
+                element,
+                property,
+                value,
+            } => {
+                // Undo (#19) lists it by this name, with the property.
+                let command = Command::new("SETPROPERTY").with_parameter("Property", property);
+                let mut tx = self.project.transaction_for(command);
+                let done = tx.set_property(element, property, value);
+                if done.and_then(|()| tx.commit()).is_err() {
+                    self.elements.fail(self.i18n.tr("properties-edit-failed"));
+                }
+            }
+            Edit::Delete(element) => match self.project.view().preview_delete(element) {
+                Ok(deleted) if deleted.len() > 1 => self.elements.ask_to_delete(deleted),
+                Ok(_) => self.delete(element),
+                Err(_) => self.elements.fail(self.i18n.tr("properties-edit-failed")),
+            },
+        }
+    }
+
+    /// Deletes an element and what goes with it, as Revit's Delete does.
+    fn delete(&mut self, element: ElementId) {
+        let mut tx = self.project.transaction_for(Command::new("DELETE"));
+        let done = tx.delete(element).map(drop);
+        if done.and_then(|()| tx.commit().map(drop)).is_err() {
+            self.elements.fail(self.i18n.tr("properties-edit-failed"));
+        }
+        self.elements.forget_deleted(&self.project);
+    }
 }
 
 impl eframe::App for Shell {
@@ -183,6 +227,15 @@ impl eframe::App for Shell {
         {
             self.run(name);
         }
+        // Delete removes the element picked in the browser, unless the user
+        // is typing.
+        let delete = ui.input(|i| i.key_pressed(egui::Key::Delete))
+            && !ui.ctx().egui_wants_keyboard_input()
+            && !self.elements.is_asking();
+        if let Some(element) = self.elements.selected().filter(|_| delete) {
+            self.edit(Edit::Delete(element));
+        }
+        self.elements.forget_deleted(&self.project);
 
         let (layout, theme) = (&self.layout, self.theme);
         let state = ribbon::State {
@@ -219,14 +272,27 @@ impl eframe::App for Shell {
             viewports: &mut self.viewports,
             render_state,
             open: None,
+            project: &self.project,
+            input: &self.input,
+            elements: &mut self.elements,
+            edits: Vec::new(),
         };
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE)
             .show(ui, |ui| {
                 DockArea::new(&mut self.layout.dock).show_inside(ui, &mut tabs);
             });
-        if let Some(view) = tabs.open {
+        let (open, edits) = (tabs.open, tabs.edits);
+        if let Some(view) = open {
             self.layout.open_view(view);
+        }
+        for edit in edits {
+            self.edit(edit);
+        }
+        let (i18n, project) = (&self.i18n, &self.project);
+        if let Some(element) = elements::confirm_delete(ui.ctx(), i18n, project, &mut self.elements)
+        {
+            self.delete(element);
         }
         self.layout.track_focus();
 
@@ -244,5 +310,65 @@ impl eframe::App for Shell {
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         eframe::set_value(storage, LAYOUT_KEY, &self.layout);
         eframe::set_value(storage, THEME_KEY, &self.theme);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use eframe::egui::accesskit::Role;
+    use egui_kittest::Harness;
+    use egui_kittest::kittest::Queryable;
+    use hito_core::{ClassDef, ClassId, Element, Relationship, Schema, SchemaVersion};
+    use hito_structural::{class, level};
+
+    use super::*;
+
+    /// The window in English, with a column attached to Level 1. Columns
+    /// come with #37, so this one is of a test class.
+    fn window_with_a_column() -> (Harness<'static, Shell>, ElementId, ElementId) {
+        let mut shell = Shell::restore(None, Locale::En);
+        let mut schemas = SchemaRegistry::new();
+        hito_structural::register(&mut schemas).unwrap();
+        let framing = Schema::new("TestFraming", SchemaVersion::new(1, 0, 0))
+            .class(ClassDef::new("Column", class(level::LEVEL_BASED_ELEMENT)));
+        schemas.register(framing).unwrap();
+        shell.project = project::new_project(schemas, &shell.i18n);
+        let first = level::levels(&shell.project.view())[0].0;
+        let mut tx = shell.project.transaction();
+        let model = project::physical_model(&mut tx).unwrap();
+        let column = Element::new(ClassId::new("TestFraming", "Column"), model);
+        let column = tx.insert(column).unwrap();
+        let attached = Relationship::new(class(level::ATTACHED_TO_LEVEL), column, first);
+        tx.relate(attached).unwrap();
+        tx.commit().unwrap();
+
+        let mut h = Harness::builder()
+            .with_size(egui::vec2(1280.0, 800.0))
+            .build_eframe(move |_cc| shell);
+        h.run_steps(2);
+        (h, first, column)
+    }
+
+    #[test]
+    fn deleting_a_level_asks_first_when_elements_go_with_it() {
+        let (mut h, level, column) = window_with_a_column();
+        h.get_by_label("Level 1").click();
+        h.run_steps(2);
+        h.key_press(egui::Key::Delete);
+        h.run_steps(2);
+        let warning = "Deleting \u{2068}Level 1\u{2069} also deletes 1 element attached to it.";
+        assert!(h.query_by_label(warning).is_some(), "asks");
+
+        h.get_by_role_and_label(Role::Button, "Cancel").click();
+        h.run_steps(2);
+        assert!(h.state().project.get(level).is_some(), "cancelled");
+
+        h.key_press(egui::Key::Delete);
+        h.run_steps(2);
+        h.get_by_role_and_label(Role::Button, "Delete").click();
+        h.run_steps(2);
+        let project = &h.state().project;
+        assert!(project.get(level).is_none() && project.get(column).is_none());
+        assert_eq!(h.state().elements.selected(), None);
     }
 }

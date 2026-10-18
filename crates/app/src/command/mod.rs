@@ -24,6 +24,7 @@ pub use input::{InputError, InputFormat};
 pub use matching::fold;
 pub use session::{Outcome, Session};
 
+use crate::i18n::I18n;
 use crate::shell::Action;
 
 /// A command, as the registry lists it.
@@ -59,6 +60,12 @@ pub enum Run {
 /// The [`Session`] opens that transaction, named after the command, so a
 /// tool never opens one itself, and cancelling with Esc changes nothing.
 pub trait Tool {
+    /// Called once when the tool starts, before its first prompt, with what
+    /// it may need to know about where it runs. Most tools need nothing.
+    fn start(&mut self, context: &Context<'_>) {
+        let _ = context;
+    }
+
     /// What the tool asks for next.
     fn prompt(&self) -> Prompt;
 
@@ -66,8 +73,16 @@ pub trait Tool {
     fn input(&mut self, input: Input) -> Next;
 
     /// Makes the tool's change, once [`Tool::input`] has returned
-    /// [`Next::Done`]. An error discards the whole transaction.
+    /// [`Next::Done`] or [`Next::Repeat`]. An error discards the whole
+    /// transaction.
     fn commit(self: Box<Self>, tx: &mut Transaction<'_>) -> Result<(), StoreError>;
+}
+
+/// What a tool knows about where it runs, given to [`Tool::start`].
+pub struct Context<'a> {
+    /// The user interface's language, for data the tool names in it, such
+    /// as a new level's name.
+    pub i18n: &'a I18n,
 }
 
 /// What a tool asks for, shown on the command line.
@@ -106,6 +121,10 @@ pub enum Next {
     Reject(&'static str),
     /// Has what it needs, and is ready to commit.
     Done,
+    /// Has what it needs for one element: commit it, then start again for
+    /// the next one, as Revit's placement tools stay active until Esc.
+    /// Each element is its own transaction, so its own undo step.
+    Repeat,
 }
 
 /// Every command, in the order completions list them.
