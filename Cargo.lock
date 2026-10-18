@@ -1576,6 +1576,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hito-architectural"
+version = "0.0.0"
+dependencies = [
+ "hito-core",
+ "hito-geometry",
+ "hito-structural",
+]
+
+[[package]]
 name = "hito-architecture-check"
 version = "0.0.0"
 dependencies = [
@@ -1602,8 +1611,10 @@ dependencies = [
 name = "hito-manifold"
 version = "0.0.0"
 dependencies = [
+ "hito-architectural",
  "hito-core",
  "hito-geometry",
+ "hito-structural",
  "manifold-csg",
 ]
 
