@@ -1380,6 +1380,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "glam"
+version = "0.34.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc148d4ddd3930c52f9e5ae79b89805c6f07e9ff417e7b083e0348cea60a5aba"
+
+[[package]]
 name = "glifo"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1562,12 +1568,16 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 name = "hito"
 version = "0.0.0"
 dependencies = [
+ "bytemuck",
  "eframe",
  "egui_dock",
  "egui_kittest",
  "fluent-bundle",
+ "glam",
  "hito-architectural",
  "hito-core",
+ "hito-geometry",
+ "hito-manifold",
  "hito-storage-sqlite",
  "hito-structural",
  "hito-units",

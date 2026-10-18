@@ -73,6 +73,10 @@ ui-theme = Tema
 theme-light = Claro
 theme-dark = Oscuro
 theme-system = Según el sistema
+ui-navigation = Navegación 3D
+navigation-wheel-orbits = La rueda orbita, Mayús + rueda desplaza
+navigation-revit = Revit: la rueda desplaza, Mayús + rueda orbita
+action-zoom-to-fit = Zoom para ajustar
 
 ## Paneles
 
@@ -109,3 +113,14 @@ view-kind-3d = Vista 3D
 view-default-3d = {"{"}3D{"}"}
 view-3d-numbered = Vista 3D { $number }
 viewport-no-gpu = La vista 3D necesita un dispositivo gráfico
+# El cubo de vistas, como el ViewCube de Revit.
+view-cube-top = SUPERIOR
+view-cube-bottom = INFERIOR
+view-cube-front = FRONTAL
+view-cube-back = POSTERIOR
+view-cube-left = IZQUIERDA
+view-cube-right = DERECHA
+view-cube-home = Inicio
+view-cube-go-home = Ir a inicio
+view-perspective = Perspectiva
+view-orthographic = Ortogonal

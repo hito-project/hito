@@ -15,6 +15,7 @@ use hito::Shell;
 use hito::command::{Command, Input, Next, Prompt, Run, Tool, Wants};
 use hito::i18n::Locale;
 use hito::shell::{Tab, Theme, ViewId};
+use hito::viewport::Navigation;
 use hito_core::{Dimension, Model, ModelKind, StoreError, Transaction};
 
 /// kittest runs one step per input event. Short steps keep the two clicks
@@ -206,6 +207,68 @@ fn the_theme_is_light_by_default_switches_and_is_remembered() {
     let h = window_from(Some(&storage));
     assert_eq!(h.state().theme(), Theme::Dark);
     assert_eq!(h.ctx.theme(), egui::Theme::Dark);
+}
+
+/// The wheel orbits by default, as the founding user asked, and Revit's
+/// bindings are one click away (ADR 0025).
+#[test]
+fn the_wheel_orbits_by_default_and_revits_navigation_is_one_click_away() {
+    let mut h = window();
+    assert_eq!(h.state().navigation(), Navigation::WheelOrbits);
+
+    ribbon_tab(&mut h, "View");
+    click(&mut h, "User Interface");
+    let revit = "Revit: wheel pans, Shift + wheel orbits";
+    h.get_by_role_and_label(Role::RadioButton, revit).click();
+    h.run_steps(2);
+    assert_eq!(h.state().navigation(), Navigation::Revit);
+
+    let mut storage = Storage::default();
+    eframe::App::save(h.state_mut(), &mut storage);
+    drop(h);
+    let h = window_from(Some(&storage));
+    assert_eq!(h.state().navigation(), Navigation::Revit);
+}
+
+#[test]
+fn the_wheel_navigates_the_3d_view_and_zf_zooms_to_fit() {
+    let mut h = window();
+    let target = |h: &Harness<'_, Shell>| {
+        let viewport = h.state().viewport(ViewId::DEFAULT_3D).expect("shown");
+        viewport.camera().target()
+    };
+    let start = target(&h);
+
+    // Shift and the wheel pan the view.
+    let middle = egui::pos2(1280.0 * 3.0 / 5.0, 400.0);
+    let wheel = |pos, pressed| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Middle,
+        pressed,
+        modifiers: egui::Modifiers::SHIFT,
+    };
+    h.event(egui::Event::ModifiersChanged(egui::Modifiers::SHIFT));
+    h.hover_at(middle);
+    h.run_steps(1);
+    h.event(wheel(middle, true));
+    h.run_steps(1);
+    for step in 1..=4 {
+        h.hover_at(middle + egui::vec2(30.0, 20.0) * step as f32);
+        h.run_steps(1);
+    }
+    h.event(wheel(middle + egui::vec2(120.0, 80.0), false));
+    h.event(egui::Event::ModifiersChanged(egui::Modifiers::NONE));
+    h.remove_cursor();
+    h.run_steps(2);
+    assert_ne!(target(&h), start, "panned");
+
+    // Revit's shortcut, typed with nothing focused.
+    h.event(egui::Event::Text("Z".into()));
+    h.event(egui::Event::Text("F".into()));
+    h.run_steps(2);
+    assert_eq!(h.state().commands().message(), None, "ZF ran");
+    let fitted = target(&h);
+    assert!(fitted.x.abs() < 1e-9 && fitted.y.abs() < 1e-9, "{fitted}");
 }
 
 #[test]

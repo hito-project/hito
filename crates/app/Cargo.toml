@@ -14,6 +14,8 @@ hito-architectural.workspace = true
 hito-structural.workspace = true
 hito-storage-sqlite.workspace = true
 hito-units.workspace = true
+hito-geometry.workspace = true
+hito-manifold.workspace = true
 
 # The UI toolkit lives in this crate only, so it can be swapped without
 # touching the core, domains or adapters (ADR 0015). `persistence` saves the
@@ -29,6 +31,12 @@ unic-langid = { version = "0.9", features = ["macros"] }
 # Unicode decomposition, so typed commands match ignoring accents. Pure Rust,
 # Unicode-3.0; eframe already builds it (through url and idna).
 icu_normalizer = { version = "2.3", default-features = false, features = ["compiled_data"] }
+
+# The 3D view: camera and matrix maths in f64, so a model far from the
+# origin keeps its precision, and vertex data laid out for wgpu. Pure Rust,
+# MIT OR Apache-2.0; eframe already builds bytemuck.
+glam = "0.34"
+bytemuck = { version = "1.25", features = ["derive"] }
 
 [dev-dependencies]
 # Drives the window headless through its AccessKit tree (ADR 0015).

@@ -47,6 +47,12 @@ const COMMANDS: &[Command] = &[
         None,
         Action::TogglePanel(Tab::ProjectBrowser),
     ),
+    window(
+        "ZOOMFIT",
+        "action-zoom-to-fit",
+        Some("ZF"),
+        Action::ZoomToFit,
+    ),
 ];
 
 const fn unavailable(
