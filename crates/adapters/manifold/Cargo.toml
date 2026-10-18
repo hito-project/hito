@@ -19,3 +19,6 @@ manifold-csg = { version = "0.4.1", default-features = false }
 
 [dev-dependencies]
 hito-core.workspace = true
+# Joined walls (#193) meshed through the cache, with their layers unioned.
+hito-architectural.workspace = true
+hito-structural.workspace = true

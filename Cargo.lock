@@ -1611,8 +1611,10 @@ dependencies = [
 name = "hito-manifold"
 version = "0.0.0"
 dependencies = [
+ "hito-architectural",
  "hito-core",
  "hito-geometry",
+ "hito-structural",
  "manifold-csg",
 ]
 
