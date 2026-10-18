@@ -71,6 +71,7 @@ impl InputFormat {
                 .map(Input::Quantity)
                 .map_err(|_| InputError::NotAQuantity),
             Wants::Point => self.point(text),
+            Wants::PointFrom(base) => self.point_from(text, base),
         }
     }
 
@@ -78,6 +79,33 @@ impl InputFormat {
     /// [`parse`](Self::parse) reads it back, such as `3.2 m`.
     pub fn format(&self, value: f64, dimension: Dimension) -> String {
         self.units.format(value, dimension)
+    }
+
+    /// A point, absolute or, after `@`, relative to `base`: `@dx,dy` or
+    /// `@length<angle`, as AutoCAD reads them.
+    fn point_from(&self, text: &str, base: [f64; 3]) -> Result<Input, InputError> {
+        let Some(relative) = text.trim().strip_prefix('@') else {
+            return self.point(text);
+        };
+        let offset = match relative.split_once('<') {
+            Some((length, angle)) => {
+                let length = self
+                    .units
+                    .parse(length, Dimension::LENGTH)
+                    .map_err(|_| InputError::NotAPoint)?;
+                let degrees: f64 = angle.trim().parse().map_err(|_| InputError::NotAPoint)?;
+                if !degrees.is_finite() {
+                    return Err(InputError::NotAPoint);
+                }
+                let (sin, cos) = degrees.to_radians().sin_cos();
+                [length * cos, length * sin, 0.0]
+            }
+            None => match self.point(relative)? {
+                Input::Point(offset) => offset,
+                Input::Quantity(_) => return Err(InputError::NotAPoint),
+            },
+        };
+        Ok(Input::Point([0, 1, 2].map(|i| base[i] + offset[i])))
     }
 
     fn point(&self, text: &str) -> Result<Input, InputError> {
@@ -117,6 +145,26 @@ mod tests {
                 Err(InputError::NotAPoint),
                 "{bad}"
             );
+        }
+    }
+
+    #[test]
+    fn points_relative_to_the_last_one() {
+        let input = InputFormat::new();
+        let wants = Wants::PointFrom([1.0, 2.0, 0.0]);
+        let point = |text| match input.parse(text, wants) {
+            Ok(Input::Point(p)) => p,
+            other => panic!("{text}: {other:?}"),
+        };
+        assert_eq!(point("5,0"), [5.0, 0.0, 0.0], "absolute");
+        assert_eq!(point("@3,-1"), [4.0, 1.0, 0.0]);
+        assert_eq!(point("@ 400 cm,0"), [5.0, 2.0, 0.0]);
+        let polar = point("@2 m<90");
+        assert!((polar[0] - 1.0).abs() < 1e-12 && (polar[1] - 4.0).abs() < 1e-12);
+        let polar = point("@1.5<180");
+        assert!((polar[0] + 0.5).abs() < 1e-12 && (polar[1] - 2.0).abs() < 1e-12);
+        for bad in ["@", "@3", "@3<", "@3<north", "@a,b", "@2 kN<0"] {
+            assert_eq!(input.parse(bad, wants), Err(InputError::NotAPoint), "{bad}");
         }
     }
 

@@ -1574,6 +1574,7 @@ dependencies = [
  "egui_kittest",
  "fluent-bundle",
  "glam",
+ "hito-architectural",
  "hito-core",
  "hito-geometry",
  "hito-manifold",

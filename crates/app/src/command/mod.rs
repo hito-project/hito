@@ -18,7 +18,7 @@ mod input;
 mod matching;
 mod session;
 
-use hito_core::{Dimension, StoreError, Transaction};
+use hito_core::{Dimension, ElementId, StoreError, Transaction};
 
 pub use input::{InputError, InputFormat};
 pub use matching::fold;
@@ -76,6 +76,15 @@ pub trait Tool {
     /// [`Next::Done`] or [`Next::Repeat`]. An error discards the whole
     /// transaction.
     fn commit(self: Box<Self>, tx: &mut Transaction<'_>) -> Result<(), StoreError>;
+
+    /// After [`Next::Repeat`], the tool that carries on, such as a wall tool
+    /// that starts the next wall where the last one ended (a chain). `None`,
+    /// the default, starts the command again from scratch. Called just
+    /// before [`Tool::commit`]; if the commit fails, the command starts
+    /// again from scratch instead.
+    fn after_commit(&self) -> Option<Box<dyn Tool>> {
+        None
+    }
 }
 
 /// What a tool knows about where it runs, given to [`Tool::start`].
@@ -83,6 +92,10 @@ pub struct Context<'a> {
     /// The user interface's language, for data the tool names in it, such
     /// as a new level's name.
     pub i18n: &'a I18n,
+    /// The level new elements go on: the one picked in the project
+    /// browser, until plan views (#183) make it the active view's level.
+    /// `None` lets the tool choose, such as the lowest level.
+    pub level: Option<ElementId>,
 }
 
 /// What a tool asks for, shown on the command line.
@@ -98,6 +111,10 @@ pub struct Prompt {
 pub enum Wants {
     /// A point, as coordinates. Picking it in a view comes with #29.
     Point,
+    /// A point, which can also be typed relative to this one, as in
+    /// AutoCAD: `@dx,dy` or `@length<angle`, the angle in degrees
+    /// anticlockwise from x. How walls take typed lengths.
+    PointFrom([f64; 3]),
     /// A quantity of a dimension, such as a length, with or without units.
     /// [`Dimension::NONE`] is a plain number.
     Quantity(Dimension),

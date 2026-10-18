@@ -13,7 +13,7 @@ use crate::tools;
 /// their stories, and the window commands, which work now.
 const COMMANDS: &[Command] = &[
     unavailable("BEAM", "command-beam", Some("BM")),
-    unavailable("WALL", "command-wall", Some("WA")),
+    tool("WALL", "command-wall", Some("WA"), tools::wall::start),
     unavailable("COLUMN", "command-column", Some("CL")),
     unavailable("SLAB", "command-slab", Some("SB")),
     unavailable("ISOLATEDFOOTING", "command-isolated-footing", None),

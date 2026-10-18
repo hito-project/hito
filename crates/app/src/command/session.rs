@@ -1,6 +1,6 @@
 //! Running commands: the command line's state between keystrokes.
 
-use hito_core::{ChangeSet, ElementStore};
+use hito_core::{ChangeSet, ElementId, ElementStore};
 
 use super::{Command, Context, InputFormat, Next, Prompt, Registry, Run, Tool};
 use crate::i18n::I18n;
@@ -12,6 +12,8 @@ pub struct Session {
     registry: Registry,
     running: Option<Running>,
     message: Option<String>,
+    /// The level tools place elements on, given to them when they start.
+    level: Option<ElementId>,
 }
 
 struct Running {
@@ -38,7 +40,13 @@ impl Session {
             registry,
             running: None,
             message: None,
+            level: None,
         }
+    }
+
+    /// Sets the level tools started from now on place elements on.
+    pub fn set_level(&mut self, level: Option<ElementId>) {
+        self.level = level;
     }
 
     pub fn registry(&self) -> &Registry {
@@ -81,7 +89,7 @@ impl Session {
             Run::Tool(start) => {
                 self.running = Some(Running {
                     command,
-                    tool: started(start, i18n),
+                    tool: started(start, i18n, self.level),
                 });
                 Outcome::Nothing
             }
@@ -139,20 +147,23 @@ impl Session {
             }
             next @ (Next::Done | Next::Repeat) => {
                 let Running { command, tool } = self.running.take().expect("running");
+                let mut next_tool = match next {
+                    Next::Repeat => tool.after_commit(),
+                    _ => None,
+                };
                 let mut tx = store.transaction_for(hito_core::Command::new(command.name));
                 let outcome = match tool.commit(&mut tx).and_then(|()| tx.commit()) {
                     Ok(changes) => Outcome::Committed(changes),
                     Err(_) => {
+                        next_tool = None;
                         let label = i18n.tr(command.label);
                         self.message = Some(i18n.tr_with("command-failed", "command", label));
                         Outcome::Nothing
                     }
                 };
                 if let (Next::Repeat, Run::Tool(start)) = (next, command.run) {
-                    self.running = Some(Running {
-                        command,
-                        tool: started(start, i18n),
-                    });
+                    let tool = next_tool.unwrap_or_else(|| started(start, i18n, self.level));
+                    self.running = Some(Running { command, tool });
                 }
                 outcome
             }
@@ -171,9 +182,9 @@ impl Session {
 }
 
 /// A new tool from its command's factory, started.
-fn started(start: fn() -> Box<dyn Tool>, i18n: &I18n) -> Box<dyn Tool> {
+fn started(start: fn() -> Box<dyn Tool>, i18n: &I18n, level: Option<ElementId>) -> Box<dyn Tool> {
     let mut tool = start();
-    tool.start(&Context { i18n });
+    tool.start(&Context { i18n, level });
     tool
 }
 

@@ -505,8 +505,8 @@ fn commands_prompt_on_the_command_line() {
     assert_eq!(prompt(&h), None);
     assert_eq!(
         h.state().project().models().count(),
-        2,
-        "the probe added a model"
+        3,
+        "the probe added a model to the new project's physical and definition models"
     );
 }
 
@@ -524,8 +524,8 @@ fn input_uses_a_decimal_point_in_spanish_too() {
     assert_eq!(prompt(&h), None);
     assert_eq!(
         h.state().project().models().count(),
-        2,
-        "the probe added a model"
+        3,
+        "the probe added a model to the new project's physical and definition models"
     );
 }
 
@@ -541,8 +541,8 @@ fn esc_cancels_a_command() {
     assert_eq!(h.state().commands().message(), Some("*Cancel*"));
     assert_eq!(
         h.state().project().models().count(),
-        1,
-        "only the new project's"
+        2,
+        "only the new project's physical and definition models"
     );
 
     // A ribbon button cancels the running command and runs its own.
@@ -728,4 +728,40 @@ fn grid_labels_are_edited_in_the_properties_and_grids_deleted() {
     h.run_steps(2);
     assert!(grid(&h, "2").is_none());
     assert!(grid(&h, "A").is_some());
+}
+
+/// The walls in the project, oldest first.
+fn walls(h: &Harness<'_, Shell>) -> Vec<hito_core::ElementId> {
+    let project = h.state().project();
+    let class = hito_architectural::class(hito_architectural::wall::WALL);
+    let mut walls: Vec<_> = project
+        .elements()
+        .filter(|e| project.registry().is_a(e.class(), &class))
+        .map(|e| e.id())
+        .collect();
+    walls.sort();
+    walls
+}
+
+#[test]
+fn walls_are_drawn_as_a_chain_with_typed_lengths() {
+    let mut h = window();
+    command_line(&mut h, "WA");
+    assert_eq!(prompt(&h), Some("wall-prompt-start"));
+    command_line(&mut h, "0,0");
+    command_line(&mut h, "@5<0");
+    command_line(&mut h, "@4<90");
+    assert_eq!(prompt(&h), Some("wall-prompt-next"), "still drawing");
+    h.key_press(egui::Key::Escape);
+    h.run_steps(2);
+    assert_eq!(prompt(&h), None);
+
+    let walls = walls(&h);
+    assert_eq!(walls.len(), 2);
+    let view = h.state().project().view();
+    let (_, end) = hito_architectural::wall::line(&view, walls[1]).unwrap();
+    assert!((end[0] - 5.0).abs() < 1e-9 && (end[1] - 4.0).abs() < 1e-9);
+    let corner = hito_architectural::footprint::End::End;
+    let joined = hito_architectural::join::joined_at(&view, walls[0], corner);
+    assert_eq!(joined, [walls[1]], "the corner joined");
 }

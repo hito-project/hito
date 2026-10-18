@@ -55,6 +55,13 @@ level-prompt-elevation = Enter the new level's elevation, such as 3.5 or 350 cm
 level-name-empty = A level needs a name
 level-name-taken = Another level is already called { $name }
 
+# The Wall tool (WA). Points are typed until plan views let them be clicked.
+wall-prompt-start = Specify the wall's start point, such as 0,0
+wall-prompt-next = Specify the next point, such as 5,0, @5,0 or @5<90. Esc ends the chain
+wall-same-point = The next point must differ from the last one
+# The wall type every new project starts with. It's data from then on.
+wall-type-generic = Generic - 200 mm
+
 ## Grids
 
 grid-prompt-start = Enter the grid's start point, such as 0,0
