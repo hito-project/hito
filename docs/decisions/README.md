@@ -30,5 +30,6 @@ Each ADR records one decision, its context and its consequences. ADRs are never 
 | [0022](0022-ifc-reader.md) | IFC reader: our own STEP Part 21 reader next to the writer, IFC geometry in HITO through the geometry port; ifc-lite as a CI reference, not a dependency | Accepted |
 | [0023](0023-mpl-dependencies.md) | MPL-2.0 dependencies are allowed, used unmodified; bundled data files' licenses are checked too | Accepted |
 | [0024](0024-model-history.md) | Model history: a hash-chained log of change sets in the .hito file, undo that survives reopening, tiered compression, branches as layers that also serve as Design Options, merge first, full history kept | Accepted |
+| [0025](0025-m1-small-building.md) | M1 models a small building the way the founding user does: architecture, basic concrete structure and drawings; calm UI, mouse-wheel orbit, modest hardware | Proposed |
 
 Use [template.md](template.md) for new ADRs.
