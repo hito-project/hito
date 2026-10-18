@@ -12,7 +12,7 @@ use super::elements::{self, Edit, Elements};
 use super::layout::{Tab, ViewId};
 use crate::command::InputFormat;
 use crate::i18n::I18n;
-use crate::viewport::Viewport;
+use crate::viewport::{Navigation, Scene, Viewport};
 
 /// Draws the dock tabs. The dock borrows the layout while it draws, so
 /// `Tabs` gets copies of what it needs from it, and records in `open` a view
@@ -23,6 +23,8 @@ pub(super) struct Tabs<'a> {
     pub views: Vec<ViewId>,
     pub active_view: Option<ViewId>,
     pub viewports: &'a mut HashMap<ViewId, Viewport>,
+    pub scene: &'a mut Scene,
+    pub navigation: Navigation,
     pub render_state: Option<&'a RenderState>,
     pub open: Option<ViewId>,
     pub project: &'a ElementStore,
@@ -127,9 +129,9 @@ impl egui_dock::TabViewer for Tabs<'_> {
             Tab::ProjectBrowser => self.project_browser(ui),
             Tab::Properties => self.properties(ui),
             Tab::View(view) => {
-                let no_gpu = self.i18n.tr("viewport-no-gpu");
                 let viewport = self.viewports.entry(view).or_default();
-                viewport.ui(ui, self.render_state, &no_gpu);
+                let (scene, navigation) = (&mut *self.scene, self.navigation);
+                viewport.ui(ui, scene, navigation, self.render_state, self.i18n);
             }
         }
     }

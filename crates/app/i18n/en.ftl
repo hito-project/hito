@@ -74,6 +74,10 @@ ui-theme = Theme
 theme-light = Light
 theme-dark = Dark
 theme-system = Use system setting
+ui-navigation = 3D navigation
+navigation-wheel-orbits = Wheel orbits, Shift + wheel pans
+navigation-revit = Revit: wheel pans, Shift + wheel orbits
+action-zoom-to-fit = Zoom to Fit
 
 ## Panels
 
@@ -113,3 +117,14 @@ view-kind-3d = 3D View
 view-default-3d = {"{"}3D{"}"}
 view-3d-numbered = 3D View { $number }
 viewport-no-gpu = The 3D view needs a graphics device
+# The view cube, as Revit's ViewCube.
+view-cube-top = TOP
+view-cube-bottom = BOTTOM
+view-cube-front = FRONT
+view-cube-back = BACK
+view-cube-left = LEFT
+view-cube-right = RIGHT
+view-cube-home = Home
+view-cube-go-home = Go Home
+view-perspective = Perspective
+view-orthographic = Orthographic
