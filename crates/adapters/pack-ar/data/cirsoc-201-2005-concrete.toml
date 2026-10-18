@@ -1,0 +1,123 @@
+# Concrete grades of CIRSOC 201-2005, the Argentine concrete code, as
+# structural materials (#36).
+#
+# This table is engineering data. Every value names its source and its
+# status. The tests in tests/concrete.rs recompute each derived value from
+# the code's formula, and a snapshot test locks the whole table as it was
+# reviewed: any change here fails CI until an engineer reviews it again and
+# the snapshot is re-approved (see that test for how).
+#
+# Values are written with their units and read through hito-units, so any
+# unit the catalogue knows works. Numbers use a decimal point.
+#
+# Status of each value:
+#   verified    read in the cited clause of the primary source
+#   derived     computed from verified values with the cited formula; the
+#               tests recompute it
+#   assumption  a choice HITO makes where the code doesn't decide; needs the
+#               engineer's review
+#   unverified  not yet checked against the primary source
+
+# The engineer who last reviewed the table, and when. A change to the table
+# resets both to "pending" until the next review.
+[review]
+reviewer = "pending"
+date = "pending"
+
+# The primary sources, as published free of charge by INTI-CIRSOC. The hash
+# identifies the exact file that was read.
+[sources.cirsoc-201-2005]
+title = "Reglamento CIRSOC 201, Reglamento Argentino de Estructuras de Hormigón"
+edition = "Julio 2005"
+url = "https://www.inti.gob.ar/assets/uploads/files/cirsoc/vigencia-2013/area100/area100a/reglamento201completo.pdf"
+sha256 = "595188044a4b8070a6cab8972c6dcfa507ffee0fff3936aff61443de8d8cea9a"
+
+[sources.cirsoc-101-2005]
+title = "Reglamento CIRSOC 101, Reglamento Argentino de Cargas Permanentes y Sobrecargas Mínimas de Diseño para Edificios y otras Estructuras"
+edition = "Julio 2005"
+url = "https://www.inti.gob.ar/assets/uploads/files/cirsoc/vigencia-2013/area100/Reglamento-cirsoc101-completo.pdf"
+sha256 = "528f50d546139af0db0640f5bcef08caa6f7699d175e35f3bbcedf4766dfea9e"
+
+[sources.hito]
+title = "HITO's own choice, not taken from a code"
+
+[[grades]]
+name = "H-15"
+use = { value = "plain concrete only (simples, sin armar)", source = "cirsoc-201-2005", clause = "2.3.2, Tabla 2.7 (p. Cap. 2 - 38)", status = "verified" }
+compressive-strength = { value = "15 MPa", source = "cirsoc-201-2005", clause = "2.3.2, Tabla 2.7 (p. Cap. 2 - 38)", status = "verified" }
+young-modulus = { value = "18203 MPa", source = "cirsoc-201-2005", clause = "8.5.1, expresión (8-1): Ec = 4700 √f'c, in MPa (p. Cap. 8 - 187); rounded to 1 MPa", status = "derived" }
+unit-weight = { value = "23.5 kN/m³", source = "cirsoc-101-2005", clause = "Tabla 3.1, Hormigones: hormigón de cemento pórtland, arena y canto rodado o piedra partida, sin armar (p. Cap. 3 - 6)", status = "assumption", note = "The value is verified. H-15 is for unreinforced concrete only (Tabla 2.7), so the unreinforced row applies. Choosing the row for natural gravel or crushed stone (not basaltic, 25 kN/m³) is HITO's choice." }
+mass-density = { value = "2396 kg/m³", source = "cirsoc-101-2005", clause = "unit weight ÷ standard gravity (9.80665 m/s²), so self-weight is exactly the code's unit weight; rounded to 1 kg/m³", status = "derived" }
+shading-colour = { value = "#c8c8c8", source = "hito", clause = "a grey that darkens as the strength grows", status = "assumption" }
+
+[[grades]]
+name = "H-20"
+use = { value = "plain and reinforced concrete (simples y armados)", source = "cirsoc-201-2005", clause = "2.3.2, Tabla 2.7 (p. Cap. 2 - 38)", status = "verified" }
+compressive-strength = { value = "20 MPa", source = "cirsoc-201-2005", clause = "2.3.2, Tabla 2.7 (p. Cap. 2 - 38)", status = "verified" }
+young-modulus = { value = "21019 MPa", source = "cirsoc-201-2005", clause = "8.5.1, expresión (8-1): Ec = 4700 √f'c, in MPa (p. Cap. 8 - 187); rounded to 1 MPa", status = "derived" }
+unit-weight = { value = "25 kN/m³", source = "cirsoc-101-2005", clause = "Tabla 3.1, Hormigones: hormigón de cemento pórtland, arena y canto rodado o piedra partida, armado (p. Cap. 3 - 6)", status = "assumption", note = "The value is verified. Using the reinforced row for every grade from H-20 up is HITO's choice, since these grades may also be used unreinforced (23.5 kN/m³), and so is choosing the row for natural gravel or crushed stone over basaltic aggregate." }
+mass-density = { value = "2549 kg/m³", source = "cirsoc-101-2005", clause = "unit weight ÷ standard gravity (9.80665 m/s²), so self-weight is exactly the code's unit weight; rounded to 1 kg/m³", status = "derived" }
+shading-colour = { value = "#b8b8b8", source = "hito", clause = "a grey that darkens as the strength grows", status = "assumption" }
+
+[[grades]]
+name = "H-25"
+use = { value = "plain, reinforced and prestressed concrete (simples, armados y pretensados)", source = "cirsoc-201-2005", clause = "2.3.2, Tabla 2.7 (p. Cap. 2 - 38)", status = "verified" }
+compressive-strength = { value = "25 MPa", source = "cirsoc-201-2005", clause = "2.3.2, Tabla 2.7 (p. Cap. 2 - 38)", status = "verified" }
+young-modulus = { value = "23500 MPa", source = "cirsoc-201-2005", clause = "8.5.1, expresión (8-1): Ec = 4700 √f'c, in MPa (p. Cap. 8 - 187); rounded to 1 MPa", status = "derived" }
+unit-weight = { value = "25 kN/m³", source = "cirsoc-101-2005", clause = "Tabla 3.1, Hormigones: hormigón de cemento pórtland, arena y canto rodado o piedra partida, armado (p. Cap. 3 - 6)", status = "assumption", note = "The value is verified. Using the reinforced row for every grade from H-20 up is HITO's choice, since these grades may also be used unreinforced (23.5 kN/m³), and so is choosing the row for natural gravel or crushed stone over basaltic aggregate." }
+mass-density = { value = "2549 kg/m³", source = "cirsoc-101-2005", clause = "unit weight ÷ standard gravity (9.80665 m/s²), so self-weight is exactly the code's unit weight; rounded to 1 kg/m³", status = "derived" }
+shading-colour = { value = "#a8a8a8", source = "hito", clause = "a grey that darkens as the strength grows", status = "assumption" }
+
+[[grades]]
+name = "H-30"
+use = { value = "plain, reinforced and prestressed concrete (simples, armados y pretensados)", source = "cirsoc-201-2005", clause = "2.3.2, Tabla 2.7 (p. Cap. 2 - 38)", status = "verified" }
+compressive-strength = { value = "30 MPa", source = "cirsoc-201-2005", clause = "2.3.2, Tabla 2.7 (p. Cap. 2 - 38)", status = "verified" }
+young-modulus = { value = "25743 MPa", source = "cirsoc-201-2005", clause = "8.5.1, expresión (8-1): Ec = 4700 √f'c, in MPa (p. Cap. 8 - 187); rounded to 1 MPa", status = "derived" }
+unit-weight = { value = "25 kN/m³", source = "cirsoc-101-2005", clause = "Tabla 3.1, Hormigones: hormigón de cemento pórtland, arena y canto rodado o piedra partida, armado (p. Cap. 3 - 6)", status = "assumption", note = "The value is verified. Using the reinforced row for every grade from H-20 up is HITO's choice, since these grades may also be used unreinforced (23.5 kN/m³), and so is choosing the row for natural gravel or crushed stone over basaltic aggregate." }
+mass-density = { value = "2549 kg/m³", source = "cirsoc-101-2005", clause = "unit weight ÷ standard gravity (9.80665 m/s²), so self-weight is exactly the code's unit weight; rounded to 1 kg/m³", status = "derived" }
+shading-colour = { value = "#989898", source = "hito", clause = "a grey that darkens as the strength grows", status = "assumption" }
+
+[[grades]]
+name = "H-35"
+use = { value = "plain, reinforced and prestressed concrete (simples, armados y pretensados)", source = "cirsoc-201-2005", clause = "2.3.2, Tabla 2.7 (p. Cap. 2 - 38)", status = "verified" }
+compressive-strength = { value = "35 MPa", source = "cirsoc-201-2005", clause = "2.3.2, Tabla 2.7 (p. Cap. 2 - 38)", status = "verified" }
+young-modulus = { value = "27806 MPa", source = "cirsoc-201-2005", clause = "8.5.1, expresión (8-1): Ec = 4700 √f'c, in MPa (p. Cap. 8 - 187); rounded to 1 MPa", status = "derived" }
+unit-weight = { value = "25 kN/m³", source = "cirsoc-101-2005", clause = "Tabla 3.1, Hormigones: hormigón de cemento pórtland, arena y canto rodado o piedra partida, armado (p. Cap. 3 - 6)", status = "assumption", note = "The value is verified. Using the reinforced row for every grade from H-20 up is HITO's choice, since these grades may also be used unreinforced (23.5 kN/m³), and so is choosing the row for natural gravel or crushed stone over basaltic aggregate." }
+mass-density = { value = "2549 kg/m³", source = "cirsoc-101-2005", clause = "unit weight ÷ standard gravity (9.80665 m/s²), so self-weight is exactly the code's unit weight; rounded to 1 kg/m³", status = "derived" }
+shading-colour = { value = "#888888", source = "hito", clause = "a grey that darkens as the strength grows", status = "assumption" }
+
+[[grades]]
+name = "H-40"
+use = { value = "plain, reinforced and prestressed concrete (simples, armados y pretensados)", source = "cirsoc-201-2005", clause = "2.3.2, Tabla 2.7 (p. Cap. 2 - 38)", status = "verified" }
+compressive-strength = { value = "40 MPa", source = "cirsoc-201-2005", clause = "2.3.2, Tabla 2.7 (p. Cap. 2 - 38)", status = "verified" }
+young-modulus = { value = "29725 MPa", source = "cirsoc-201-2005", clause = "8.5.1, expresión (8-1): Ec = 4700 √f'c, in MPa (p. Cap. 8 - 187); rounded to 1 MPa", status = "derived" }
+unit-weight = { value = "25 kN/m³", source = "cirsoc-101-2005", clause = "Tabla 3.1, Hormigones: hormigón de cemento pórtland, arena y canto rodado o piedra partida, armado (p. Cap. 3 - 6)", status = "assumption", note = "The value is verified. Using the reinforced row for every grade from H-20 up is HITO's choice, since these grades may also be used unreinforced (23.5 kN/m³), and so is choosing the row for natural gravel or crushed stone over basaltic aggregate." }
+mass-density = { value = "2549 kg/m³", source = "cirsoc-101-2005", clause = "unit weight ÷ standard gravity (9.80665 m/s²), so self-weight is exactly the code's unit weight; rounded to 1 kg/m³", status = "derived" }
+shading-colour = { value = "#787878", source = "hito", clause = "a grey that darkens as the strength grows", status = "assumption" }
+
+[[grades]]
+name = "H-45"
+use = { value = "plain, reinforced and prestressed concrete (simples, armados y pretensados)", source = "cirsoc-201-2005", clause = "2.3.2, Tabla 2.7 (p. Cap. 2 - 38)", status = "verified" }
+compressive-strength = { value = "45 MPa", source = "cirsoc-201-2005", clause = "2.3.2, Tabla 2.7 (p. Cap. 2 - 38)", status = "verified" }
+young-modulus = { value = "31529 MPa", source = "cirsoc-201-2005", clause = "8.5.1, expresión (8-1): Ec = 4700 √f'c, in MPa (p. Cap. 8 - 187); rounded to 1 MPa", status = "derived" }
+unit-weight = { value = "25 kN/m³", source = "cirsoc-101-2005", clause = "Tabla 3.1, Hormigones: hormigón de cemento pórtland, arena y canto rodado o piedra partida, armado (p. Cap. 3 - 6)", status = "assumption", note = "The value is verified. Using the reinforced row for every grade from H-20 up is HITO's choice, since these grades may also be used unreinforced (23.5 kN/m³), and so is choosing the row for natural gravel or crushed stone over basaltic aggregate." }
+mass-density = { value = "2549 kg/m³", source = "cirsoc-101-2005", clause = "unit weight ÷ standard gravity (9.80665 m/s²), so self-weight is exactly the code's unit weight; rounded to 1 kg/m³", status = "derived" }
+shading-colour = { value = "#686868", source = "hito", clause = "a grey that darkens as the strength grows", status = "assumption" }
+
+[[grades]]
+name = "H-50"
+use = { value = "plain, reinforced and prestressed concrete (simples, armados y pretensados)", source = "cirsoc-201-2005", clause = "2.3.2, Tabla 2.7 (p. Cap. 2 - 38)", status = "verified" }
+compressive-strength = { value = "50 MPa", source = "cirsoc-201-2005", clause = "2.3.2, Tabla 2.7 (p. Cap. 2 - 38)", status = "verified" }
+young-modulus = { value = "33234 MPa", source = "cirsoc-201-2005", clause = "8.5.1, expresión (8-1): Ec = 4700 √f'c, in MPa (p. Cap. 8 - 187); rounded to 1 MPa", status = "derived" }
+unit-weight = { value = "25 kN/m³", source = "cirsoc-101-2005", clause = "Tabla 3.1, Hormigones: hormigón de cemento pórtland, arena y canto rodado o piedra partida, armado (p. Cap. 3 - 6)", status = "assumption", note = "The value is verified. Using the reinforced row for every grade from H-20 up is HITO's choice, since these grades may also be used unreinforced (23.5 kN/m³), and so is choosing the row for natural gravel or crushed stone over basaltic aggregate." }
+mass-density = { value = "2549 kg/m³", source = "cirsoc-101-2005", clause = "unit weight ÷ standard gravity (9.80665 m/s²), so self-weight is exactly the code's unit weight; rounded to 1 kg/m³", status = "derived" }
+shading-colour = { value = "#585858", source = "hito", clause = "a grey that darkens as the strength grows", status = "assumption" }
+
+[[grades]]
+name = "H-60"
+use = { value = "plain, reinforced and prestressed concrete (simples, armados y pretensados)", source = "cirsoc-201-2005", clause = "2.3.2, Tabla 2.7 (p. Cap. 2 - 38)", status = "verified" }
+compressive-strength = { value = "60 MPa", source = "cirsoc-201-2005", clause = "2.3.2, Tabla 2.7 (p. Cap. 2 - 38)", status = "verified" }
+young-modulus = { value = "36406 MPa", source = "cirsoc-201-2005", clause = "8.5.1, expresión (8-1): Ec = 4700 √f'c, in MPa (p. Cap. 8 - 187); rounded to 1 MPa", status = "derived" }
+unit-weight = { value = "25 kN/m³", source = "cirsoc-101-2005", clause = "Tabla 3.1, Hormigones: hormigón de cemento pórtland, arena y canto rodado o piedra partida, armado (p. Cap. 3 - 6)", status = "assumption", note = "The value is verified. Using the reinforced row for every grade from H-20 up is HITO's choice, since these grades may also be used unreinforced (23.5 kN/m³), and so is choosing the row for natural gravel or crushed stone over basaltic aggregate." }
+mass-density = { value = "2549 kg/m³", source = "cirsoc-101-2005", clause = "unit weight ÷ standard gravity (9.80665 m/s²), so self-weight is exactly the code's unit weight; rounded to 1 kg/m³", status = "derived" }
+shading-colour = { value = "#484848", source = "hito", clause = "a grey that darkens as the strength grows", status = "assumption" }
