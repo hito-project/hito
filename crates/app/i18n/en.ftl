@@ -100,6 +100,8 @@ browser-none = (none)
 
 properties-no-view = No view is open
 properties-view-name = View Name
+# Several selected elements of different classes, as Revit shows them.
+properties-common = Common ({ $count })
 properties-kind-level = Level
 properties-kind-grid = Grid
 properties-label = Label
@@ -115,6 +117,11 @@ action-cancel = Cancel
 delete-also = { $count ->
     [one] Deleting { $name } also deletes 1 element attached to it.
    *[other] Deleting { $name } also deletes { $count } elements attached to it.
+}
+# The same warning when several elements are selected.
+delete-also-selected = { $count ->
+    [one] Deleting the { $selected } selected elements also deletes 1 element attached to them.
+   *[other] Deleting the { $selected } selected elements also deletes { $count } elements attached to them.
 }
 
 ## Views

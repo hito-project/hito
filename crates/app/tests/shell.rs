@@ -14,6 +14,7 @@ use egui_kittest::{Harness, HarnessBuilder};
 use hito::Shell;
 use hito::command::{Command, Input, Next, Prompt, Run, Tool, Wants};
 use hito::i18n::Locale;
+use hito::selection::Mode;
 use hito::shell::{Tab, Theme, ViewId};
 use hito::viewport::Navigation;
 use hito_core::{Dimension, Model, ModelKind, StoreError, Transaction};
@@ -551,6 +552,65 @@ fn esc_cancels_a_command() {
     click(&mut h, "3D View");
     assert_eq!(prompt(&h), None);
     assert_eq!(h.state().layout().open_views().len(), 2);
+}
+
+/// The browser picks into the selection the views share (#30). The
+/// properties panel edits one level, shows several read-only, as Revit
+/// does, and Esc clears the selection.
+#[test]
+fn the_properties_show_the_selection_and_esc_clears_it() {
+    let mut h = window();
+    add_level(&mut h, "3");
+    h.get_by_label("Level 1").click();
+    h.run_steps(2);
+    assert_eq!(h.state().selection().len(), 1, "the browser selects");
+    assert!(
+        h.query_by_role_and_label(Role::TextInput, "Elevation")
+            .is_some()
+    );
+
+    // Ctrl adds, as in the views.
+    let second = level_id(&h, "Level 2");
+    h.state_mut().select([second], Mode::Add);
+    h.run_steps(2);
+    assert_eq!(h.state().selection().len(), 2);
+    assert!(shows(&h, "Level (2)"), "several, read-only");
+    assert!(
+        h.query_by_role_and_label(Role::TextInput, "Elevation")
+            .is_none()
+    );
+
+    h.key_press(egui::Key::Escape);
+    h.run_steps(2);
+    assert!(h.state().selection().is_empty());
+    assert!(shows(&h, "View Name"), "back to the view's properties");
+}
+
+/// The ID of the level called `name`.
+fn level_id(h: &Harness<'_, Shell>, name: &str) -> hito_core::ElementId {
+    let name = hito_core::Value::Text(name.into());
+    let project = h.state().project();
+    let level = project
+        .elements()
+        .find(|e| e.properties().get(hito_structural::level::NAME) == Some(&name));
+    level.expect("the level").id()
+}
+
+/// Delete removes every selected element in one go.
+#[test]
+fn delete_removes_the_selection() {
+    let mut h = window();
+    add_level(&mut h, "3");
+    let before = h.state().project().elements().count();
+    let (first, second) = (level_id(&h, "Level 1"), level_id(&h, "Level 2"));
+    h.state_mut().select([first, second], Mode::Replace);
+    h.run_steps(1);
+    h.key_press(egui::Key::Delete);
+    h.run_steps(2);
+    let project = h.state().project();
+    assert!(project.get(first).is_none() && project.get(second).is_none());
+    assert_eq!(project.elements().count(), before - 2);
+    assert!(h.state().selection().is_empty());
 }
 
 /// The elevation of the level called `name`, if there is one.

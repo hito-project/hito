@@ -1,12 +1,11 @@
 //! Elements in the project browser and the properties panel (#33, #34):
 //! the browser lists the levels and grids, and the properties panel edits
-//! the one picked there. Each edit is one transaction, so one undo step
-//! (#19).
+//! the selected one. Each edit is one transaction, so one undo step (#19).
 //!
 //! Revit edits levels in elevation views and grids in plan views, which
 //! HITO doesn't have yet (#197, #183), so the browser is where they're
-//! picked for now. Picking in the views comes with #30, which will share
-//! this selection.
+//! picked for now. The browser picks into the one selection the 3D views
+//! share (#30), and the properties panel and Delete act on it.
 
 use eframe::egui;
 use hito_core::{Dimension, ElementId, ElementStore, StoreView, Value};
@@ -14,17 +13,27 @@ use hito_structural::{class, grid, level};
 
 use crate::command::{Input, InputFormat, Wants};
 use crate::i18n::I18n;
+use crate::selection::{Mode, Selection};
 
 /// What the browser and the properties panel remember between frames.
 #[derive(Debug, Default)]
 pub(super) struct Elements {
-    /// The element picked in the project browser, whose properties show.
-    selected: Option<ElementId>,
+    /// The selected elements, picked in the browser or in the 3D views.
+    selection: Selection,
     /// Why the last edit couldn't be made, shown under the properties.
     error: Option<String>,
-    /// What a deletion would remove, the picked element first, while the
+    /// A deletion that removes more than the selected elements, while the
     /// user is asked to confirm it.
-    confirm: Option<Vec<ElementId>>,
+    confirm: Option<Deletion>,
+}
+
+/// A deletion waiting for the user to confirm it.
+#[derive(Debug, Clone, PartialEq)]
+struct Deletion {
+    /// The elements the user asked to delete.
+    selected: Vec<ElementId>,
+    /// How many elements go in all, with the ones attached to them.
+    deleted: usize,
 }
 
 /// A change the user asked for, made after the panels are drawn.
@@ -36,28 +45,42 @@ pub(super) enum Edit {
         property: &'static str,
         value: Value,
     },
-    /// Deletes an element, asking first if others go with it.
-    Delete(ElementId),
+    /// Deletes elements, asking first if others go with them.
+    Delete(Vec<ElementId>),
 }
 
 impl Elements {
-    /// The element picked in the project browser, if it still exists.
+    /// The selected element, when exactly one is selected.
     pub fn selected(&self) -> Option<ElementId> {
-        self.selected
+        let mut ids = self.selection.ids().iter();
+        match (ids.next(), ids.next()) {
+            (Some(&id), None) => Some(id),
+            _ => None,
+        }
     }
 
-    pub fn select(&mut self, element: Option<ElementId>) {
-        if self.selected != element {
+    /// Every selected element.
+    pub fn selection(&self) -> &Selection {
+        &self.selection
+    }
+
+    /// Changes the selection, as a click in the browser or a view does.
+    pub fn select(&mut self, ids: impl IntoIterator<Item = ElementId>, mode: Mode) {
+        let before = self.selection.clone();
+        self.selection.apply(ids, mode);
+        if self.selection != before {
             self.error = None;
         }
-        self.selected = element;
+    }
+
+    /// Empties the selection, as Esc does.
+    pub fn clear_selection(&mut self) {
+        self.select([], Mode::Replace);
     }
 
     /// Forgets elements that no longer exist, such as a deleted level.
     pub fn forget_deleted(&mut self, store: &ElementStore) {
-        if self.selected.is_some_and(|id| store.get(id).is_none()) {
-            self.select(None);
-        }
+        self.selection.retain_existing(store);
     }
 
     pub fn fail(&mut self, message: String) {
@@ -68,10 +91,10 @@ impl Elements {
         self.error = None;
     }
 
-    /// Asks the user to confirm deleting `deleted`, the first element and
-    /// the ones that go with it.
-    pub fn ask_to_delete(&mut self, deleted: Vec<ElementId>) {
-        self.confirm = Some(deleted);
+    /// Asks the user to confirm deleting `selected`, which takes `deleted`
+    /// elements in all with the ones attached to them.
+    pub fn ask_to_delete(&mut self, selected: Vec<ElementId>, deleted: usize) {
+        self.confirm = Some(Deletion { selected, deleted });
     }
 
     pub fn is_asking(&self) -> bool {
@@ -170,21 +193,25 @@ fn browser_list(
         ui.weak(i18n.tr("browser-none"));
     }
     for id in all {
-        let picked = elements.selected == Some(id);
+        let picked = elements.selection.contains(id);
         let response = ui.selectable_label(picked, name(&view, id));
         if response.clicked() {
-            elements.select(Some(id));
+            // As in the views: Ctrl adds and Shift removes.
+            let mode = ui.input(|i| Mode::from_keys(i.modifiers.command, i.modifiers.shift));
+            elements.select([id], mode);
         }
         response.context_menu(|ui| {
             if ui.button(i18n.tr("action-delete")).clicked() {
-                edits.push(Edit::Delete(id));
+                edits.push(Edit::Delete(vec![id]));
             }
         });
     }
 }
 
-/// The picked element's properties, editable. Returns whether an element is
-/// picked; with none, the panel shows the active view's, as in Revit.
+/// The selected level's or grid's properties, editable, when one of them
+/// is the only element selected. Returns whether it showed them; if not,
+/// the panel shows the selection read-only, or with nothing selected the
+/// active view's, as in Revit.
 pub(super) fn properties(
     ui: &mut egui::Ui,
     i18n: &I18n,
@@ -195,7 +222,7 @@ pub(super) fn properties(
 ) -> bool {
     let view = store.view();
     let Some((id, kind)) = elements
-        .selected
+        .selected()
         .and_then(|id| Some((id, Kind::of(&view, id)?)))
     else {
         return false;
@@ -301,35 +328,41 @@ fn text_row(
     (response.lost_focus() && !escaped && text != current).then_some(text)
 }
 
-/// Asks before a deletion that removes more than the picked element, as
-/// Revit warns. Returns the element to delete once the user confirms.
+/// Asks before a deletion that removes more than the selected elements, as
+/// Revit warns. Returns the elements to delete once the user confirms.
 pub(super) fn confirm_delete(
     ctx: &egui::Context,
     i18n: &I18n,
     store: &ElementStore,
     elements: &mut Elements,
-) -> Option<ElementId> {
-    let deleted = elements.confirm.as_ref()?;
-    let first = deleted[0];
-    let others = deleted.len() - 1;
-    let view = store.view();
+) -> Option<Vec<ElementId>> {
+    let deletion = elements.confirm.as_ref()?;
+    let others = deletion.deleted - deletion.selected.len();
+    let message = match deletion.selected.as_slice() {
+        [one] => i18n.tr_args(
+            "delete-also",
+            [
+                ("name", name(&store.view(), *one).to_owned().into()),
+                ("count", others.into()),
+            ],
+        ),
+        several => i18n.tr_args(
+            "delete-also-selected",
+            [("selected", several.len().into()), ("count", others.into())],
+        ),
+    };
     let mut confirmed = false;
     let mut cancelled = false;
     let modal = egui::Modal::new(egui::Id::new("confirm-delete")).show(ctx, |ui| {
-        ui.label(i18n.tr_args(
-            "delete-also",
-            [
-                ("name", name(&view, first).to_owned().into()),
-                ("count", others.into()),
-            ],
-        ));
+        ui.label(message);
         ui.horizontal(|ui| {
             confirmed = ui.button(i18n.tr("action-delete")).clicked();
             cancelled = ui.button(i18n.tr("action-cancel")).clicked();
         });
     });
+    let selected = deletion.selected.clone();
     if confirmed || cancelled || modal.should_close() {
         elements.confirm = None;
     }
-    confirmed.then_some(first)
+    confirmed.then_some(selected)
 }

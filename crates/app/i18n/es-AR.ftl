@@ -100,6 +100,8 @@ browser-none = (ninguno)
 
 properties-no-view = No hay ninguna vista abierta
 properties-view-name = Nombre de vista
+# Varios elementos seleccionados de distintas clases, como los muestra Revit.
+properties-common = Comunes ({ $count })
 properties-kind-level = Nivel
 properties-kind-grid = Eje
 properties-label = Rótulo
@@ -115,6 +117,11 @@ action-cancel = Cancelar
 delete-also = { $count ->
     [one] Al eliminar { $name } también se elimina 1 elemento asociado.
    *[other] Al eliminar { $name } también se eliminan { $count } elementos asociados.
+}
+# El mismo aviso con varios elementos seleccionados.
+delete-also-selected = { $count ->
+    [one] Al eliminar los { $selected } elementos seleccionados también se elimina 1 elemento asociado.
+   *[other] Al eliminar los { $selected } elementos seleccionados también se eliminan { $count } elementos asociados.
 }
 
 ## Vistas

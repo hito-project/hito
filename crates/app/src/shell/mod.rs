@@ -21,7 +21,7 @@ mod panels;
 mod ribbon;
 mod theme;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use eframe::egui;
@@ -38,6 +38,7 @@ pub use theme::Theme;
 use crate::command::{InputFormat, Outcome, Session};
 use crate::i18n::{I18n, Locale};
 use crate::project;
+use crate::selection::{Mode, Selection};
 use crate::viewport::{Navigation, Scene, Viewport};
 use command_line::{CommandLine, Request};
 use elements::{Edit, Elements};
@@ -67,7 +68,8 @@ pub struct Shell {
     /// The model being edited. Opening and saving files comes with E10
     /// (#46).
     project: ElementStore,
-    /// The element picked in the project browser, and edits in progress.
+    /// The selection, shared by the views and the browser, and edits in
+    /// progress.
     elements: Elements,
 }
 
@@ -126,6 +128,17 @@ impl Shell {
         self.navigation
     }
 
+    /// The selected elements, picked in the 3D views or the project
+    /// browser.
+    pub fn selection(&self) -> &Selection {
+        self.elements.selection()
+    }
+
+    /// Changes the selection, as a click or a box in a view does.
+    pub fn select(&mut self, ids: impl IntoIterator<Item = ElementId>, mode: Mode) {
+        self.elements.select(ids, mode);
+    }
+
     /// What the 3D views show.
     pub fn scene(&self) -> &Scene {
         &self.scene
@@ -163,8 +176,12 @@ impl Shell {
         self.follow(outcome);
     }
 
-    /// Cancels the running command, as Esc does.
+    /// Cancels the running command, as Esc does. With no command running,
+    /// Esc clears the selection, as in Revit.
     pub fn cancel(&mut self) {
+        if self.commands.running().is_none() {
+            self.elements.clear_selection();
+        }
         self.commands.cancel(&self.i18n);
         self.command_line.clear();
     }
@@ -214,10 +231,11 @@ impl Shell {
     fn committed(&mut self, changes: &ChangeSet) {
         let regenerated = self.geometry.update(&self.project, changes);
         self.scene.update(&self.geometry, &regenerated);
+        self.elements.forget_deleted(&self.project);
     }
 
-    /// The level placement tools put elements on: the level picked in the
-    /// project browser, if one is. Plan views (#183) will make it the
+    /// The level placement tools put elements on: the selected level, if
+    /// it's the only element selected. Plan views (#183) will make it the
     /// active view's level.
     fn active_level(&self) -> Option<ElementId> {
         let level = hito_structural::class(hito_structural::level::LEVEL);
@@ -248,18 +266,41 @@ impl Shell {
                     Err(_) => self.elements.fail(self.i18n.tr("properties-edit-failed")),
                 }
             }
-            Edit::Delete(element) => match self.project.view().preview_delete(element) {
-                Ok(deleted) if deleted.len() > 1 => self.elements.ask_to_delete(deleted),
-                Ok(_) => self.delete(element),
-                Err(_) => self.elements.fail(self.i18n.tr("properties-edit-failed")),
-            },
+            Edit::Delete(selected) => {
+                let view = self.project.view();
+                let mut deleted = HashSet::new();
+                for &id in &selected {
+                    match view.preview_delete(id) {
+                        Ok(ids) => deleted.extend(ids),
+                        Err(_) => {
+                            return self.elements.fail(self.i18n.tr("properties-edit-failed"));
+                        }
+                    }
+                }
+                if deleted.len() > selected.len() {
+                    self.elements.ask_to_delete(selected, deleted.len());
+                } else {
+                    self.delete(&selected);
+                }
+            }
         }
     }
 
-    /// Deletes an element and what goes with it, as Revit's Delete does.
-    fn delete(&mut self, element: ElementId) {
+    /// Deletes elements and what goes with them in one transaction, as
+    /// Revit's Delete does.
+    fn delete(&mut self, elements: &[ElementId]) {
         let mut tx = self.project.transaction_for(Command::new("DELETE"));
-        match tx.delete(element).and_then(|_| tx.commit()) {
+        let mut result = Ok(());
+        for &id in elements {
+            // An element may already have gone with another one.
+            if tx.view().get(id).is_some()
+                && let Err(error) = tx.delete(id)
+            {
+                result = Err(error);
+                break;
+            }
+        }
+        match result.and_then(|()| tx.commit()) {
             Ok(changes) => self.committed(&changes),
             Err(_) => self.elements.fail(self.i18n.tr("properties-edit-failed")),
         }
@@ -275,6 +316,11 @@ impl eframe::App for Shell {
             ui.ctx().set_theme(preference);
         }
 
+        // Over a 3D view, Tab cycles through overlapping elements (#30).
+        for viewport in self.viewports.values() {
+            viewport.claim_tab(ui.ctx());
+        }
+
         // Esc cancels the running command wherever the focus is.
         if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
             self.cancel();
@@ -285,13 +331,13 @@ impl eframe::App for Shell {
         {
             self.run(name);
         }
-        // Delete removes the element picked in the browser, unless the user
-        // is typing.
+        // Delete removes the selected elements, unless the user is typing.
         let delete = ui.input(|i| i.key_pressed(egui::Key::Delete))
             && !ui.ctx().egui_wants_keyboard_input()
             && !self.elements.is_asking();
-        if let Some(element) = self.elements.selected().filter(|_| delete) {
-            self.edit(Edit::Delete(element));
+        if delete && !self.elements.selection().is_empty() {
+            let selected = self.elements.selection().ids().iter().copied().collect();
+            self.edit(Edit::Delete(selected));
         }
         self.elements.forget_deleted(&self.project);
 
@@ -323,6 +369,7 @@ impl eframe::App for Shell {
             None => {}
         }
 
+        self.scene.set_selected(self.elements.selection().ids());
         let render_state = frame.wgpu_render_state();
         let mut tabs = panels::Tabs {
             i18n: &self.i18n,
@@ -337,13 +384,17 @@ impl eframe::App for Shell {
             input: &self.input,
             elements: &mut self.elements,
             edits: Vec::new(),
+            picked: None,
         };
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE)
             .show(ui, |ui| {
                 DockArea::new(&mut self.layout.dock).show_inside(ui, &mut tabs);
             });
-        let (open, edits) = (tabs.open, tabs.edits);
+        let (open, edits, picked) = (tabs.open, tabs.edits, tabs.picked);
+        if let Some(picked) = picked {
+            self.elements.select(picked.ids, picked.mode);
+        }
         if let Some(view) = open {
             self.layout.open_view(view);
         }
@@ -351,9 +402,10 @@ impl eframe::App for Shell {
             self.edit(edit);
         }
         let (i18n, project) = (&self.i18n, &self.project);
-        if let Some(element) = elements::confirm_delete(ui.ctx(), i18n, project, &mut self.elements)
+        if let Some(selected) =
+            elements::confirm_delete(ui.ctx(), i18n, project, &mut self.elements)
         {
-            self.delete(element);
+            self.delete(&selected);
         }
         self.layout.track_focus();
 

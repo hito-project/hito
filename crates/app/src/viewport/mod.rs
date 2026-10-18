@@ -8,18 +8,22 @@
 
 pub mod camera;
 pub mod navigation;
+mod pick;
 mod scene;
 mod view_cube;
 
 use eframe::egui;
 use eframe::egui_wgpu::{RenderState, wgpu};
 use glam::{DVec2, DVec3, Vec4};
+use hito_core::ElementId;
 
 pub use camera::{Bounds, Camera, Projection};
 pub use navigation::Navigation;
+pub use pick::BoxKind;
 pub use scene::Scene;
 
 use crate::i18n::I18n;
+use crate::selection::Mode;
 use navigation::Motion;
 use scene::{COLOR_FORMAT, DEPTH_FORMAT, SAMPLES};
 use view_cube::CubeAction;
@@ -43,9 +47,29 @@ pub struct Viewport {
     framed: bool,
     /// The view's size in points when it last showed.
     size: DVec2,
+    /// The elements under the pointer, nearest first, where it was when
+    /// they were found, and which of them Tab has reached.
+    under: Vec<ElementId>,
+    under_at: Option<(egui::Pos2, Camera, u64)>,
+    cycle: usize,
+    /// Whether this view set the scene's pre-highlight, so it clears it
+    /// when the pointer leaves.
+    prehighlighting: bool,
+    /// Whether the pointer was over the view in the last frame.
+    hovered: bool,
+    /// Where the selection box being dragged started.
+    box_start: Option<egui::Pos2>,
     target: Option<Target>,
     /// How many times it has rendered, so tests can check that it did.
     pub renders: u64,
+}
+
+/// What a click or a selection box picked in a view, and how it changes
+/// the selection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Picked {
+    pub ids: Vec<ElementId>,
+    pub mode: Mode,
 }
 
 /// Everything a rendered image depends on.
@@ -85,6 +109,20 @@ impl Viewport {
         &mut self.camera
     }
 
+    /// Takes Tab for cycling through overlapping elements while the pointer
+    /// is over the view and nothing has the focus, as in Revit, so egui
+    /// doesn't move the focus to the first widget instead. Call it before
+    /// any widget shows in the frame. Returns whether Tab was pressed.
+    pub fn claim_tab(&self, ctx: &egui::Context) -> bool {
+        let tab = self.hovered
+            && ctx.memory(|m| m.focused().is_none())
+            && ctx.input(|i| i.key_pressed(egui::Key::Tab) && !i.modifiers.any());
+        if tab {
+            ctx.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
+        }
+        tab
+    }
+
     /// Zooms so the whole model shows, as Revit's Zoom to Fit. An empty
     /// model shows the area round the origin.
     pub fn zoom_to_fit(&mut self, scene: &Scene) {
@@ -102,9 +140,11 @@ impl Viewport {
         navigation: Navigation,
         render_state: Option<&RenderState>,
         i18n: &I18n,
-    ) {
+    ) -> Option<Picked> {
+        let tab = self.claim_tab(ui.ctx());
         let rect = ui.available_rect_before_wrap();
         let response = ui.allocate_rect(rect, egui::Sense::click_and_drag());
+        self.hovered = response.hover_pos().is_some();
         // The image goes under the view cube, which draws next.
         let image = ui.painter().add(egui::Shape::Noop);
         self.size = DVec2::new(rect.width().into(), rect.height().into());
@@ -116,6 +156,7 @@ impl Viewport {
         if let Some(action) = view_cube::ui(ui, rect, &self.camera, i18n) {
             self.cube(action, scene);
         }
+        let picked = self.select(ui, &response, scene, tab);
 
         let Some(rs) = render_state else {
             ui.painter().text(
@@ -125,7 +166,7 @@ impl Viewport {
                 egui::FontId::default(),
                 ui.visuals().weak_text_color(),
             );
-            return;
+            return picked;
         };
         scene.prepare(rs);
         let ppp = ui.pixels_per_point();
@@ -146,6 +187,90 @@ impl Viewport {
         let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
         let shape = egui::Shape::image(id, rect, uv, egui::Color32::WHITE);
         ui.painter().set(image, shape);
+        picked
+    }
+
+    /// Selects as Revit does: a click picks the element under the cursor,
+    /// or the one Tab has cycled to among those overlapping there; a drag
+    /// to the right draws a window box, a drag to the left a crossing box.
+    /// Ctrl adds to the selection and Shift removes from it.
+    fn select(
+        &mut self,
+        ui: &egui::Ui,
+        response: &egui::Response,
+        scene: &mut Scene,
+        tab: bool,
+    ) -> Option<Picked> {
+        let origin = response.rect.min;
+        let local = |p: egui::Pos2| DVec2::new((p.x - origin.x).into(), (p.y - origin.y).into());
+        let boxing = response.dragged_by(egui::PointerButton::Primary)
+            || response.drag_stopped_by(egui::PointerButton::Primary);
+
+        match response.hover_pos().filter(|_| !boxing) {
+            Some(pointer) => {
+                let at = Some((pointer, self.camera, scene.geometry_revision()));
+                if self.under_at != at {
+                    self.under = pick::under(scene, &self.camera, local(pointer), self.size);
+                    self.under_at = at;
+                    self.cycle = 0;
+                }
+                if tab && self.under.len() > 1 {
+                    ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Tab));
+                    self.cycle = (self.cycle + 1) % self.under.len();
+                }
+                scene.set_prehighlight(self.under.get(self.cycle).copied());
+                self.prehighlighting = true;
+            }
+            None => {
+                self.under_at = None;
+                if self.prehighlighting {
+                    scene.set_prehighlight(None);
+                    self.prehighlighting = false;
+                }
+            }
+        }
+
+        let mode = ui.input(|i| Mode::from_keys(i.modifiers.command, i.modifiers.shift));
+        if response.clicked_by(egui::PointerButton::Primary) {
+            let ids = self.under.get(self.cycle).copied().into_iter().collect();
+            return Some(Picked { ids, mode });
+        }
+        if !boxing {
+            return None;
+        }
+        if response.drag_started_by(egui::PointerButton::Primary) {
+            self.box_start = ui.input(|i| i.pointer.press_origin());
+        }
+        let start = self.box_start?;
+        let end = response.interact_pointer_pos().or(response.hover_pos())?;
+        let corners = [local(start), local(end)];
+        let kind = BoxKind::of_drag(corners[0], corners[1]);
+        if response.drag_stopped_by(egui::PointerButton::Primary) {
+            self.box_start = None;
+            let ids = pick::in_box(scene, &self.camera, corners, kind, self.size);
+            return Some(Picked { ids, mode });
+        }
+        // Revit draws a window box with a solid line and a crossing box
+        // with a dashed one.
+        let painter = ui.painter_at(response.rect);
+        let stroke = egui::Stroke::new(1.0, ui.visuals().strong_text_color());
+        let rect = egui::Rect::from_two_pos(start, end);
+        match kind {
+            BoxKind::Window => {
+                painter.rect_stroke(rect, 0.0, stroke, egui::StrokeKind::Inside);
+            }
+            BoxKind::Crossing => {
+                let c = [
+                    rect.left_top(),
+                    rect.right_top(),
+                    rect.right_bottom(),
+                    rect.left_bottom(),
+                    rect.left_top(),
+                ];
+                painter.extend(egui::Shape::dashed_line(&c, stroke, 4.0, 3.0));
+            }
+        }
+        None
     }
 
     /// Zooms with the wheel, orbits and pans with the wheel held down, and
@@ -361,11 +486,13 @@ impl Viewport {
     }
 }
 
-/// What orbiting turns round: the middle of the model, as in Revit, or
-/// the camera's target when the view is empty.
+/// What orbiting turns round, as in Revit: the middle of the selection,
+/// or of the model when nothing is selected, or the camera's target when
+/// the view is empty.
 fn pivot(scene: &Scene, camera: &Camera) -> DVec3 {
     scene
-        .bounds()
+        .selection_bounds()
+        .or_else(|| scene.bounds())
         .map_or(camera.target(), |bounds| bounds.center())
 }
 
@@ -373,6 +500,7 @@ fn pivot(scene: &Scene, camera: &Camera) -> DVec3 {
 mod tests {
     use super::*;
     use crate::i18n::Locale;
+    use crate::selection::Selection;
     use egui::accesskit::Role;
     use egui_kittest::Harness;
     use egui_kittest::kittest::Queryable;
@@ -386,13 +514,27 @@ mod tests {
         i18n: I18n,
         render_state: Option<RenderState>,
         rect: egui::Rect,
+        selection: Selection,
+        /// The columns: at the origin, 6 m to its right, and 3 m behind it.
+        ids: [ElementId; 3],
     }
 
-    /// Two columns, 6 m apart.
+    /// Three columns: two 6 m apart, and one 3 m behind the first.
     fn view(render_state: Option<RenderState>) -> Harness<'static, View> {
         let mut scene = Scene::default();
-        scene.insert(ElementId::generate(), scene::tests::column(0.0, 0.3));
-        scene.insert(ElementId::generate(), scene::tests::column(6.0, 0.3));
+        let ids = [(); 3].map(|_| ElementId::generate());
+        scene.insert(ids[0], scene::tests::column(0.0, 0.3));
+        scene.insert(ids[1], scene::tests::column(6.0, 0.3));
+        let behind = scene::tests::column(0.0, 0.3);
+        let behind = hito_geometry::Mesh {
+            positions: behind
+                .positions
+                .iter()
+                .map(|p| [p[0], p[1] + 3.0, p[2]])
+                .collect(),
+            triangles: behind.triangles.clone(),
+        };
+        scene.insert(ids[2], std::sync::Arc::new(behind));
         let view = View {
             viewport: Viewport::default(),
             scene,
@@ -400,6 +542,8 @@ mod tests {
             i18n: I18n::new(Locale::En),
             render_state,
             rect: egui::Rect::NOTHING,
+            selection: Selection::default(),
+            ids,
         };
         let mut builder = Harness::builder()
             .with_size(egui::vec2(800.0, 600.0))
@@ -413,7 +557,10 @@ mod tests {
             |ui, v: &mut View| {
                 v.rect = ui.available_rect_before_wrap();
                 let rs = v.render_state.as_ref();
-                v.viewport.ui(ui, &mut v.scene, v.navigation, rs, &v.i18n);
+                v.scene.set_selected(v.selection.ids());
+                if let Some(picked) = v.viewport.ui(ui, &mut v.scene, v.navigation, rs, &v.i18n) {
+                    v.selection.apply(picked.ids, picked.mode);
+                }
             },
             view,
         );
@@ -565,6 +712,131 @@ mod tests {
         assert_eq!(camera(&h).projection(), Projection::Perspective);
     }
 
+    /// Turns the view to look from the front, fitted to the model.
+    fn from_the_front(h: &mut Harness<'_, View>) {
+        let v = h.state_mut();
+        v.viewport.camera_mut().look_from(-DVec3::Y);
+        v.viewport.zoom_to_fit(&v.scene);
+        h.run_steps(1);
+    }
+
+    /// Where a point of the model shows in the window.
+    fn on_screen(h: &Harness<'_, View>, point: DVec3) -> egui::Pos2 {
+        let rect = h.state().rect;
+        let size = DVec2::new(rect.width().into(), rect.height().into());
+        let p = h.state().viewport.camera().project(point, size).unwrap();
+        rect.min + egui::vec2(p.x as f32, p.y as f32)
+    }
+
+    fn click(h: &mut Harness<'_, View>, pos: egui::Pos2, modifiers: egui::Modifiers) {
+        h.event(egui::Event::ModifiersChanged(modifiers));
+        h.hover_at(pos);
+        h.run_steps(1);
+        button(h, egui::PointerButton::Primary, pos, true);
+        button(h, egui::PointerButton::Primary, pos, false);
+        h.event(egui::Event::ModifiersChanged(egui::Modifiers::NONE));
+        // Let the click age, so the next one isn't a double click.
+        h.run_steps(12);
+    }
+
+    fn drag_box(h: &mut Harness<'_, View>, from: egui::Pos2, to: egui::Pos2) {
+        h.hover_at(from);
+        h.run_steps(1);
+        button(h, egui::PointerButton::Primary, from, true);
+        h.run_steps(1);
+        for step in 1..=4 {
+            h.hover_at(from + (to - from) * step as f32 / 4.0);
+            h.run_steps(1);
+        }
+        button(h, egui::PointerButton::Primary, to, false);
+        h.run_steps(2);
+    }
+
+    fn selected(h: &Harness<'_, View>) -> Vec<ElementId> {
+        h.state().selection.ids().iter().copied().collect()
+    }
+
+    fn sorted(mut ids: Vec<ElementId>) -> Vec<ElementId> {
+        ids.sort();
+        ids
+    }
+
+    #[test]
+    fn click_selects_ctrl_adds_shift_removes_and_empty_space_clears() {
+        let mut h = view(None);
+        from_the_front(&mut h);
+        let [first, second, _] = h.state().ids;
+        let at_first = on_screen(&h, DVec3::new(0.0, 0.0, 1.5));
+        let at_second = on_screen(&h, DVec3::new(6.0, 0.0, 1.5));
+
+        click(&mut h, at_first, egui::Modifiers::NONE);
+        assert_eq!(selected(&h), [first]);
+        click(&mut h, at_second, egui::Modifiers::NONE);
+        assert_eq!(selected(&h), [second], "a click replaces");
+        click(&mut h, at_first, egui::Modifiers::COMMAND);
+        assert_eq!(selected(&h), sorted(vec![first, second]), "Ctrl adds");
+        click(&mut h, at_second, egui::Modifiers::SHIFT);
+        assert_eq!(selected(&h), [first], "Shift removes");
+        let empty = on_screen(&h, DVec3::new(3.0, 0.0, 1.5));
+        click(&mut h, empty, egui::Modifiers::NONE);
+        assert!(selected(&h).is_empty(), "empty space clears");
+    }
+
+    #[test]
+    fn tab_cycles_through_overlapping_elements() {
+        let mut h = view(None);
+        from_the_front(&mut h);
+        let [first, _, behind] = h.state().ids;
+        let at = on_screen(&h, DVec3::new(0.0, 0.0, 1.5));
+        h.hover_at(at);
+        h.run_steps(2);
+        assert_eq!(h.state().scene.prehighlight(), Some(first), "the nearest");
+        h.key_press(egui::Key::Tab);
+        h.run_steps(2);
+        assert_eq!(h.state().scene.prehighlight(), Some(behind), "Tab");
+        click(&mut h, at, egui::Modifiers::NONE);
+        assert_eq!(selected(&h), [behind]);
+        h.key_press(egui::Key::Tab);
+        h.run_steps(2);
+        assert_eq!(h.state().scene.prehighlight(), Some(first), "round again");
+    }
+
+    #[test]
+    fn window_boxes_take_whole_elements_and_crossing_boxes_touched_ones() {
+        let mut h = view(None);
+        from_the_front(&mut h);
+        let [first, second, behind] = h.state().ids;
+        // Left to right round the first column and the one behind it.
+        let a = on_screen(&h, DVec3::new(-1.0, 0.0, 3.5));
+        let b = on_screen(&h, DVec3::new(1.0, 0.0, -0.5));
+        drag_box(&mut h, a, b);
+        assert_eq!(selected(&h), sorted(vec![first, behind]), "window");
+
+        // A window round only the second column's middle takes nothing.
+        let a = on_screen(&h, DVec3::new(5.0, 0.0, 2.0));
+        let b = on_screen(&h, DVec3::new(7.0, 0.0, 1.0));
+        drag_box(&mut h, a, b);
+        assert!(selected(&h).is_empty(), "nothing wholly inside");
+        // The same box right to left crosses it.
+        drag_box(&mut h, b, a);
+        assert_eq!(selected(&h), [second], "crossing");
+    }
+
+    #[test]
+    fn orbiting_turns_round_the_selection() {
+        let mut h = view(None);
+        let second = h.state().ids[1];
+        h.state_mut()
+            .selection
+            .apply([second], crate::selection::Mode::Replace);
+        h.run_steps(1);
+        let center = DVec3::new(6.0, 0.0, 1.5);
+        let before = on_screen(&h, center);
+        wheel_drag(&mut h, egui::vec2(120.0, 40.0), egui::Modifiers::NONE);
+        let after = on_screen(&h, center);
+        assert!((after - before).length() < 0.01, "{before:?} {after:?}");
+    }
+
     /// With a wgpu device, the columns show shaded, with dark edges, and
     /// the view renders again only when something changes.
     #[test]
@@ -620,5 +892,18 @@ mod tests {
         let dark =
             (x.saturating_sub(15)..x + 15).any(|x| pixel((x, y))[..3].iter().all(|&c| c < 90));
         assert!(dark, "an edge on the column's side");
+
+        // Selected, it shows blue.
+        let first = h.state().ids[0];
+        let v = h.state_mut();
+        v.selection.apply([first], crate::selection::Mode::Replace);
+        h.run_steps(2);
+        let image = h.render().expect("render");
+        let [r, g, b, _] = image.get_pixel(x, y).0;
+        assert!(
+            b > r.saturating_add(40) && b > g,
+            "selected {:?}",
+            [r, g, b]
+        );
     }
 }
