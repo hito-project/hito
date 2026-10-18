@@ -25,7 +25,7 @@ use std::sync::Arc;
 
 use eframe::egui;
 use egui_dock::DockArea;
-use hito_core::{ElementStore, SchemaRegistry};
+use hito_core::{ElementId, ElementStore, SchemaRegistry};
 use hito_geometry::GeometryCache;
 use hito_manifold::Manifold;
 
@@ -36,6 +36,7 @@ pub use theme::Theme;
 
 use crate::command::{InputFormat, Outcome, Session};
 use crate::i18n::{I18n, Locale};
+use crate::selection::{Mode, Selection};
 use crate::viewport::{Navigation, Scene, Viewport};
 use command_line::{CommandLine, Request};
 use ribbon::Pressed;
@@ -58,6 +59,8 @@ pub struct Shell {
     /// Every element's mesh, and what the 3D views show of them.
     geometry: GeometryCache,
     scene: Scene,
+    /// The selected elements, shared by every view.
+    selection: Selection,
     commands: Session,
     command_line: CommandLine,
     input: InputFormat,
@@ -97,6 +100,7 @@ impl Shell {
             // to #41).
             geometry: GeometryCache::new(Arc::new(Manifold), Vec::new()),
             scene: Scene::default(),
+            selection: Selection::default(),
             commands: Session::new(registry()),
             command_line: Default::default(),
             input: InputFormat::new(),
@@ -115,6 +119,16 @@ impl Shell {
     /// What dragging with the mouse wheel does in 3D views.
     pub fn navigation(&self) -> Navigation {
         self.navigation
+    }
+
+    /// The selected elements.
+    pub fn selection(&self) -> &Selection {
+        &self.selection
+    }
+
+    /// Changes the selection, as a click or a box in a view does.
+    pub fn select(&mut self, ids: impl IntoIterator<Item = ElementId>, mode: Mode) {
+        self.selection.apply(ids, mode);
     }
 
     /// What the 3D views show.
@@ -153,8 +167,12 @@ impl Shell {
         self.follow(outcome);
     }
 
-    /// Cancels the running command, as Esc does.
+    /// Cancels the running command, as Esc does. With no command running,
+    /// Esc clears the selection, as in Revit.
     pub fn cancel(&mut self) {
+        if self.commands.running().is_none() {
+            self.selection.clear();
+        }
         self.commands.cancel(&self.i18n);
         self.command_line.clear();
     }
@@ -198,6 +216,7 @@ impl Shell {
             Outcome::Committed(changes) => {
                 let regenerated = self.geometry.update(&self.project, &changes);
                 self.scene.update(&self.geometry, &regenerated);
+                self.selection.retain_existing(&self.project);
             }
         }
     }
@@ -209,6 +228,11 @@ impl eframe::App for Shell {
         let preference = self.theme.preference();
         if ui.ctx().options(|o| o.theme_preference) != preference {
             ui.ctx().set_theme(preference);
+        }
+
+        // Over a 3D view, Tab cycles through overlapping elements (#30).
+        for viewport in self.viewports.values() {
+            viewport.claim_tab(ui.ctx());
         }
 
         // Esc cancels the running command wherever the focus is.
@@ -250,6 +274,7 @@ impl eframe::App for Shell {
             None => {}
         }
 
+        self.scene.set_selected(self.selection.ids());
         let render_state = frame.wgpu_render_state();
         let mut tabs = panels::Tabs {
             i18n: &self.i18n,
@@ -260,14 +285,21 @@ impl eframe::App for Shell {
             navigation: self.navigation,
             render_state,
             open: None,
+            project: &self.project,
+            selection: &self.selection,
+            picked: None,
         };
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE)
             .show(ui, |ui| {
                 DockArea::new(&mut self.layout.dock).show_inside(ui, &mut tabs);
             });
+        let picked = tabs.picked.take();
         if let Some(view) = tabs.open {
             self.layout.open_view(view);
+        }
+        if let Some(picked) = picked {
+            self.selection.apply(picked.ids, picked.mode);
         }
         self.layout.track_focus();
 

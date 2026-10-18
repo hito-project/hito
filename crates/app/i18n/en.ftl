@@ -75,6 +75,8 @@ browser-none = (none)
 
 properties-no-view = No view is open
 properties-view-name = View Name
+# Several selected elements of different classes, as Revit shows them.
+properties-common = Common ({ $count })
 
 ## Views
 

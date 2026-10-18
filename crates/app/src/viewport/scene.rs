@@ -1,7 +1,7 @@
 //! What the 3D views show: every element's mesh from the geometry cache,
 //! uploaded once to the graphics device and shared by every view.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
 use eframe::egui_wgpu::{RenderState, wgpu};
@@ -23,6 +23,12 @@ pub(super) const SAMPLES: u32 = 4;
 const FACE: [f32; 4] = [0.80, 0.80, 0.78, 1.0];
 /// The colour of elements' edges.
 const EDGE: [f32; 4] = [0.08, 0.08, 0.08, 1.0];
+/// Selected elements show in Revit's selection blue, faces tinted.
+const SELECTED_FACE: [f32; 4] = [0.55, 0.68, 0.95, 1.0];
+const SELECTED_EDGE: [f32; 4] = [0.0, 0.23, 0.74, 1.0];
+/// The element a click would select has blue edges, as Revit's
+/// pre-selection highlight.
+const PREHIGHLIGHT_EDGE: [f32; 4] = [0.0, 0.47, 0.95, 1.0];
 
 /// Edges between faces that meet at more than this angle are drawn. Lower
 /// angles are a curved surface's facets, or a flat face's triangles.
@@ -36,7 +42,12 @@ pub struct Scene {
     /// are `f32` there, so they're kept small: a model far from the origin
     /// keeps its precision.
     origin: Option<DVec3>,
+    /// What shows highlighted: the selection, and the element a click
+    /// would select.
+    selected: BTreeSet<ElementId>,
+    prehighlight: Option<ElementId>,
     revision: u64,
+    geometry_revision: u64,
     gpu: Option<Gpu>,
 }
 
@@ -50,11 +61,13 @@ impl Scene {
             self.origin = mesh.positions.first().map(|&p| DVec3::from(p).round());
         }
         self.elements.insert(id, mesh);
+        self.geometry_revision += 1;
         self.changed();
     }
 
     pub fn remove(&mut self, id: ElementId) {
         if self.elements.remove(&id).is_some() {
+            self.geometry_revision += 1;
             self.changed();
         }
     }
@@ -70,6 +83,56 @@ impl Scene {
         for &id in &regenerated.removed {
             self.remove(id);
         }
+    }
+
+    /// Shows these elements selected.
+    pub fn set_selected(&mut self, selected: &BTreeSet<ElementId>) {
+        if self.selected != *selected {
+            self.selected.clone_from(selected);
+            self.changed();
+        }
+    }
+
+    pub fn selected(&self) -> &BTreeSet<ElementId> {
+        &self.selected
+    }
+
+    /// Shows the element a click would select.
+    pub fn set_prehighlight(&mut self, id: Option<ElementId>) {
+        if self.prehighlight != id {
+            self.prehighlight = id;
+            self.changed();
+        }
+    }
+
+    pub fn prehighlight(&self) -> Option<ElementId> {
+        self.prehighlight
+    }
+
+    /// The box round the selected elements that show, `None` if none do.
+    pub fn selection_bounds(&self) -> Option<Bounds> {
+        self.selected
+            .iter()
+            .filter_map(|id| self.elements.get(id)?.bounds())
+            .map(|(min, max)| Bounds::new(min, max))
+            .reduce(Bounds::union)
+    }
+
+    /// Every element's mesh, by element.
+    pub fn meshes(&self) -> impl Iterator<Item = (ElementId, &Arc<Mesh>)> {
+        self.elements.iter().map(|(&id, mesh)| (id, mesh))
+    }
+
+    /// The element's colours: selected, about to be, or neither.
+    fn colors(&self, id: ElementId) -> ElementColors {
+        let (face, edge) = if self.selected.contains(&id) {
+            (SELECTED_FACE, SELECTED_EDGE)
+        } else if self.prehighlight == Some(id) {
+            (FACE, PREHIGHLIGHT_EDGE)
+        } else {
+            (FACE, EDGE)
+        };
+        ElementColors { face, edge }
     }
 
     /// The element's mesh, if it shows.
@@ -100,6 +163,12 @@ impl Scene {
         self.revision
     }
 
+    /// Like [`revision`](Scene::revision), but only for the meshes, not
+    /// their highlighting.
+    pub fn geometry_revision(&self) -> u64 {
+        self.geometry_revision
+    }
+
     pub(super) fn origin(&self) -> DVec3 {
         self.origin.unwrap_or_default()
     }
@@ -111,6 +180,7 @@ impl Scene {
     /// Uploads what changed since the last call. Call it once a frame,
     /// before the views draw.
     pub fn prepare(&mut self, rs: &RenderState) {
+        let colors: Vec<_> = self.elements.keys().map(|&id| self.colors(id)).collect();
         let gpu = self.gpu.get_or_insert_with(|| Gpu::new(&rs.device));
         if gpu.revision == Some(self.revision) {
             return;
@@ -121,12 +191,14 @@ impl Scene {
                 .get(id)
                 .is_some_and(|m| Arc::ptr_eq(m, &uploaded.mesh))
         });
-        for (&id, mesh) in &self.elements {
-            gpu.meshes
+        for (slot, (&id, mesh)) in self.elements.iter().enumerate() {
+            let uploaded = gpu
+                .meshes
                 .entry(id)
                 .or_insert_with(|| GpuMesh::new(&rs.device, mesh.clone(), origin));
+            uploaded.slot = slot as u32;
         }
-        gpu.write_elements(rs, self.elements.len());
+        gpu.write_elements(rs, &colors);
         gpu.revision = Some(self.revision);
     }
 
@@ -171,6 +243,8 @@ pub(super) struct GpuMesh {
     face_vertices: u32,
     edges: wgpu::Buffer,
     edge_vertices: u32,
+    /// Where its colours are in the elements' buffer.
+    slot: u32,
 }
 
 impl Gpu {
@@ -266,8 +340,8 @@ impl Gpu {
 
     /// Writes every element's colours, growing the buffer if it's too
     /// small.
-    fn write_elements(&mut self, rs: &RenderState, count: usize) {
-        let count = count.max(1);
+    fn write_elements(&mut self, rs: &RenderState, colors: &[ElementColors]) {
+        let count = colors.len().max(1);
         if self.elements.as_ref().is_none_or(|(_, _, n)| *n < count) {
             let capacity = count.next_power_of_two();
             let buffer = rs.device.create_buffer(&wgpu::BufferDescriptor {
@@ -292,12 +366,8 @@ impl Gpu {
         }
         let (buffer, _, capacity) = self.elements.as_ref().expect("just made");
         let mut bytes = vec![0u8; self.stride as usize * capacity];
-        let colors = ElementColors {
-            face: FACE,
-            edge: EDGE,
-        };
-        for slot in bytes.chunks_mut(self.stride as usize) {
-            slot[..size_of::<ElementColors>()].copy_from_slice(bytemuck::bytes_of(&colors));
+        for (slot, colors) in bytes.chunks_mut(self.stride as usize).zip(colors) {
+            slot[..size_of::<ElementColors>()].copy_from_slice(bytemuck::bytes_of(colors));
         }
         rs.queue.write_buffer(buffer, 0, &bytes);
     }
@@ -308,9 +378,6 @@ impl Gpu {
             return;
         };
         pass.set_pipeline(if edges { &self.edges } else { &self.faces });
-        // Every element has the same colours until selection (#30) changes
-        // them, so each uses the first slot.
-        pass.set_bind_group(1, group, &[0]);
         for mesh in self.meshes.values() {
             let (buffer, count) = if edges {
                 (&mesh.edges, mesh.edge_vertices)
@@ -318,6 +385,8 @@ impl Gpu {
                 (&mesh.faces, mesh.face_vertices)
             };
             if count > 0 {
+                let offset = u64::from(mesh.slot) * self.stride;
+                pass.set_bind_group(1, group, &[offset as u32]);
                 pass.set_vertex_buffer(0, buffer.slice(..));
                 pass.draw(0..count, 0..1);
             }
@@ -346,6 +415,7 @@ impl GpuMesh {
             face_vertices: faces.len() as u32,
             edges: buffer("3D view edges", &edges),
             edge_vertices: edges.len() as u32,
+            slot: 0,
         }
     }
 }

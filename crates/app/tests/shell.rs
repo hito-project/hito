@@ -14,9 +14,11 @@ use egui_kittest::{Harness, HarnessBuilder};
 use hito::Shell;
 use hito::command::{Command, Input, Next, Prompt, Run, Tool, Wants};
 use hito::i18n::Locale;
+use hito::selection::Mode;
 use hito::shell::{Tab, Theme, ViewId};
 use hito::viewport::Navigation;
-use hito_core::{Dimension, Model, ModelKind, StoreError, Transaction};
+use hito_core::{Dimension, Element, Model, ModelKind, StoreError, Transaction};
+use hito_structural::level;
 
 /// kittest runs one step per input event. Short steps keep the two clicks
 /// of a double-click within egui's double-click delay.
@@ -539,4 +541,61 @@ fn esc_cancels_a_command() {
     click(&mut h, "3D View");
     assert_eq!(prompt(&h), None);
     assert_eq!(h.state().layout().open_views().len(), 2);
+}
+
+/// A tool for the tests: asks for an elevation and adds a level there.
+struct AddLevel;
+
+impl Tool for AddLevel {
+    fn prompt(&self) -> Prompt {
+        Prompt {
+            message: "probe-length",
+            wants: Wants::Quantity(Dimension::LENGTH),
+        }
+    }
+
+    fn input(&mut self, input: Input) -> Next {
+        match input {
+            Input::Quantity(_) => Next::Done,
+            Input::Point(_) => Next::Ask,
+        }
+    }
+
+    fn commit(self: Box<Self>, tx: &mut Transaction<'_>) -> Result<(), StoreError> {
+        let model = tx.insert_model(Model::new(ModelKind::Physical))?;
+        let level = Element::new(hito_structural::class(level::LEVEL), model)
+            .with_property(level::NAME, "Primer piso")
+            .with_property(level::ELEVATION, 3.2);
+        tx.insert(level).map(drop)
+    }
+}
+
+/// The properties panel shows the selection, shared with every view, and
+/// Esc clears it, as in Revit.
+#[test]
+fn the_properties_show_the_selection_and_esc_clears_it() {
+    let mut h = window();
+    let add_level = Command {
+        name: "ADDLEVEL",
+        label: "probe",
+        alias: None,
+        run: Run::Tool(|| Box::new(AddLevel)),
+    };
+    let registry = h.state_mut().commands_mut().registry_mut();
+    registry.register(add_level).unwrap();
+    command_line(&mut h, "ADDLEVEL");
+    command_line(&mut h, "3.2");
+    let id = h.state().project().elements().next().expect("a level").id();
+
+    h.state_mut().select([id], Mode::Replace);
+    h.run_steps(2);
+    for label in ["Level", "Elevation", "3.2", "Primer piso"] {
+        assert!(shows(&h, label), "{label:?} in the properties");
+    }
+    assert!(!shows(&h, "View Name"));
+
+    h.key_press(egui::Key::Escape);
+    h.run_steps(2);
+    assert!(h.state().selection().is_empty());
+    assert!(shows(&h, "View Name"), "back to the view's properties");
 }

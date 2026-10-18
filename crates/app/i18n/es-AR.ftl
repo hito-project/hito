@@ -75,6 +75,8 @@ browser-none = (ninguno)
 
 properties-no-view = No hay ninguna vista abierta
 properties-view-name = Nombre de vista
+# Varios elementos seleccionados de distintas clases, como los muestra Revit.
+properties-common = Comunes ({ $count })
 
 ## Vistas
 
