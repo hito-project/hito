@@ -1574,6 +1574,7 @@ dependencies = [
  "egui_kittest",
  "fluent-bundle",
  "glam",
+ "hito-architectural",
  "hito-core",
  "hito-geometry",
  "hito-manifold",
@@ -1583,6 +1584,15 @@ dependencies = [
  "icu_normalizer",
  "serde",
  "unic-langid",
+]
+
+[[package]]
+name = "hito-architectural"
+version = "0.0.0"
+dependencies = [
+ "hito-core",
+ "hito-geometry",
+ "hito-structural",
 ]
 
 [[package]]
@@ -1612,8 +1622,10 @@ dependencies = [
 name = "hito-manifold"
 version = "0.0.0"
 dependencies = [
+ "hito-architectural",
  "hito-core",
  "hito-geometry",
+ "hito-structural",
  "manifold-csg",
 ]
 

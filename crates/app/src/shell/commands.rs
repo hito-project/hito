@@ -6,18 +6,19 @@
 
 use super::Action;
 use super::layout::Tab;
-use crate::command::{Command, Registry, Run};
+use crate::command::{Command, Registry, Run, Tool};
+use crate::tools;
 
 /// Revit's ribbon commands for M1 (#33 to #41, #36, #163), which come with
 /// their stories, and the window commands, which work now.
 const COMMANDS: &[Command] = &[
     unavailable("BEAM", "command-beam", Some("BM")),
-    unavailable("WALL", "command-wall", Some("WA")),
+    tool("WALL", "command-wall", Some("WA"), tools::wall::start),
     unavailable("COLUMN", "command-column", Some("CL")),
     unavailable("SLAB", "command-slab", Some("SB")),
     unavailable("ISOLATEDFOOTING", "command-isolated-footing", None),
-    unavailable("LEVEL", "command-level", Some("LL")),
-    unavailable("GRID", "command-grid", Some("GR")),
+    tool("LEVEL", "command-level", Some("LL"), tools::level::start),
+    tool("GRID", "command-grid", Some("GR"), tools::grid::start),
     unavailable("MATERIALS", "command-materials", None),
     unavailable("UNITS", "command-project-units", Some("UN")),
     window("VIEW3D", "action-new-3d-view", None, Action::New3dView),
@@ -64,6 +65,20 @@ const fn unavailable(
         label,
         alias,
         run: Run::Unavailable,
+    }
+}
+
+const fn tool(
+    name: &'static str,
+    label: &'static str,
+    alias: Option<&'static str>,
+    start: fn() -> Box<dyn Tool>,
+) -> Command {
+    Command {
+        name,
+        label,
+        alias,
+        run: Run::Tool(start),
     }
 }
 

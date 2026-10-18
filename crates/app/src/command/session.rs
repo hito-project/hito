@@ -1,8 +1,8 @@
 //! Running commands: the command line's state between keystrokes.
 
-use hito_core::{ChangeSet, ElementStore};
+use hito_core::{ChangeSet, ElementId, ElementStore};
 
-use super::{Command, InputFormat, Next, Prompt, Registry, Run, Tool};
+use super::{Command, Context, InputFormat, Next, Prompt, Registry, Run, Tool};
 use crate::i18n::I18n;
 use crate::shell::Action;
 
@@ -12,6 +12,8 @@ pub struct Session {
     registry: Registry,
     running: Option<Running>,
     message: Option<String>,
+    /// The level tools place elements on, given to them when they start.
+    level: Option<ElementId>,
 }
 
 struct Running {
@@ -38,7 +40,13 @@ impl Session {
             registry,
             running: None,
             message: None,
+            level: None,
         }
+    }
+
+    /// Sets the level tools started from now on place elements on.
+    pub fn set_level(&mut self, level: Option<ElementId>) {
+        self.level = level;
     }
 
     pub fn registry(&self) -> &Registry {
@@ -81,7 +89,7 @@ impl Session {
             Run::Tool(start) => {
                 self.running = Some(Running {
                     command,
-                    tool: start(),
+                    tool: started(start, i18n, self.level),
                 });
                 Outcome::Nothing
             }
@@ -137,17 +145,27 @@ impl Session {
                 self.message = Some(i18n.tr(message));
                 Outcome::Nothing
             }
-            Next::Done => {
+            next @ (Next::Done | Next::Repeat) => {
                 let Running { command, tool } = self.running.take().expect("running");
+                let mut next_tool = match next {
+                    Next::Repeat => tool.after_commit(),
+                    _ => None,
+                };
                 let mut tx = store.transaction_for(hito_core::Command::new(command.name));
-                match tool.commit(&mut tx).and_then(|()| tx.commit()) {
+                let outcome = match tool.commit(&mut tx).and_then(|()| tx.commit()) {
                     Ok(changes) => Outcome::Committed(changes),
                     Err(_) => {
+                        next_tool = None;
                         let label = i18n.tr(command.label);
                         self.message = Some(i18n.tr_with("command-failed", "command", label));
                         Outcome::Nothing
                     }
+                };
+                if let (Next::Repeat, Run::Tool(start)) = (next, command.run) {
+                    let tool = next_tool.unwrap_or_else(|| started(start, i18n, self.level));
+                    self.running = Some(Running { command, tool });
                 }
+                outcome
             }
         }
     }
@@ -161,6 +179,13 @@ impl Session {
             self.message = None;
         }
     }
+}
+
+/// A new tool from its command's factory, started.
+fn started(start: fn() -> Box<dyn Tool>, i18n: &I18n, level: Option<ElementId>) -> Box<dyn Tool> {
+    let mut tool = start();
+    tool.start(&Context { i18n, level });
+    tool
 }
 
 #[cfg(test)]
@@ -207,6 +232,39 @@ mod tests {
         }
     }
 
+    /// Asks for a length, adds a model for each, and stays active. Checks
+    /// it was started in English.
+    #[derive(Default)]
+    struct Stamp {
+        started_in: Option<Locale>,
+    }
+
+    impl Tool for Stamp {
+        fn start(&mut self, context: &Context<'_>) {
+            self.started_in = Some(context.i18n.locale());
+        }
+
+        fn prompt(&self) -> Prompt {
+            Prompt {
+                message: "stamp-length",
+                wants: Wants::Quantity(Dimension::LENGTH),
+            }
+        }
+
+        fn input(&mut self, _: Input) -> Next {
+            Next::Repeat
+        }
+
+        fn commit(self: Box<Self>, tx: &mut Transaction<'_>) -> Result<(), StoreError> {
+            assert_eq!(
+                self.started_in,
+                Some(Locale::En),
+                "started before committing"
+            );
+            tx.insert_model(Model::new(ModelKind::Physical)).map(drop)
+        }
+    }
+
     struct Fixture {
         session: Session,
         i18n: I18n,
@@ -223,6 +281,12 @@ mod tests {
                     "command-beam",
                     Some("PR"),
                     Run::Tool(|| Box::new(Probe::default())),
+                ),
+                (
+                    "STAMP",
+                    "command-level",
+                    None,
+                    Run::Tool(|| Box::new(Stamp::default())),
                 ),
                 ("COLUMN", "command-column", Some("CL"), Run::Unavailable),
                 (
@@ -303,6 +367,25 @@ mod tests {
         let outcome = f.session.start("TILEVIEWS", &f.i18n);
         assert!(matches!(outcome, Outcome::Window(Action::TileViews)));
         assert!(f.session.running().is_none());
+    }
+
+    #[test]
+    fn a_repeating_tool_commits_each_element_and_stays_active() {
+        let mut f = Fixture::new();
+        f.session.start("STAMP", &f.i18n);
+        for n in 1..=2 {
+            let Outcome::Committed(changes) = f.enter("3 m") else {
+                panic!("committed");
+            };
+            assert_eq!(changes.command().map(|c| c.name()), Some("STAMP"));
+            assert_eq!(changes.models().len(), 1, "one element per transaction");
+            assert_eq!(f.store.models().count(), n);
+            assert_eq!(f.session.running().map(|c| c.name), Some("STAMP"));
+        }
+        // Esc ends it, and keeps what was committed.
+        f.session.cancel(&f.i18n);
+        assert!(f.session.running().is_none());
+        assert_eq!(f.store.models().count(), 2);
     }
 
     #[test]

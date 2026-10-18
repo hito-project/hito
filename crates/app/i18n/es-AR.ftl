@@ -46,6 +46,30 @@ input-empty = Escribir una respuesta, o Esc para cancelar
 input-not-a-point = Ingresar un punto como x,y o x,y,z, por ejemplo 3.5,2
 input-not-a-value = Ingresar un valor, como 3.5 o 350 cm
 
+## Niveles
+
+# Los niveles nuevos se llaman con esta palabra y un número, como "Nivel 3".
+# Los nombres son datos: no cambian al cambiar el idioma.
+level-name = Nivel
+level-prompt-elevation = Ingresar la elevación del nuevo nivel, como 3.5 o 350 cm
+level-name-empty = El nivel necesita un nombre
+level-name-taken = Ya hay otro nivel llamado { $name }
+
+# La herramienta Muro (WA). Los puntos se escriben hasta que las vistas en planta permitan marcarlos.
+wall-prompt-start = Indicar el punto inicial del muro, como 0,0
+wall-prompt-next = Indicar el punto siguiente, como 5,0, @5,0 o @5<90. Esc termina la cadena
+wall-same-point = El punto siguiente tiene que ser distinto del anterior
+# El tipo de muro con el que empieza todo proyecto nuevo. Desde ahí es un dato.
+wall-type-generic = Genérico - 200 mm
+
+## Ejes
+
+grid-prompt-start = Ingresar el punto inicial del eje, como 0,0
+grid-prompt-end = Ingresar el punto final del eje, como 0,10
+grid-points-differ = El punto final debe ser distinto del inicial
+grid-name-empty = El eje necesita un rótulo
+grid-name-taken = Ya hay otro eje con el rótulo { $name }
+
 ## Acciones de ventanas
 
 action-new-3d-view = Vista 3D
@@ -70,6 +94,7 @@ panel-properties = Propiedades
 browser-views = Vistas (todas)
 browser-3d-views = Vistas 3D
 browser-levels = Niveles
+browser-grids = Ejes
 browser-element-types = Tipos de elemento
 browser-none = (ninguno)
 
@@ -77,6 +102,27 @@ properties-no-view = No hay ninguna vista abierta
 properties-view-name = Nombre de vista
 # Varios elementos seleccionados de distintas clases, como los muestra Revit.
 properties-common = Comunes ({ $count })
+properties-kind-level = Nivel
+properties-kind-grid = Eje
+properties-label = Rótulo
+properties-name = Nombre
+properties-elevation = Elevación
+properties-edit-failed = No se pudo hacer el cambio
+
+## Eliminar elementos
+
+action-delete = Eliminar
+action-cancel = Cancelar
+# Revit avisa antes de eliminar elementos de los que dependen otros.
+delete-also = { $count ->
+    [one] Al eliminar { $name } también se elimina 1 elemento asociado.
+   *[other] Al eliminar { $name } también se eliminan { $count } elementos asociados.
+}
+# El mismo aviso con varios elementos seleccionados.
+delete-also-selected = { $count ->
+    [one] Al eliminar los { $selected } elementos seleccionados también se elimina 1 elemento asociado.
+   *[other] Al eliminar los { $selected } elementos seleccionados también se eliminan { $count } elementos asociados.
+}
 
 ## Vistas
 

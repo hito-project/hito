@@ -36,6 +36,7 @@ publish = false
 [workspace.dependencies]
 hito-core = { path = "crates/core" }
 hito-geometry = { path = "crates/geometry" }
+hito-architectural = { path = "crates/domains/architectural" }
 hito-structural = { path = "crates/domains/structural" }
 hito-manifold = { path = "crates/adapters/manifold" }
 hito-storage-sqlite = { path = "crates/adapters/storage-sqlite" }

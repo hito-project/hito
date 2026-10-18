@@ -46,6 +46,30 @@ input-empty = Type an answer, or press Esc to cancel
 input-not-a-point = Enter a point as x,y or x,y,z, such as 3.5,2
 input-not-a-value = Enter a value, such as 3.5 or 350 cm
 
+## Levels
+
+# New levels are named this word and a number, such as "Level 3". Names are
+# data: they don't change when the language does.
+level-name = Level
+level-prompt-elevation = Enter the new level's elevation, such as 3.5 or 350 cm
+level-name-empty = A level needs a name
+level-name-taken = Another level is already called { $name }
+
+# The Wall tool (WA). Points are typed until plan views let them be clicked.
+wall-prompt-start = Specify the wall's start point, such as 0,0
+wall-prompt-next = Specify the next point, such as 5,0, @5,0 or @5<90. Esc ends the chain
+wall-same-point = The next point must differ from the last one
+# The wall type every new project starts with. It's data from then on.
+wall-type-generic = Generic - 200 mm
+
+## Grids
+
+grid-prompt-start = Enter the grid's start point, such as 0,0
+grid-prompt-end = Enter the grid's end point, such as 0,10
+grid-points-differ = The end point must differ from the start point
+grid-name-empty = A grid needs a label
+grid-name-taken = Another grid is already labelled { $name }
+
 ## Window actions
 
 action-new-3d-view = 3D View
@@ -70,6 +94,7 @@ panel-properties = Properties
 browser-views = Views (all)
 browser-3d-views = 3D Views
 browser-levels = Levels
+browser-grids = Grids
 browser-element-types = Element types
 browser-none = (none)
 
@@ -77,6 +102,27 @@ properties-no-view = No view is open
 properties-view-name = View Name
 # Several selected elements of different classes, as Revit shows them.
 properties-common = Common ({ $count })
+properties-kind-level = Level
+properties-kind-grid = Grid
+properties-label = Label
+properties-name = Name
+properties-elevation = Elevation
+properties-edit-failed = The change could not be made
+
+## Deleting elements
+
+action-delete = Delete
+action-cancel = Cancel
+# Revit warns before deleting elements that others depend on.
+delete-also = { $count ->
+    [one] Deleting { $name } also deletes 1 element attached to it.
+   *[other] Deleting { $name } also deletes { $count } elements attached to it.
+}
+# The same warning when several elements are selected.
+delete-also-selected = { $count ->
+    [one] Deleting the { $selected } selected elements also deletes 1 element attached to them.
+   *[other] Deleting the { $selected } selected elements also deletes { $count } elements attached to them.
+}
 
 ## Views
 

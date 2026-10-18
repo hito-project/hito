@@ -17,8 +17,7 @@ use hito::i18n::Locale;
 use hito::selection::Mode;
 use hito::shell::{Tab, Theme, ViewId};
 use hito::viewport::Navigation;
-use hito_core::{Dimension, Element, Model, ModelKind, StoreError, Transaction};
-use hito_structural::level;
+use hito_core::{Dimension, Model, ModelKind, StoreError, Transaction};
 
 /// kittest runs one step per input event. Short steps keep the two clicks
 /// of a double-click within egui's double-click delay.
@@ -505,7 +504,11 @@ fn commands_prompt_on_the_command_line() {
     h.key_press(egui::Key::Enter);
     h.run_steps(2);
     assert_eq!(prompt(&h), None);
-    assert_eq!(h.state().project().models().count(), 1);
+    assert_eq!(
+        h.state().project().models().count(),
+        3,
+        "the probe added a model to the new project's physical and definition models"
+    );
 }
 
 /// The command line reads numbers as AutoCAD does in every language, even
@@ -520,7 +523,11 @@ fn input_uses_a_decimal_point_in_spanish_too() {
     assert_eq!(prompt(&h), Some("probe-length"), "a comma isn't a decimal");
     command_line(&mut h, "1.5 m");
     assert_eq!(prompt(&h), None);
-    assert_eq!(h.state().project().models().count(), 1);
+    assert_eq!(
+        h.state().project().models().count(),
+        3,
+        "the probe added a model to the new project's physical and definition models"
+    );
 }
 
 #[test]
@@ -533,7 +540,11 @@ fn esc_cancels_a_command() {
     h.run_steps(2);
     assert_eq!(prompt(&h), None);
     assert_eq!(h.state().commands().message(), Some("*Cancel*"));
-    assert_eq!(h.state().project().models().count(), 0);
+    assert_eq!(
+        h.state().project().models().count(),
+        2,
+        "only the new project's physical and definition models"
+    );
 
     // A ribbon button cancels the running command and runs its own.
     command_line(&mut h, "probe");
@@ -543,59 +554,274 @@ fn esc_cancels_a_command() {
     assert_eq!(h.state().layout().open_views().len(), 2);
 }
 
-/// A tool for the tests: asks for an elevation and adds a level there.
-struct AddLevel;
-
-impl Tool for AddLevel {
-    fn prompt(&self) -> Prompt {
-        Prompt {
-            message: "probe-length",
-            wants: Wants::Quantity(Dimension::LENGTH),
-        }
-    }
-
-    fn input(&mut self, input: Input) -> Next {
-        match input {
-            Input::Quantity(_) => Next::Done,
-            Input::Point(_) => Next::Ask,
-        }
-    }
-
-    fn commit(self: Box<Self>, tx: &mut Transaction<'_>) -> Result<(), StoreError> {
-        let model = tx.insert_model(Model::new(ModelKind::Physical))?;
-        let level = Element::new(hito_structural::class(level::LEVEL), model)
-            .with_property(level::NAME, "Primer piso")
-            .with_property(level::ELEVATION, 3.2);
-        tx.insert(level).map(drop)
-    }
-}
-
-/// The properties panel shows the selection, shared with every view, and
-/// Esc clears it, as in Revit.
+/// The browser picks into the selection the views share (#30). The
+/// properties panel edits one level, shows several read-only, as Revit
+/// does, and Esc clears the selection.
 #[test]
 fn the_properties_show_the_selection_and_esc_clears_it() {
     let mut h = window();
-    let add_level = Command {
-        name: "ADDLEVEL",
-        label: "probe",
-        alias: None,
-        run: Run::Tool(|| Box::new(AddLevel)),
-    };
-    let registry = h.state_mut().commands_mut().registry_mut();
-    registry.register(add_level).unwrap();
-    command_line(&mut h, "ADDLEVEL");
-    command_line(&mut h, "3.2");
-    let id = h.state().project().elements().next().expect("a level").id();
-
-    h.state_mut().select([id], Mode::Replace);
+    add_level(&mut h, "3");
+    h.get_by_label("Level 1").click();
     h.run_steps(2);
-    for label in ["Level", "Elevation", "3.2", "Primer piso"] {
-        assert!(shows(&h, label), "{label:?} in the properties");
-    }
-    assert!(!shows(&h, "View Name"));
+    assert_eq!(h.state().selection().len(), 1, "the browser selects");
+    assert!(
+        h.query_by_role_and_label(Role::TextInput, "Elevation")
+            .is_some()
+    );
+
+    // Ctrl adds, as in the views.
+    let second = level_id(&h, "Level 2");
+    h.state_mut().select([second], Mode::Add);
+    h.run_steps(2);
+    assert_eq!(h.state().selection().len(), 2);
+    assert!(shows(&h, "Level (2)"), "several, read-only");
+    assert!(
+        h.query_by_role_and_label(Role::TextInput, "Elevation")
+            .is_none()
+    );
 
     h.key_press(egui::Key::Escape);
     h.run_steps(2);
     assert!(h.state().selection().is_empty());
     assert!(shows(&h, "View Name"), "back to the view's properties");
+}
+
+/// The ID of the level called `name`.
+fn level_id(h: &Harness<'_, Shell>, name: &str) -> hito_core::ElementId {
+    let name = hito_core::Value::Text(name.into());
+    let project = h.state().project();
+    let level = project
+        .elements()
+        .find(|e| e.properties().get(hito_structural::level::NAME) == Some(&name));
+    level.expect("the level").id()
+}
+
+/// Delete removes every selected element in one go.
+#[test]
+fn delete_removes_the_selection() {
+    let mut h = window();
+    add_level(&mut h, "3");
+    let before = h.state().project().elements().count();
+    let (first, second) = (level_id(&h, "Level 1"), level_id(&h, "Level 2"));
+    h.state_mut().select([first, second], Mode::Replace);
+    h.run_steps(1);
+    h.key_press(egui::Key::Delete);
+    h.run_steps(2);
+    let project = h.state().project();
+    assert!(project.get(first).is_none() && project.get(second).is_none());
+    assert_eq!(project.elements().count(), before - 2);
+    assert!(h.state().selection().is_empty());
+}
+
+/// The elevation of the level called `name`, if there is one.
+fn level(h: &Harness<'_, Shell>, name: &str) -> Option<f64> {
+    use hito_core::Value;
+    use hito_structural::level::{ELEVATION, NAME};
+    let project = h.state().project();
+    let name = Value::Text(name.into());
+    let level = project
+        .elements()
+        .find(|e| e.properties().get(NAME) == Some(&name))?;
+    match project.property(level.id(), ELEVATION) {
+        Some(Value::Real(elevation)) => Some(*elevation),
+        other => panic!("elevation {other:?}"),
+    }
+}
+
+/// Replaces the text of the property field labelled `label` and presses
+/// Enter.
+fn set_property(h: &mut Harness<'_, Shell>, label: &str, text: &str) {
+    h.get_by_role_and_label(Role::TextInput, label).focus();
+    h.run_steps(1);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    h.get_by_role_and_label(Role::TextInput, label)
+        .type_text(text);
+    h.run_steps(1);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(2);
+}
+
+/// Adds a level at `elevation` with the Level command, then ends it.
+fn add_level(h: &mut Harness<'_, Shell>, elevation: &str) {
+    command_line(h, "LL");
+    command_line(h, elevation);
+    h.key_press(egui::Key::Escape);
+    h.run_steps(2);
+}
+
+#[test]
+fn a_new_project_starts_with_one_level() {
+    let h = window();
+    assert_eq!(level(&h, "Level 1"), Some(0.0));
+    assert_eq!(level(&h, "Level 2"), None);
+    assert!(shows(&h, "Level 1"), "in the browser");
+}
+
+#[test]
+fn levels_are_renamed_and_moved_in_the_properties() {
+    let mut h = window();
+    add_level(&mut h, "3");
+    h.get_by_label("Level 2").click();
+    h.run_steps(2);
+    let elevation = h.get_by_role_and_label(Role::TextInput, "Elevation");
+    assert_eq!(elevation.value().as_deref(), Some("3 m"));
+
+    set_property(&mut h, "Elevation", "320 cm");
+    assert_eq!(level(&h, "Level 2"), Some(3.2));
+    set_property(&mut h, "Elevation", "three");
+    assert_eq!(level(&h, "Level 2"), Some(3.2), "not a length");
+
+    // Names are unique, as in Revit.
+    set_property(&mut h, "Name", "Level 1");
+    assert!(shows(
+        &h,
+        "Another level is already called \u{2068}Level 1\u{2069}"
+    ));
+    assert_eq!(level(&h, "Level 2"), Some(3.2));
+    set_property(&mut h, "Name", "Primer piso");
+    assert_eq!(level(&h, "Primer piso"), Some(3.2));
+    assert!(shows(&h, "Primer piso"), "the browser shows the new name");
+}
+
+#[test]
+fn levels_are_added_with_their_command_until_esc() {
+    let mut h = window();
+    h.event(egui::Event::Text("LL".into()));
+    h.run_steps(2);
+    assert_eq!(prompt(&h), Some("level-prompt-elevation"));
+    h.get_by_role(Role::TextInput).type_text("3");
+    h.key_press(egui::Key::Enter);
+    h.run_steps(2);
+    h.get_by_role(Role::TextInput).type_text("6 m");
+    h.key_press(egui::Key::Enter);
+    h.run_steps(2);
+    assert_eq!(prompt(&h), Some("level-prompt-elevation"), "still active");
+    h.key_press(egui::Key::Escape);
+    h.run_steps(2);
+    assert_eq!(prompt(&h), None);
+    // The first new level after the default one is Level 2.
+    assert_eq!(level(&h, "Level 2"), Some(3.0));
+    assert_eq!(level(&h, "Level 3"), Some(6.0));
+    assert!(shows(&h, "Level 3"), "listed in the browser");
+}
+
+#[test]
+fn levels_are_deleted_with_the_delete_key_or_their_menu() {
+    let mut h = window();
+    add_level(&mut h, "3");
+    h.get_by_label("Level 2").click();
+    h.run_steps(2);
+    h.key_press(egui::Key::Delete);
+    h.run_steps(2);
+    assert_eq!(level(&h, "Level 2"), None);
+    assert!(!shows(&h, "Level 2"));
+
+    h.get_by_label("Level 1").click_secondary();
+    h.run_steps(2);
+    click(&mut h, "Delete");
+    assert_eq!(level(&h, "Level 1"), None);
+    let empty = h.query_all_by_label("(none)").count();
+    assert_eq!(empty, 2, "no levels left, and no grids");
+}
+
+/// The line of the grid labelled `label`, if there is one.
+fn grid(h: &Harness<'_, Shell>, label: &str) -> Option<hito_structural::grid::GridLine> {
+    let project = h.state().project();
+    let id = hito_structural::grid::find(&project.view(), label)?;
+    hito_structural::grid::GridLine::of(&project.view(), id)
+}
+
+/// Types `text` in the focused command line and presses Enter.
+fn answer(h: &mut Harness<'_, Shell>, text: &str) {
+    h.get_by_role(Role::TextInput).type_text(text);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(2);
+}
+
+#[test]
+fn grids_are_drawn_with_their_command_and_labelled_automatically() {
+    use hito_structural::grid::GridLine;
+    let mut h = window();
+    assert!(shows(&h, "Grids"), "the browser lists grids");
+    h.event(egui::Event::Text("GR".into()));
+    h.run_steps(2);
+    assert_eq!(prompt(&h), Some("grid-prompt-start"));
+    answer(&mut h, "0,0");
+    assert_eq!(prompt(&h), Some("grid-prompt-end"));
+    answer(&mut h, "0,10");
+    answer(&mut h, "6,0");
+    answer(&mut h, "6,10");
+    assert_eq!(prompt(&h), Some("grid-prompt-start"), "still active");
+    h.key_press(egui::Key::Escape);
+    h.run_steps(2);
+
+    assert_eq!(grid(&h, "1"), Some(GridLine::new([0.0, 0.0], [0.0, 10.0])));
+    assert_eq!(grid(&h, "2"), Some(GridLine::new([6.0, 0.0], [6.0, 10.0])));
+}
+
+#[test]
+fn grid_labels_are_edited_in_the_properties_and_grids_deleted() {
+    let mut h = window();
+    command_line(&mut h, "GR");
+    for point in ["0,0", "0,10", "6,0", "6,10"] {
+        answer(&mut h, point);
+    }
+    h.key_press(egui::Key::Escape);
+    h.run_steps(2);
+
+    h.get_by_label("1").click();
+    h.run_steps(2);
+    assert!(shows(&h, "Grid"), "the properties show a grid");
+    set_property(&mut h, "Label", "A");
+    assert!(grid(&h, "A").is_some() && grid(&h, "1").is_none());
+    // Labels are unique, as in Revit.
+    h.get_by_label("2").click();
+    h.run_steps(2);
+    set_property(&mut h, "Label", "A");
+    assert!(shows(
+        &h,
+        "Another grid is already labelled \u{2068}A\u{2069}"
+    ));
+    assert!(grid(&h, "2").is_some());
+
+    h.key_press(egui::Key::Delete);
+    h.run_steps(2);
+    assert!(grid(&h, "2").is_none());
+    assert!(grid(&h, "A").is_some());
+}
+
+/// The walls in the project, oldest first.
+fn walls(h: &Harness<'_, Shell>) -> Vec<hito_core::ElementId> {
+    let project = h.state().project();
+    let class = hito_architectural::class(hito_architectural::wall::WALL);
+    let mut walls: Vec<_> = project
+        .elements()
+        .filter(|e| project.registry().is_a(e.class(), &class))
+        .map(|e| e.id())
+        .collect();
+    walls.sort();
+    walls
+}
+
+#[test]
+fn walls_are_drawn_as_a_chain_with_typed_lengths() {
+    let mut h = window();
+    command_line(&mut h, "WA");
+    assert_eq!(prompt(&h), Some("wall-prompt-start"));
+    command_line(&mut h, "0,0");
+    command_line(&mut h, "@5<0");
+    command_line(&mut h, "@4<90");
+    assert_eq!(prompt(&h), Some("wall-prompt-next"), "still drawing");
+    h.key_press(egui::Key::Escape);
+    h.run_steps(2);
+    assert_eq!(prompt(&h), None);
+
+    let walls = walls(&h);
+    assert_eq!(walls.len(), 2);
+    let view = h.state().project().view();
+    let (_, end) = hito_architectural::wall::line(&view, walls[1]).unwrap();
+    assert!((end[0] - 5.0).abs() < 1e-9 && (end[1] - 4.0).abs() < 1e-9);
+    let corner = hito_architectural::footprint::End::End;
+    let joined = hito_architectural::join::joined_at(&view, walls[0], corner);
+    assert_eq!(joined, [walls[1]], "the corner joined");
 }
