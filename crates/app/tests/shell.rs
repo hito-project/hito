@@ -825,3 +825,23 @@ fn walls_are_drawn_as_a_chain_with_typed_lengths() {
     let joined = hito_architectural::join::joined_at(&view, walls[0], corner);
     assert_eq!(joined, [walls[1]], "the corner joined");
 }
+
+#[test]
+fn drawn_walls_show_in_the_3d_view() {
+    let mut h = window();
+    command_line(&mut h, "WA");
+    command_line(&mut h, "0,0");
+    command_line(&mut h, "@5<0");
+    command_line(&mut h, "@4<90");
+    h.key_press(egui::Key::Escape);
+    h.run_steps(2);
+
+    let walls = walls(&h);
+    assert_eq!(walls.len(), 2);
+    for wall in walls {
+        assert!(
+            h.state().scene().mesh(wall).is_some(),
+            "a mesh for {wall:?}"
+        );
+    }
+}
