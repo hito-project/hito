@@ -78,6 +78,7 @@ impl Shell {
             .unwrap_or_default();
         let mut schemas = SchemaRegistry::new();
         hito_structural::register(&mut schemas).expect("the structural schema registers");
+        hito_architectural::register(&mut schemas).expect("the architectural schema registers");
         let i18n = I18n::new(locale);
         let project = project::new_project(schemas, &i18n);
         Self {
@@ -131,6 +132,7 @@ impl Shell {
 
     /// Runs the command called `name`, as its ribbon button does.
     pub fn run(&mut self, name: &str) {
+        self.commands.set_level(self.active_level());
         let outcome = self.commands.start(name, &self.i18n);
         self.follow(outcome);
     }
@@ -157,6 +159,7 @@ impl Shell {
     }
 
     fn enter(&mut self, text: &str) {
+        self.commands.set_level(self.active_level());
         let outcome = self
             .commands
             .enter(text, &self.i18n, &self.input, &mut self.project);
@@ -170,6 +173,17 @@ impl Shell {
             // Undo and redo (#19) will keep the change set as one step.
             Outcome::Committed(_changes) => {}
         }
+    }
+
+    /// The level placement tools put elements on: the level picked in the
+    /// project browser, if one is. Plan views (#183) will make it the
+    /// active view's level.
+    fn active_level(&self) -> Option<ElementId> {
+        let level = hito_structural::class(hito_structural::level::LEVEL);
+        let registry = self.project.registry();
+        let picked = self.elements.selected()?;
+        let element = self.project.get(picked)?;
+        registry.is_a(element.class(), &level).then_some(picked)
     }
 
     /// Makes a change the user asked for in the browser or the properties,

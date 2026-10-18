@@ -10,6 +10,7 @@ publish.workspace = true
 
 [dependencies]
 hito-core.workspace = true
+hito-architectural.workspace = true
 hito-structural.workspace = true
 hito-storage-sqlite.workspace = true
 hito-units.workspace = true

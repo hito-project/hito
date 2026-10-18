@@ -3,3 +3,4 @@
 //! and one undo step (#19).
 
 pub mod level;
+pub mod wall;

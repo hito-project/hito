@@ -55,6 +55,13 @@ level-prompt-elevation = Ingresar la elevación del nuevo nivel, como 3.5 o 350 
 level-name-empty = El nivel necesita un nombre
 level-name-taken = Ya hay otro nivel llamado { $name }
 
+# La herramienta Muro (WA). Los puntos se escriben hasta que las vistas en planta permitan marcarlos.
+wall-prompt-start = Indicar el punto inicial del muro, como 0,0
+wall-prompt-next = Indicar el punto siguiente, como 5,0, @5,0 o @5<90. Esc termina la cadena
+wall-same-point = El punto siguiente tiene que ser distinto del anterior
+# El tipo de muro con el que empieza todo proyecto nuevo. Desde ahí es un dato.
+wall-type-generic = Genérico - 200 mm
+
 ## Acciones de ventanas
 
 action-new-3d-view = Vista 3D

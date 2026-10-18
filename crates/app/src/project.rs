@@ -11,7 +11,8 @@ use crate::i18n::I18n;
 
 /// A new project: a physical model with one level at 0.00 m, named in the
 /// user's language ("Nivel 1"), so the first elements have a level to stand
-/// on. More levels are added with the Level command. The store has
+/// on, and, when the architectural schema is registered, a generic wall
+/// type. More levels are added with the Level command. The store has
 /// `schemas`, which must include the structural schema. Names are data from
 /// then on, so they don't change with the language.
 pub fn new_project(schemas: SchemaRegistry, i18n: &I18n) -> ElementStore {
@@ -22,8 +23,28 @@ pub fn new_project(schemas: SchemaRegistry, i18n: &I18n) -> ElementStore {
         .with_property(level::NAME, level_name(i18n, 1))
         .with_property(level::ELEVATION, 0.0);
     tx.insert(level).expect("the default level is valid");
+    if tx
+        .view()
+        .registry()
+        .schema_version(hito_architectural::SCHEMA)
+        .is_some()
+    {
+        generic_wall_type(&mut tx, i18n).expect("the generic wall type is valid");
+    }
     tx.commit().expect("the default level is valid");
     store
+}
+
+/// One generic wall type, 20 cm of a single structural layer, as Revit's
+/// templates start with "Generic - 200mm", so the Wall tool works in a new
+/// project. It's named in the user's language and goes in a definition
+/// model. Regional wall types come with regional packs (#167).
+fn generic_wall_type(tx: &mut Transaction<'_>, i18n: &I18n) -> Result<(), StoreError> {
+    use hito_architectural::wall_type::{self, Function, Layer};
+    let definitions = tx.insert_model(Model::new(ModelKind::Definition))?;
+    let name = i18n.tr("wall-type-generic");
+    let layers = [Layer::new(Function::Structure, 0.2)];
+    wall_type::insert(tx, definitions, &name, &layers).map(drop)
 }
 
 /// The physical model new elements go in, added if the project has none.

@@ -1566,6 +1566,7 @@ dependencies = [
  "egui_dock",
  "egui_kittest",
  "fluent-bundle",
+ "hito-architectural",
  "hito-core",
  "hito-storage-sqlite",
  "hito-structural",
