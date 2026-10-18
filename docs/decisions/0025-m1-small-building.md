@@ -1,6 +1,6 @@
 # 0025. M1 models a small building the way the founding user does: architecture, basic concrete structure and drawings
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-17
 - **Supersedes:** [0021](0021-ifc-import-in-m1.md)
 

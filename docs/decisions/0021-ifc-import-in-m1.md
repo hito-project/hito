@@ -1,6 +1,6 @@
 # 0021. M1 includes IFC import, so Revit users can switch
 
-- **Status:** Accepted
+- **Status:** Superseded by [0025](0025-m1-small-building.md)
 - **Date:** 2026-10-15
 - **Supersedes:** [0011](0011-mvp-structural-bim.md)
 

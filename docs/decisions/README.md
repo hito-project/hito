@@ -26,10 +26,10 @@ Each ADR records one decision, its context and its consequences. ADRs are never 
 | [0018](0018-hito-as-working-name.md) | HITO is a working name until the first public release; trademark conflicts in Argentina, the US and the EU | Accepted |
 | [0019](0019-dwg-and-dxf.md) | DWG and DXF: our own pure-Rust codec for the AutoCAD drawing database, DXF first, then DWG read and write; built from published specifications and permissive code only; no LibreDWG or ODA dependency | Accepted |
 | [0020](0020-rvt-rfa-through-ifc.md) | RVT and RFA: through Revit's IFC export, with a Revit add-in later for families; no direct RVT reader for now | Accepted |
-| [0021](0021-ifc-import-in-m1.md) | M1 includes IFC import: linked read-only references, native import of M1 elements, and Revit's IFC exports, so Revit users can switch | Accepted |
+| [0021](0021-ifc-import-in-m1.md) | M1 includes IFC import: linked read-only references, native import of M1 elements, and Revit's IFC exports, so Revit users can switch | Superseded by 0025 |
 | [0022](0022-ifc-reader.md) | IFC reader: our own STEP Part 21 reader next to the writer, IFC geometry in HITO through the geometry port; ifc-lite as a CI reference, not a dependency | Accepted |
 | [0023](0023-mpl-dependencies.md) | MPL-2.0 dependencies are allowed, used unmodified; bundled data files' licenses are checked too | Accepted |
 | [0024](0024-model-history.md) | Model history: a hash-chained log of change sets in the .hito file, undo that survives reopening, tiered compression, branches as layers that also serve as Design Options, merge first, full history kept | Accepted |
-| [0025](0025-m1-small-building.md) | M1 models a small building the way the founding user does: architecture, basic concrete structure and drawings; calm UI, mouse-wheel orbit, modest hardware | Proposed |
+| [0025](0025-m1-small-building.md) | M1 models a small building the way the founding user does: architecture, basic concrete structure and drawings; calm UI, mouse-wheel orbit, modest hardware | Accepted |
 
 Use [template.md](template.md) for new ADRs.
