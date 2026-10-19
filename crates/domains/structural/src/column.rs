@@ -337,6 +337,19 @@ pub(crate) fn read_section<'a>(store: &impl Read<'a>, column: ElementId) -> Opti
     section::read_section(store, store.type_of(column)?)
 }
 
+/// `point`, in plan, in the column's section axes: from its centre, turned
+/// back by its rotation.
+pub(crate) fn to_section<'a>(
+    store: &impl Read<'a>,
+    column: ElementId,
+    point: [f64; 2],
+) -> Option<[f64; 2]> {
+    let [x, y] = read_location(store, column)?;
+    let (sin, cos) = read_rotation(store, column).sin_cos();
+    let [dx, dy] = [point[0] - x, point[1] - y];
+    Some([dx * cos + dy * sin, -dx * sin + dy * cos])
+}
+
 /// The base and top elevations, read from what drives them rather than
 /// from the recomputed properties, so they're right inside a transaction
 /// before it commits.
