@@ -2,10 +2,11 @@
 //! the browser lists the levels and grids, and the properties panel edits
 //! the selected one. Each edit is one transaction, so one undo step (#19).
 //!
-//! Revit edits levels in elevation views and grids in plan views, which
-//! HITO doesn't have yet (#197, #183), so the browser is where they're
-//! picked for now. The browser picks into the one selection the 3D views
-//! share (#30), and the properties panel and Delete act on it.
+//! Revit edits levels in elevation views, which HITO doesn't have yet
+//! (#197), so the browser is where levels are picked for now; grids are
+//! also picked in plan views (#183). The browser picks into the one
+//! selection the views share (#30), and the properties panel and Delete
+//! act on it.
 
 use eframe::egui;
 use hito_core::{Dimension, ElementId, ElementStore, StoreView, Value};

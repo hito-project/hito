@@ -49,7 +49,15 @@ fn level_id(h: &Harness<'_, Shell>, name: &str) -> ElementId {
 /// Opens a level's plan from the project browser's Floor Plans, as in
 /// Revit: a double click on its name. Floor Plans start closed.
 fn open_plan(h: &mut Harness<'_, Shell>, name: &str) -> ViewId {
+    let shown = |h: &Harness<'_, Shell>| h.query_all_by_label(name).count();
+    let before = shown(h);
     h.get_by_label("Floor Plans").click();
+    h.run_steps(2);
+    if shown(h) < before {
+        // It was open, and that click closed it.
+        h.run_steps(60);
+        h.get_by_label("Floor Plans").click();
+    }
     // Let the click age, or egui counts the next two as a triple click.
     h.run_steps(60);
     // Floor Plans come before Levels in the browser.
@@ -199,4 +207,53 @@ fn walls_clicked_in_a_plan_go_on_its_level() {
     assert_eq!(walls.len(), 1);
     let view = h.state().project().view();
     assert_eq!(level::level_of(&view, walls[0]), Some(second));
+}
+
+fn selected(h: &Harness<'_, Shell>) -> Vec<ElementId> {
+    h.state().selection().ids().iter().copied().collect()
+}
+
+#[test]
+fn a_plan_draws_what_its_cut_crosses_and_selects_with_the_3d_view() {
+    let mut h = window();
+    command_line(&mut h, "LL");
+    command_line(&mut h, "3");
+    esc(&mut h);
+    let plan = open_plan(&mut h, "Level 1");
+    let none = egui::Vec2::ZERO;
+    command_line(&mut h, "GR");
+    click_at(&mut h, plan, [0.0, -2.0, 0.0], none);
+    click_at(&mut h, plan, [0.0, 6.0, 0.0], none);
+    esc(&mut h);
+    command_line(&mut h, "WA");
+    click_at(&mut h, plan, [2.0, 0.0, 0.0], none);
+    click_at(&mut h, plan, [8.0, 0.0, 0.0], none);
+    esc(&mut h);
+    let wall = walls(&h)[0];
+    assert_eq!(
+        h.state().viewport(plan).unwrap().drawn(),
+        [wall],
+        "the cut crosses the wall"
+    );
+
+    // A click on the wall selects it, in the 3D view too.
+    click_at(&mut h, plan, [5.0, 0.0, 0.0], none);
+    assert_eq!(selected(&h), [wall]);
+    assert!(h.state().scene().selected().contains(&wall), "in 3D");
+    // A click on the grid selects it, and the properties edit its label.
+    click_at(&mut h, plan, [0.0, 3.0, 0.0], egui::vec2(2.0, 0.0));
+    let grid = grid::find(&h.state().project().view(), "1").unwrap();
+    assert_eq!(selected(&h), [grid]);
+    assert!(
+        h.query_by_role_and_label(Role::TextInput, "Label")
+            .is_some()
+    );
+    // A click on nothing clears the selection.
+    click_at(&mut h, plan, [5.0, 4.0, 0.0], none);
+    assert!(selected(&h).is_empty());
+
+    // Level 2's plan cuts above the wall, which is on Level 1.
+    let upper = open_plan(&mut h, "Level 2");
+    h.run_steps(2);
+    assert!(h.state().viewport(upper).unwrap().drawn().is_empty());
 }

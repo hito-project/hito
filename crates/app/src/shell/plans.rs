@@ -20,8 +20,9 @@ pub(super) fn name(store: &ElementStore, level: ElementId) -> String {
     }
 }
 
-/// What the plan of `level` shows besides the elements: its elevation, and
-/// every grid, since grids show in every plan, as in Revit.
+/// What the plan of `level` shows besides the elements' meshes: its
+/// elevation, every grid, since grids show in every plan as in Revit, and
+/// which elements are on the level.
 pub(super) fn content(store: &ElementStore, level: ElementId) -> Plan {
     let view = store.view();
     let elevation = match view.property(level, level::ELEVATION) {
@@ -34,6 +35,11 @@ pub(super) fn content(store: &ElementStore, level: ElementId) -> Plan {
         snaps: grid::intersections(&view)
             .into_iter()
             .map(|i| i.point)
+            .collect(),
+        on_level: view
+            .elements()
+            .map(|e| e.id())
+            .filter(|&id| level::level_of(&view, id) == Some(level))
             .collect(),
     }
 }

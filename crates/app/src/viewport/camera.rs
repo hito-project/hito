@@ -163,6 +163,14 @@ impl Camera {
         self.height / 2.0 / (FIELD_OF_VIEW / 2.0).tan()
     }
 
+    /// The same view with its target at height `z`: what it shows from
+    /// straight above doesn't change, but its eye is above anything lower
+    /// than `z`, for picking in a plan view.
+    pub fn lifted(mut self, z: f64) -> Self {
+        self.target.z = z;
+        self
+    }
+
     pub fn eye(&self) -> DVec3 {
         self.target + self.backward() * self.distance()
     }
