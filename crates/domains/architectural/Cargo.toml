@@ -1,6 +1,6 @@
 [package]
 name = "hito-architectural"
-description = "The HITO architectural domain schema: walls, their types and joins."
+description = "The HITO architectural domain schema: walls, their types and joins, doors and windows."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

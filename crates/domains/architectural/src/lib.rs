@@ -1,4 +1,4 @@
-//! The architectural domain: walls for now, then doors, windows and
+//! The architectural domain: walls, doors and windows, then plain
 //! openings (ADR 0025).
 //!
 //! It depends on the core, the geometry port and the structural domain,
@@ -23,6 +23,9 @@
 //!   offsets, attachable to slabs, structural or not, and flippable
 //! - [`join`]s: walls that touch join on their own, layer by layer, and
 //!   each wall's [`footprint`] in plan
+//! - [`opening_type`]s: door and window types, fixed geometry per type
+//! - [`opening`]s: doors and windows hosted in walls, which cut their
+//!   opening in the wall
 //!
 //! Nothing here is specific to a country
 //! ([ADR 0008](https://github.com/hito-project/hito/blob/main/docs/decisions/0008-argentina-first-international-by-design.md)).
@@ -30,6 +33,8 @@
 pub mod footprint;
 mod geometry;
 pub mod join;
+pub mod opening;
+pub mod opening_type;
 pub mod plan;
 mod read;
 pub mod wall;
@@ -54,12 +59,17 @@ pub fn class(name: &str) -> ClassId {
 /// The architectural schema: every class and relationship type.
 pub fn schema() -> Schema {
     let schema = Schema::new(SCHEMA, VERSION);
-    let classes = wall_type::classes().into_iter().chain(wall::classes());
+    let classes = wall_type::classes()
+        .into_iter()
+        .chain(wall::classes())
+        .chain(opening_type::classes())
+        .chain(opening::classes());
     let schema = classes.fold(schema, Schema::class);
     let relationships = wall_type::relationships()
         .into_iter()
         .chain(wall::relationships())
-        .chain(join::relationships());
+        .chain(join::relationships())
+        .chain(opening::relationships());
     relationships.fold(schema, Schema::relationship)
 }
 
@@ -73,6 +83,8 @@ pub fn rules() -> Vec<Rule> {
     wall_type::rules()
         .into_iter()
         .chain(wall::rules())
+        .chain(opening_type::rules())
+        .chain(opening::rules())
         .collect()
 }
 

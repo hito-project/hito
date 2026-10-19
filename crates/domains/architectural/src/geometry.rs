@@ -1,11 +1,12 @@
 //! Wall geometry: each layer's outline, extruded from the wall's base to
-//! its top.
+//! its top, minus the openings its doors and windows cut. Doors and
+//! windows: their frame and their leaf or glass.
 
 use hito_geometry::{Frame, Generator, Profile, Solid};
 
 use crate::footprint;
 use crate::plan::sub;
-use crate::{class, wall};
+use crate::{class, opening, wall};
 
 /// The architectural geometry generators.
 pub(crate) fn generators() -> Vec<Generator> {
@@ -26,11 +27,23 @@ pub(crate) fn generators() -> Vec<Generator> {
                 depth: slice.top - slice.bottom,
             }));
         }
-        match parts.len() {
+        let body = match parts.len() {
             0 => None,
             1 => parts.pop(),
             _ => Some(Solid::Union(parts)),
+        }?;
+        let voids = opening::wall_voids(inputs, wall.id());
+        match voids.is_empty() {
+            true => Some(body),
+            false => Some(Solid::Difference {
+                base: Box::new(body),
+                voids,
+            }),
         }
     });
-    vec![wall]
+    let opening = Generator::new(class(opening::OPENING), |inputs, element| {
+        let o = opening::read_opening(inputs, element.id())?;
+        opening::body(&o)
+    });
+    vec![wall, opening]
 }
