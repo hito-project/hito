@@ -61,6 +61,8 @@ wall-prompt-next = Specify the next point, such as 5,0, @5,0 or @5<90. Esc ends 
 wall-same-point = The next point must differ from the last one
 # The wall type every new project starts with. It's data from then on.
 wall-type-generic = Generic - 200 mm
+# The generic concrete every new project starts with, with no strength: graded concrete comes with regional packs. It's data from then on.
+material-concrete-generic = Concrete
 
 ## Grids
 

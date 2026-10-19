@@ -61,6 +61,8 @@ wall-prompt-next = Indicar el punto siguiente, como 5,0, @5,0 o @5<90. Esc termi
 wall-same-point = El punto siguiente tiene que ser distinto del anterior
 # El tipo de muro con el que empieza todo proyecto nuevo. Desde ahí es un dato.
 wall-type-generic = Genérico - 200 mm
+# El hormigón genérico de todo proyecto nuevo, sin resistencia: los hormigones con grado vienen de los paquetes regionales. Desde ahí es un dato.
+material-concrete-generic = Hormigón
 
 ## Ejes
 
