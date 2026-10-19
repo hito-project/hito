@@ -604,9 +604,9 @@ pub(crate) fn relationships() -> [RelationshipDef; 1] {
 ///
 /// - `OpeningHost`: the door or window is in exactly one wall, has a type
 ///   and a distance along the wall.
-/// - `OpeningInWall`, a warning: it fits in its wall, along it and between
-///   its base and top. When a wall is shortened past a door, the door
-///   stays, and only what's in the wall is cut.
+/// - `OpeningInWall`: it fits in its wall, along it and between its base
+///   and top. As in Revit, a change that leaves a door or window sticking
+///   out of its wall, such as shortening the wall past it, is refused.
 /// - `OpeningOverlap`, a warning: it doesn't overlap another door or
 ///   window in the same wall.
 pub(crate) fn rules() -> Vec<Rule> {
@@ -645,8 +645,7 @@ pub(crate) fn rules() -> Vec<Rule> {
             ));
         }
         Ok(())
-    })
-    .warning();
+    });
 
     let overlap = Rule::new("OpeningOverlap", class(OPENING), |store, opening| {
         let Some(mine) = read_opening(store, opening.id()).map(|o| cut_of(&o)) else {

@@ -219,26 +219,33 @@ fn a_door_needs_one_wall_a_type_and_a_position() {
 }
 
 #[test]
-fn a_door_that_no_longer_fits_is_a_warning() {
+fn a_door_that_wouldnt_fit_its_wall_is_refused() {
     let mut p = project();
     let (door, window) = types(&mut p);
     let wall = p.wall(p.brick, [0.0, 0.0], [5.0, 0.0]);
     let d = place(&mut p, &Placement::new(door, wall, 4.0)).unwrap();
 
-    // Shortening the wall past the door doesn't block, and warns.
-    let rules = warnings(&mut p, |tx| {
-        tx.set_property(wall, wall::END_X, 4.2).unwrap()
-    });
-    assert_eq!(rules, ["OpeningInWall"]);
+    // Shortening the wall past the door is refused, as in Revit, and
+    // leaves the wall and the door as they were.
+    assert_eq!(
+        broken_rules(p.set(wall, wall::END_X, 4.2)),
+        ["OpeningInWall"]
+    );
+    assert!(close(p.real(wall, wall::END_X), 5.0));
     assert!(p.store.get(d).is_some());
+    // Shortening it up to the door's edge is fine.
+    p.set(wall, wall::END_X, 4.4).unwrap();
 
-    // A window above the top of the wall.
-    let model = p.model;
-    let rules = warnings(&mut p, |tx| {
-        let high = Placement::new(window, wall, 1.5).with_sill_height(2.5);
-        opening::insert(tx, model, &high).unwrap();
-    });
-    assert_eq!(rules, ["OpeningInWall"]);
+    // So is a door placed past the end, or a window above the wall's top.
+    let past = Placement::new(door, wall, 4.3);
+    assert_eq!(broken_rules(place(&mut p, &past)), ["OpeningInWall"]);
+    let high = Placement::new(window, wall, 1.5).with_sill_height(2.5);
+    assert_eq!(broken_rules(place(&mut p, &high)), ["OpeningInWall"]);
+    // Raising the door's sill until it pokes out of the top, too.
+    assert_eq!(
+        broken_rules(p.set(d, opening::SILL_HEIGHT, 1.0)),
+        ["OpeningInWall"]
+    );
 }
 
 #[test]
