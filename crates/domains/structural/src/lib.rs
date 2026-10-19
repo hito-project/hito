@@ -2,17 +2,19 @@
 //! ([ADR 0011](https://github.com/hito-project/hito/blob/main/docs/decisions/0011-mvp-structural-bim.md)).
 //!
 //! A domain adds element types to the core's schema system and depends on the
-//! core only. The app [registers](register) it at startup:
+//! core and the geometry port only. The app [registers](register) it at
+//! startup, and hands its [`generators`] to the geometry cache:
 //!
 //! ```
 //! use hito_core::SchemaRegistry;
-//! use hito_structural::{class, grid, level, material};
+//! use hito_structural::{class, column, grid, level, material};
 //!
 //! let mut registry = SchemaRegistry::new();
 //! hito_structural::register(&mut registry)?;
 //! assert!(registry.class(&class(level::LEVEL)).is_some());
 //! assert!(registry.class(&class(grid::GRID)).is_some());
 //! assert!(registry.class(&class(material::CONCRETE)).is_some());
+//! assert!(registry.class(&class(column::COLUMN)).is_some());
 //! # Ok::<(), hito_core::SchemaError>(())
 //! ```
 //!
@@ -23,17 +25,26 @@
 //! - [`grid`]s: labelled lines that lay out the structure in plan
 //! - [`material`]s: concrete, with its strength, elastic modulus, density and
 //!   display colour
+//! - [`section`] types: the rectangle or circle, and the material, that
+//!   column types share with beam types
+//! - [`column`]s: from a base level to a top level, on grid intersections
+//!   or anywhere
 //!
 //! Nothing here is specific to a country. Concrete grades and the formulas
 //! behind their properties come from regional packs, such as `hito-pack-ar`
 //! for CIRSOC 201
 //! ([ADR 0008](https://github.com/hito-project/hito/blob/main/docs/decisions/0008-argentina-first-international-by-design.md)).
 
+pub mod column;
+mod geometry;
 pub mod grid;
 pub mod level;
 pub mod material;
+mod read;
+pub mod section;
 
 use hito_core::{ClassId, Recompute, Rule, Schema, SchemaError, SchemaRegistry, SchemaVersion};
+use hito_geometry::Generator;
 
 /// The structural schema's name. It prefixes every class name, as in
 /// `Structural:Level`, and is stored in files.
@@ -54,17 +65,24 @@ pub fn schema() -> Schema {
     let classes = level::classes()
         .into_iter()
         .chain(grid::classes())
-        .chain(material::classes());
+        .chain(material::classes())
+        .chain(section::classes())
+        .chain(column::classes());
     let schema = classes.fold(schema, Schema::class);
-    level::relationships()
+    let relationships = level::relationships()
         .into_iter()
-        .fold(schema, Schema::relationship)
+        .chain(section::relationships())
+        .chain(column::relationships());
+    relationships.fold(schema, Schema::relationship)
 }
 
 /// The structural recompute functions: how elements follow what they
 /// depend on.
 pub fn recomputes() -> Vec<Recompute> {
     level::recomputes()
+        .into_iter()
+        .chain(column::recomputes())
+        .collect()
 }
 
 /// The structural validation rules.
@@ -73,7 +91,15 @@ pub fn rules() -> Vec<Rule> {
         .into_iter()
         .chain(grid::rules())
         .chain(material::rules())
+        .chain(section::rules())
+        .chain(column::rules())
         .collect()
+}
+
+/// The structural geometry generators, for the
+/// [`GeometryCache`](hito_geometry::GeometryCache).
+pub fn generators() -> Vec<Generator> {
+    geometry::generators()
 }
 
 /// Registers the structural schema, its recompute functions and its rules.

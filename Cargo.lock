@@ -1659,6 +1659,7 @@ name = "hito-structural"
 version = "0.0.0"
 dependencies = [
  "hito-core",
+ "hito-geometry",
 ]
 
 [[package]]

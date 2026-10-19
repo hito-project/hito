@@ -190,6 +190,20 @@ pub fn intersections(store: &StoreView<'_>) -> Vec<GridIntersection> {
     crossings
 }
 
+/// The grid intersection within `tolerance` of `point`, the nearest if
+/// there are several: where a column placed at `point` snaps to.
+pub fn intersection_near(
+    store: &StoreView<'_>,
+    point: [f64; 2],
+    tolerance: f64,
+) -> Option<GridIntersection> {
+    let distance = |c: &GridIntersection| (c.point[0] - point[0]).hypot(c.point[1] - point[1]);
+    intersections(store)
+        .into_iter()
+        .filter(|c| distance(c) <= tolerance)
+        .min_by(|a, b| distance(a).total_cmp(&distance(b)))
+}
+
 /// The grid labelled `name`, if any.
 pub fn find(store: &StoreView<'_>, name: &str) -> Option<ElementId> {
     let registry = store.registry();
