@@ -22,7 +22,12 @@ const COMMANDS: &[Command] = &[
         None,
         tools::slab::start_opening,
     ),
-    unavailable("ISOLATEDFOOTING", "command-isolated-footing", None),
+    tool(
+        "ISOLATEDFOOTING",
+        "command-isolated-footing",
+        None,
+        tools::footing::start,
+    ),
     tool("LEVEL", "command-level", Some("LL"), tools::level::start),
     tool("GRID", "command-grid", Some("GR"), tools::grid::start),
     unavailable("MATERIALS", "command-materials", None),

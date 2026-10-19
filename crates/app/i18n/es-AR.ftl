@@ -80,6 +80,13 @@ sketch-crossing = El contorno no puede cruzarse ni tocarse a sí mismo
 # El tipo de losa con el que empieza todo proyecto nuevo. Desde ahí es un dato.
 slab-type-generic = Genérico - 150 mm
 
+## Bases
+
+# La herramienta Base aislada. Los centros se escriben hasta que las vistas en planta permitan marcarlos.
+footing-prompt-centre = Indicar el centro de la base, como 3,4 o @6,0
+# El tipo de base con el que empieza todo proyecto nuevo. Desde ahí es un dato.
+footing-type-generic = Rectangular - 1800 x 1200 x 450 mm
+
 ## Ejes
 
 grid-prompt-start = Ingresar el punto inicial del eje, como 0,0

@@ -11,11 +11,11 @@ use crate::i18n::I18n;
 
 /// A new project: a physical model with one level at 0.00 m, named in the
 /// user's language ("Nivel 1"), so the first elements have a level to stand
-/// on, a generic concrete, generic column and slab types and, when the
-/// architectural schema is registered, a generic wall type. More levels
-/// are added with the Level command. The store has `schemas`, which must
-/// include the structural schema. Names are data from then on, so they
-/// don't change with the language.
+/// on, a generic concrete, generic column, slab and footing types and,
+/// when the architectural schema is registered, a generic wall type. More
+/// levels are added with the Level command. The store has `schemas`, which
+/// must include the structural schema. Names are data from then on, so
+/// they don't change with the language.
 pub fn new_project(schemas: SchemaRegistry, i18n: &I18n) -> ElementStore {
     let mut store = ElementStore::new(schemas);
     let mut tx = store.transaction();
@@ -35,8 +35,21 @@ pub fn new_project(schemas: SchemaRegistry, i18n: &I18n) -> ElementStore {
         generic_wall_type(&mut tx, i18n).expect("the generic wall type is valid");
     }
     generic_slab_type(&mut tx, i18n).expect("the generic slab type is valid");
+    generic_footing_type(&mut tx, i18n).expect("the generic footing type is valid");
     tx.commit().expect("the default level is valid");
     store
+}
+
+/// One rectangular footing type, 1.8 x 1.2 m and 45 cm thick, of the
+/// generic concrete, as Revit's metric templates load "Footing-Rectangular
+/// 1800 x 1200 x 450mm", so the Isolated footing tool works in a new
+/// project. Regional footing types come with regional packs (#167).
+fn generic_footing_type(tx: &mut Transaction<'_>, i18n: &I18n) -> Result<(), StoreError> {
+    let concrete = generic_concrete(tx, i18n)?;
+    let definitions = definitions_model(tx)?;
+    let name = i18n.tr("footing-type-generic");
+    let size = [1.8, 1.2, 0.45];
+    hito_structural::footing::insert_type(tx, definitions, &name, size, Some(concrete)).map(drop)
 }
 
 /// One generic slab type, 15 cm of the generic concrete, as Revit's metric

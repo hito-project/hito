@@ -3,6 +3,7 @@
 //! and one undo step (#19).
 
 pub mod column;
+pub mod footing;
 pub mod grid;
 pub mod level;
 mod placement;

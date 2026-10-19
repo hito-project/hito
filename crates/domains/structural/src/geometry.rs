@@ -3,7 +3,7 @@
 use hito_geometry::{Frame, Generator, Profile, Solid};
 
 use crate::read::Read;
-use crate::{class, column, slab};
+use crate::{class, column, footing, slab};
 
 /// The structural geometry generators.
 pub(crate) fn generators() -> Vec<Generator> {
@@ -49,5 +49,25 @@ pub(crate) fn generators() -> Vec<Generator> {
             depth: top - bottom,
         })
     });
-    vec![column, slab]
+    // A footing is a box: its length along its rotation, its width across,
+    // from its bottom up to its top.
+    let footing = Generator::new(class(footing::FOOTING), |inputs, footing| {
+        let [x, y] = footing::read_centre(inputs, footing.id())?;
+        let (bottom, top) = footing::read_elevations(inputs, footing.id())?;
+        let angle = inputs.real(footing.id(), footing::ROTATION).unwrap_or(0.0);
+        let frame = Frame::new(
+            [x, y, bottom],
+            [0.0, 0.0, 1.0],
+            [angle.cos(), angle.sin(), 0.0],
+        );
+        Some(Solid::Extrusion {
+            profile: Profile::Rectangle {
+                width: inputs.real(footing.id(), footing::LENGTH)?,
+                height: inputs.real(footing.id(), footing::WIDTH)?,
+            },
+            frame: frame.ok()?,
+            depth: top - bottom,
+        })
+    });
+    vec![column, slab, footing]
 }

@@ -31,6 +31,8 @@
 //!   or anywhere
 //! - [`slab`]s: floors drawn by their boundary on a level, with their
 //!   types and openings, and the [`outline`]s they're drawn with
+//! - isolated [`footing`]s: rectangular pads under columns or free on a
+//!   level
 //!
 //! Nothing here is specific to a country. Concrete grades and the formulas
 //! behind their properties come from regional packs, such as `hito-pack-ar`
@@ -38,6 +40,7 @@
 //! ([ADR 0008](https://github.com/hito-project/hito/blob/main/docs/decisions/0008-argentina-first-international-by-design.md)).
 
 pub mod column;
+pub mod footing;
 mod geometry;
 pub mod grid;
 pub mod level;
@@ -72,13 +75,15 @@ pub fn schema() -> Schema {
         .chain(material::classes())
         .chain(section::classes())
         .chain(column::classes())
-        .chain(slab::classes());
+        .chain(slab::classes())
+        .chain(footing::classes());
     let schema = classes.fold(schema, Schema::class);
     let relationships = level::relationships()
         .into_iter()
         .chain(section::relationships())
         .chain(column::relationships())
-        .chain(slab::relationships());
+        .chain(slab::relationships())
+        .chain(footing::relationships());
     relationships.fold(schema, Schema::relationship)
 }
 
@@ -89,6 +94,7 @@ pub fn recomputes() -> Vec<Recompute> {
         .into_iter()
         .chain(column::recomputes())
         .chain(slab::recomputes())
+        .chain(footing::recomputes())
         .collect()
 }
 
@@ -101,6 +107,7 @@ pub fn rules() -> Vec<Rule> {
         .chain(section::rules())
         .chain(column::rules())
         .chain(slab::rules())
+        .chain(footing::rules())
         .collect()
 }
 
