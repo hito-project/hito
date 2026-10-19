@@ -106,7 +106,7 @@ impl Tool for OpeningTool {
 
 /// Where the centre of something `width` wide goes, near `along`, so it
 /// stays within a wall `length` long. A wall too short keeps `along`, and
-/// the domain warns that it doesn't fit.
+/// the domain refuses the door, so the command says it couldn't place it.
 fn fit(along: f64, width: f64, length: f64) -> f64 {
     let half = width / 2.0;
     if length < width {
@@ -284,6 +284,21 @@ mod tests {
     }
 
     #[test]
+    fn a_wall_too_short_for_the_door_is_refused() {
+        let mut f = Fixture::new();
+        f.enter("WA");
+        f.enter("0,5");
+        f.enter("0.5,5");
+        f.session.cancel(&f.i18n);
+        f.enter("DR");
+        assert!(matches!(f.enter("0.25,5"), Outcome::Nothing));
+        assert!(f.session.message().is_some(), "says it couldn't");
+        let door = hito_architectural::class(opening::DOOR);
+        let registry = f.store.registry();
+        assert!(!f.store.elements().any(|e| registry.is_a(e.class(), &door)));
+    }
+
+    #[test]
     fn deleting_the_wall_deletes_its_doors() {
         let mut f = Fixture::new();
         f.enter("DR");
@@ -302,6 +317,10 @@ mod tests {
         assert_eq!(fit(0.1, 0.8, 6.0), 0.4);
         assert_eq!(fit(5.9, 0.8, 6.0), 5.6);
         assert_eq!(fit(3.0, 0.8, 6.0), 3.0);
-        assert_eq!(fit(0.2, 0.8, 0.5), 0.2, "too short: left for the warning");
+        assert_eq!(
+            fit(0.2, 0.8, 0.5),
+            0.2,
+            "too short: left for the domain to refuse"
+        );
     }
 }
