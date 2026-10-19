@@ -318,4 +318,25 @@ mod tests {
         let width = hito_architectural::wall_type::width(&view, wall_type);
         assert!((width - 0.2).abs() < 1e-12);
     }
+
+    /// Its layer is the generic concrete, so a generic wall marked
+    /// structural is concrete, with no warning (#207).
+    #[test]
+    fn a_generic_structural_wall_is_concrete() {
+        let mut f = Fixture::new();
+        let view = f.store.view();
+        let wall_type = default_type(&view).unwrap();
+        let ground = level::levels(&view)[0].0;
+        let placement = Placement::new(wall_type, ground, [0.0, 0.0], [5.0, 0.0]).structural(true);
+        let mut tx = f.store.transaction();
+        let model = project::physical_model(&mut tx).unwrap();
+        let wall = wall::insert(&mut tx, model, &placement).unwrap();
+        let changes = tx.commit().unwrap();
+        assert!(changes.warnings().is_empty(), "{:?}", changes.warnings());
+        let material = wall::structural_material(&f.store.view(), wall).unwrap();
+        assert_eq!(
+            f.store.property(material, hito_structural::material::NAME),
+            Some(&Value::Text("Hormigón".into()))
+        );
+    }
 }

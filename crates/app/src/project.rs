@@ -62,15 +62,17 @@ fn generic_slab_type(tx: &mut Transaction<'_>, i18n: &I18n) -> Result<(), StoreE
     hito_structural::slab::insert_type(tx, definitions, &name, 0.15, Some(concrete)).map(drop)
 }
 
-/// One generic wall type, 20 cm of a single structural layer, as Revit's
-/// templates start with "Generic - 200mm", so the Wall tool works in a new
-/// project. It's named in the user's language and goes in a definition
-/// model. Regional wall types come with regional packs (#167).
+/// One generic wall type, 20 cm of a single structural layer of the
+/// generic concrete, as Revit's templates start with "Generic - 200mm", so
+/// the Wall tool works in a new project, and a generic wall marked
+/// structural is concrete. It's named in the user's language and goes in a
+/// definition model. Regional wall types come with regional packs (#167).
 fn generic_wall_type(tx: &mut Transaction<'_>, i18n: &I18n) -> Result<(), StoreError> {
     use hito_architectural::wall_type::{self, Function, Layer};
+    let concrete = generic_concrete(tx, i18n)?;
     let definitions = definitions_model(tx)?;
     let name = i18n.tr("wall-type-generic");
-    let layers = [Layer::new(Function::Structure, 0.2)];
+    let layers = [Layer::new(Function::Structure, 0.2).with_material(concrete)];
     wall_type::insert(tx, definitions, &name, &layers).map(drop)
 }
 
