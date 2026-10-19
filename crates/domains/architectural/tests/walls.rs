@@ -10,7 +10,7 @@ use hito_architectural::wall::{
 };
 use hito_architectural::wall_type::{self, Function, Layer};
 use hito_architectural::{class, footprint};
-use hito_core::{Element, ElementId, Relationship, Value};
+use hito_core::{Element, ElementId, Relationship, StoreError, Value};
 use hito_structural::level::{self, BOTTOM_ELEVATION as SLAB_BOTTOM, TOP_ELEVATION as SLAB_TOP};
 
 #[test]
@@ -328,6 +328,61 @@ fn a_structural_wall_carries_its_core_material() {
         wall::structural_material(&p.store.view(), brick),
         Some(p.hollow_brick)
     );
+}
+
+/// The warnings the commit of a structural wall of `wall_type`, along `y`,
+/// gives.
+fn structural_warnings(p: &mut Project, wall_type: ElementId, y: f64) -> Vec<String> {
+    let placement = p.placement(wall_type, [0.0, y], [5.0, y]).structural(true);
+    let mut tx = p.store.transaction();
+    wall::insert(&mut tx, p.model, &placement).unwrap();
+    let changes = tx.commit().expect("warnings don't refuse the wall");
+    changes.warnings().iter().map(|w| w.rule.clone()).collect()
+}
+
+#[test]
+fn a_structural_wall_is_expected_to_be_concrete() {
+    let mut p = project();
+    let (concrete, brick) = (p.concrete, p.brick);
+    assert!(structural_warnings(&mut p, concrete, 0.0).is_empty());
+    // Hollow brick isn't concrete.
+    assert_eq!(
+        structural_warnings(&mut p, brick, 3.0),
+        ["StructuralWallConcrete"]
+    );
+    // Nor is a layer without a material.
+    let mut tx = p.store.transaction();
+    let bare = wall_type::insert(
+        &mut tx,
+        p.model,
+        "Sin material",
+        &[Layer::new(Function::Structure, 0.2)],
+    )
+    .unwrap();
+    tx.commit().unwrap();
+    assert_eq!(
+        structural_warnings(&mut p, bare, 6.0),
+        ["StructuralWallConcrete"]
+    );
+
+    // A wall that isn't structural can be of anything.
+    let placement = p.placement(brick, [0.0, 9.0], [5.0, 9.0]);
+    let mut tx = p.store.transaction();
+    wall::insert(&mut tx, p.model, &placement).unwrap();
+    assert!(tx.commit().unwrap().warnings().is_empty());
+}
+
+#[test]
+fn layer_materials_are_materials() {
+    let mut p = project();
+    let layer = wall_type::layers(&p.store.view(), p.concrete)[0].id;
+    let mut tx = p.store.transaction();
+    // A wall type isn't a material.
+    let not_a_material = Relationship::new(class(wall_type::LAYER_MATERIAL), layer, p.brick);
+    assert!(matches!(
+        tx.relate(not_a_material),
+        Err(StoreError::InvalidRelationship(_))
+    ));
 }
 
 #[test]

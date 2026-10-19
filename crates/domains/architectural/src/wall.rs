@@ -27,7 +27,10 @@
 //!
 //! A wall is [`STRUCTURAL`] or not, as Revit's "Structural" parameter: the
 //! same wall either way, which IFC export (#51) writes as a load-bearing
-//! `IfcWall`.
+//! `IfcWall`. A structural wall is expected to be concrete: its
+//! [`structural_material`] should be a structural
+//! [`ConcreteMaterial`](hito_structural::material::CONCRETE), or the commit
+//! warns.
 //!
 //! ```
 //! use hito_architectural::wall::{self, Placement, Top};
@@ -64,6 +67,7 @@ use hito_structural::level::{
     ATTACHED_TO_LEVEL, BOTTOM_ELEVATION as SURFACE_BOTTOM, ELEVATION, HORIZONTAL_ELEMENT, LEVEL,
     LEVEL_BASED_ELEMENT, LEVEL_OFFSET, TOP_ELEVATION as SURFACE_TOP,
 };
+use hito_structural::material::CONCRETE;
 
 use crate::plan::{Point, distance};
 use crate::read::Read;
@@ -345,6 +349,8 @@ pub(crate) fn recomputes() -> Vec<Recompute> {
 /// - `WallHeight`: the wall's top is above its base.
 /// - `WallConstraints`: at most one top level, one attached top and one
 ///   attached base, and a known location line.
+/// - `StructuralWallConcrete` (a warning): a structural wall's structural
+///   material, from its type, is a concrete material, as #193 asks.
 pub(crate) fn rules() -> Vec<Rule> {
     let line = Rule::new("WallLine", class(WALL), |store, wall| {
         match read_line(store, wall.id()) {
@@ -393,7 +399,22 @@ pub(crate) fn rules() -> Vec<Rule> {
         }
     });
 
-    vec![line, wall_type, height, constraints]
+    // A warning, not an error: the wall can still be drawn and marked
+    // structural before its type has a material.
+    let concrete = Rule::new("StructuralWallConcrete", class(WALL), |store, wall| {
+        if !store.boolean(wall.id(), STRUCTURAL) {
+            return Ok(());
+        }
+        let concrete = hito_structural::class(CONCRETE);
+        match structural_material(store, wall.id()) {
+            Some(m) if store.is_a(m, &concrete) => Ok(()),
+            Some(m) => Err(format!("the structural wall's material {m} isn't concrete")),
+            None => Err("the structural wall's structural layer has no material".into()),
+        }
+    })
+    .warning();
+
+    vec![line, wall_type, height, constraints, concrete]
 }
 
 pub(crate) fn read_line<'a>(store: &impl Read<'a>, wall: ElementId) -> Option<(Point, Point)> {

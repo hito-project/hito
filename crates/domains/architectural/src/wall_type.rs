@@ -39,8 +39,8 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
-//! Layer materials can be any definition element until materials (#36)
-//! merge; then they narrow to materials.
+//! A layer's material is a [`Material`](hito_structural::material::MATERIAL)
+//! of the structural domain (#207).
 
 use std::ops::Range;
 
@@ -48,6 +48,7 @@ use hito_core::{
     ClassDef, ClassId, DataType, Dimension, Element, ElementId, ModelId, OnDelete, Relationship,
     RelationshipDef, Rule, StoreError, StoreView, Transaction, Value,
 };
+use hito_structural::material::MATERIAL;
 
 use crate::class;
 use crate::read::Read;
@@ -58,7 +59,8 @@ pub const WALL_TYPE: &str = "WallType";
 pub const WALL_LAYER: &str = "WallLayer";
 /// From a layer to its wall type. Deleting the type deletes its layers.
 pub const LAYER_OF: &str = "LayerOf";
-/// From a layer to its material.
+/// From a layer to its material, a structural domain
+/// [`Material`](hito_structural::material::MATERIAL).
 pub const LAYER_MATERIAL: &str = "LayerMaterial";
 
 /// A wall type's name, unique among wall types. It's data, not interface
@@ -161,7 +163,7 @@ pub(crate) fn relationships() -> [RelationshipDef; 2] {
     let material = RelationshipDef::new(
         LAYER_MATERIAL,
         class(WALL_LAYER),
-        ClassId::DEFINITION_ELEMENT,
+        hito_structural::class(MATERIAL),
     );
     [layer_of, material]
 }
