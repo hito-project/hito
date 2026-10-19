@@ -84,6 +84,19 @@ const TABS: &[RibbonTab] = &[
             },
         ],
     },
+    // Revit's Architecture tab, after Structure so the M1 structural
+    // commands still show first.
+    RibbonTab {
+        title: "ribbon-tab-architecture",
+        groups: &[Group {
+            title: "ribbon-group-build",
+            items: &[
+                Item::Command("WALL"),
+                Item::Command("DOOR"),
+                Item::Command("WINDOW"),
+            ],
+        }],
+    },
     RibbonTab {
         title: "ribbon-tab-view",
         groups: &[

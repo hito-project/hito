@@ -7,6 +7,8 @@ app-title = HITO
 ## Ribbon tabs and groups
 
 ribbon-tab-structure = Structure
+ribbon-tab-architecture = Architecture
+ribbon-group-build = Build
 ribbon-tab-view = View
 ribbon-tab-manage = Manage
 ribbon-group-structure = Structure
@@ -21,6 +23,8 @@ ribbon-group-settings = Settings
 
 command-beam = Beam
 command-wall = Wall
+command-door = Door
+command-window = Window
 command-column = Column
 command-slab = Slab
 command-vertical-opening = Vertical
@@ -86,6 +90,13 @@ slab-type-generic = Generic - 150 mm
 footing-prompt-centre = Specify the footing's centre, such as 3,4 or @6,0
 # The footing type every new project starts with. It's data from then on.
 footing-type-generic = Rectangular - 1800 x 1200 x 450 mm
+
+# The Door (DR) and Window (WN) tools. The point is typed until plan views let it be clicked.
+door-prompt = Specify a point on a wall, such as 2,0. The door swings to that side. Esc ends
+window-prompt = Specify a point on a wall, such as 2,0. Esc ends
+# The door and window types every new project starts with. They're data from then on.
+door-type-generic = Single door - 800 × 2050 mm
+window-type-generic = Window - 1500 × 1100 mm
 
 ## Grids
 

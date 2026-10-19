@@ -28,6 +28,18 @@ const COMMANDS: &[Command] = &[
         None,
         tools::footing::start,
     ),
+    tool(
+        "DOOR",
+        "command-door",
+        Some("DR"),
+        tools::opening::start_door,
+    ),
+    tool(
+        "WINDOW",
+        "command-window",
+        Some("WN"),
+        tools::opening::start_window,
+    ),
     tool("LEVEL", "command-level", Some("LL"), tools::level::start),
     tool("GRID", "command-grid", Some("GR"), tools::grid::start),
     unavailable("MATERIALS", "command-materials", None),
