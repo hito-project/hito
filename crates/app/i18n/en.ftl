@@ -72,6 +72,13 @@ grid-points-differ = The end point must differ from the start point
 grid-name-empty = A grid needs a label
 grid-name-taken = Another grid is already labelled { $name }
 
+## Columns
+
+# The Column tool (CL). On the crossing of two grids, the column follows the grids.
+column-prompt-point = Specify the column's centre, such as 0,0. Esc ends
+# The column type every new project starts with. It's data from then on.
+column-type-generic = Rectangular - 300 x 300 mm
+
 ## Window actions
 
 action-new-3d-view = 3D View

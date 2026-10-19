@@ -11,7 +11,8 @@ use crate::i18n::I18n;
 
 /// A new project: a physical model with one level at 0.00 m, named in the
 /// user's language ("Nivel 1"), so the first elements have a level to stand
-/// on, a generic concrete material and, when the architectural schema is
+/// on, a generic concrete, a generic column type and, when the
+/// architectural schema is
 /// registered, a generic wall type. More levels are added with the Level
 /// command. The store has `schemas`, which must include the structural
 /// schema. Names are data from then on, so they don't change with the
@@ -25,6 +26,7 @@ pub fn new_project(schemas: SchemaRegistry, i18n: &I18n) -> ElementStore {
         .with_property(level::ELEVATION, 0.0);
     tx.insert(level).expect("the default level is valid");
     generic_concrete(&mut tx, i18n).expect("the generic concrete is valid");
+    generic_column_type(&mut tx, i18n).expect("the generic column type is valid");
     if tx
         .view()
         .registry()
@@ -71,6 +73,22 @@ pub(crate) fn generic_concrete(
     }
     let definitions = definitions_model(tx)?;
     tx.insert(Element::new(concrete, definitions).with_property(material::NAME, name))
+}
+
+/// One generic column type, a 30 x 30 cm rectangle of the generic
+/// concrete, so the Column tool works in a new project, as Revit's
+/// templates load a concrete column family.
+fn generic_column_type(tx: &mut Transaction<'_>, i18n: &I18n) -> Result<(), StoreError> {
+    use hito_structural::column::COLUMN_TYPE;
+    use hito_structural::section::{self, Section};
+    let concrete = generic_concrete(tx, i18n)?;
+    let definitions = definitions_model(tx)?;
+    let name = i18n.tr("column-type-generic");
+    let square = Section::Rectangle {
+        width: 0.3,
+        depth: 0.3,
+    };
+    section::insert(tx, definitions, COLUMN_TYPE, &name, square, Some(concrete)).map(drop)
 }
 
 /// The definition model types and materials go in, added if the project

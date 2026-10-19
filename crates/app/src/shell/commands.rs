@@ -14,7 +14,7 @@ use crate::tools;
 const COMMANDS: &[Command] = &[
     unavailable("BEAM", "command-beam", Some("BM")),
     tool("WALL", "command-wall", Some("WA"), tools::wall::start),
-    unavailable("COLUMN", "command-column", Some("CL")),
+    tool("COLUMN", "command-column", Some("CL"), tools::column::start),
     unavailable("SLAB", "command-slab", Some("SB")),
     unavailable("ISOLATEDFOOTING", "command-isolated-footing", None),
     tool("LEVEL", "command-level", Some("LL"), tools::level::start),

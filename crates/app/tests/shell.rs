@@ -79,10 +79,10 @@ fn ribbon_tab(h: &mut Harness<'_, Shell>, label: &str) {
 #[test]
 fn ribbon_has_discipline_tabs_with_groups() {
     let mut h = window();
-    // The Structure tab shows first, with the M1 commands, disabled until
-    // their stories build them.
+    // The Structure tab shows first, with the M1 commands. Those built so
+    // far, such as Column, are enabled.
     let column = h.get_by_role_and_label(Role::Button, "Column");
-    assert!(column.accesskit_node().is_disabled());
+    assert!(!column.accesskit_node().is_disabled());
     assert!(shows(&h, "Datum"));
 
     ribbon_tab(&mut h, "View");
@@ -411,11 +411,11 @@ fn two_letter_shortcuts_when_nothing_has_focus() {
     assert!(!h.state().layout().is_open(Tab::Properties), "PP");
 
     // A command that isn't available yet says so.
-    h.event(egui::Event::Text("c".into()));
-    h.event(egui::Event::Text("l".into()));
+    h.event(egui::Event::Text("u".into()));
+    h.event(egui::Event::Text("n".into()));
     h.run_steps(2);
     let message = h.state().commands().message().unwrap_or_default();
-    assert!(message.contains("Column"), "{message:?}");
+    assert!(message.contains("Project Units"), "{message:?}");
 
     // The ribbon's tooltip names the alias.
     ribbon_tab(&mut h, "View");
