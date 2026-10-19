@@ -12,7 +12,7 @@ use crate::tools;
 /// Revit's ribbon commands for M1 (#33 to #41, #36, #163), which come with
 /// their stories, and the window commands, which work now.
 const COMMANDS: &[Command] = &[
-    unavailable("BEAM", "command-beam", Some("BM")),
+    tool("BEAM", "command-beam", Some("BM"), tools::beam::start),
     tool("WALL", "command-wall", Some("WA"), tools::wall::start),
     tool("COLUMN", "command-column", Some("CL"), tools::column::start),
     tool("SLAB", "command-slab", Some("SB"), tools::slab::start),

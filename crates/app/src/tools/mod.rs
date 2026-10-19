@@ -2,6 +2,7 @@
 //! as [`Tool`](crate::command::Tool)s so each element is one transaction
 //! and one undo step (#19).
 
+pub mod beam;
 pub mod column;
 pub mod footing;
 pub mod grid;

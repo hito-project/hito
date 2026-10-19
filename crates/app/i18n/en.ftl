@@ -102,6 +102,15 @@ column-prompt-point = Specify the column's centre, such as 0,0. Esc ends
 # The column type every new project starts with. It's data from then on.
 column-type-generic = Rectangular - 300 x 300 mm
 
+## Beams
+
+# The Beam tool (BM). An end on a column frames into it and follows it.
+beam-prompt-start = Specify the beam's start point, such as 0,0
+beam-prompt-end = Specify the beam's end point, such as 5,0, @5,0 or @5<90. Esc ends
+beam-same-point = The end point must differ from the start point
+# The beam type every new project starts with. It's data from then on.
+beam-type-generic = Rectangular - 200 x 400 mm
+
 ## Window actions
 
 action-new-3d-view = 3D View
