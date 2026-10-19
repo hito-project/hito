@@ -55,7 +55,7 @@ level-prompt-elevation = Ingresar la elevación del nuevo nivel, como 3.5 o 350 
 level-name-empty = El nivel necesita un nombre
 level-name-taken = Ya hay otro nivel llamado { $name }
 
-# La herramienta Muro (WA). Los puntos se escriben hasta que las vistas en planta permitan marcarlos.
+# La herramienta Muro (WA). Los puntos se marcan en una vista en planta o se escriben.
 wall-prompt-start = Indicar el punto inicial del muro, como 0,0
 wall-prompt-next = Indicar el punto siguiente, como 5,0, @5,0 o @5<90. Esc termina la cadena
 wall-same-point = El punto siguiente tiene que ser distinto del anterior
@@ -92,6 +92,7 @@ panel-project-browser = Navegador de proyectos
 panel-properties = Propiedades
 
 browser-views = Vistas (todas)
+browser-floor-plans = Planos de planta
 browser-3d-views = Vistas 3D
 browser-levels = Niveles
 browser-grids = Ejes
@@ -127,6 +128,7 @@ delete-also-selected = { $count ->
 ## Vistas
 
 view-kind-3d = Vista 3D
+view-kind-floor-plan = Plano de planta
 # El nombre de Revit para la vista 3D predeterminada, igual en todos los idiomas.
 view-default-3d = {"{"}3D{"}"}
 view-3d-numbered = Vista 3D { $number }

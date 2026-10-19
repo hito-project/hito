@@ -3,16 +3,26 @@
 //! the next time it starts.
 
 use egui_dock::{DockState, Node, NodeIndex, NodePath, Split, SurfaceIndex};
+use hito_core::ElementId;
 use serde::{Deserialize, Serialize};
 
-/// A view. A placeholder until views are elements in the core (#43): every
-/// view is a 3D view, numbered in the order it was made. Number 0 is the
-/// default 3D view, `{3D}`.
+/// A view. A placeholder until views are elements in the core (#43): a 3D
+/// view, numbered in the order it was made, or a level's plan view (#183),
+/// numbered from [`ViewId::FIRST_PLAN`]. Number 0 is the default 3D view,
+/// `{3D}`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ViewId(pub u32);
 
 impl ViewId {
     pub const DEFAULT_3D: ViewId = ViewId(0);
+    /// The first plan view's number. Plan views are numbered apart from 3D
+    /// views, so 3D views keep their numbers, and their names, whatever
+    /// levels there are.
+    pub const FIRST_PLAN: u32 = 1 << 20;
+
+    pub fn is_plan(self) -> bool {
+        self.0 >= Self::FIRST_PLAN
+    }
 }
 
 /// What a dock tab shows.
@@ -29,8 +39,13 @@ pub enum Tab {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Layout {
     pub(super) dock: DockState<Tab>,
-    /// Every view, open or not, in the order they were made.
+    /// Every 3D view, open or not, in the order they were made.
     views: Vec<ViewId>,
+    /// Every level's plan view, in the order they were made. Levels belong
+    /// to the project, which isn't saved yet (#46), so plan views aren't
+    /// saved with the layout: they're made again for the levels there are.
+    #[serde(skip)]
+    plans: Vec<(ViewId, ElementId)>,
     /// The view the user last worked in.
     active: Option<ViewId>,
 }
@@ -48,15 +63,65 @@ impl Default for Layout {
         Self {
             dock,
             views: vec![ViewId::DEFAULT_3D],
+            plans: Vec::new(),
             active: Some(ViewId::DEFAULT_3D),
         }
     }
 }
 
 impl Layout {
-    /// Every view, open or not, in the order they were made.
+    /// Every 3D view, open or not, in the order they were made.
     pub fn views(&self) -> &[ViewId] {
         &self.views
+    }
+
+    /// Every plan view and its level, in the order they were made.
+    pub fn plans(&self) -> &[(ViewId, ElementId)] {
+        &self.plans
+    }
+
+    /// The level a plan view shows, `None` for a 3D view.
+    pub fn plan_level(&self, view: ViewId) -> Option<ElementId> {
+        self.plans
+            .iter()
+            .find(|(v, _)| *v == view)
+            .map(|(_, level)| *level)
+    }
+
+    /// The plan view of a level, if it has one.
+    pub fn plan_of(&self, level: ElementId) -> Option<ViewId> {
+        self.plans
+            .iter()
+            .find(|(_, l)| *l == level)
+            .map(|(view, _)| *view)
+    }
+
+    /// Gives each of `levels` a plan view, as Revit makes one for each new
+    /// level, and deletes the plan views of levels that are gone, closing
+    /// their tabs.
+    pub fn sync_plans(&mut self, levels: &[ElementId]) {
+        let gone: Vec<ViewId> = self
+            .plans
+            .iter()
+            .filter(|(_, level)| !levels.contains(level))
+            .map(|(view, _)| *view)
+            .collect();
+        for view in gone {
+            self.close(Tab::View(view));
+            self.plans.retain(|(v, _)| *v != view);
+        }
+        for &level in levels {
+            if self.plan_of(level).is_none() {
+                let next = self.plans.iter().map(|(v, _)| v.0 + 1).max();
+                let view = ViewId(next.unwrap_or(ViewId::FIRST_PLAN));
+                self.plans.push((view, level));
+            }
+        }
+    }
+
+    /// Whether the view exists, open or not.
+    fn exists(&self, view: ViewId) -> bool {
+        self.views.contains(&view) || self.plan_level(view).is_some()
     }
 
     /// The open views, in the order their tabs are laid out.
@@ -111,7 +176,7 @@ impl Layout {
     /// Opens a view next to the other open views, or brings it to the front
     /// if it's already open.
     pub fn open_view(&mut self, view: ViewId) {
-        if !self.views.contains(&view) {
+        if !self.exists(view) {
             return;
         }
         let tab = Tab::View(view);
@@ -368,6 +433,60 @@ mod tests {
         assert_eq!(layout.open_views(), [ViewId::DEFAULT_3D]);
         layout.toggle_panel(Tab::Properties);
         assert!(layout.is_open(Tab::Properties));
+    }
+
+    #[test]
+    fn each_level_gets_a_plan_view_until_it_is_deleted() {
+        let mut layout = Layout::default();
+        let [a, b] = [(); 2].map(|_| ElementId::generate());
+        layout.sync_plans(&[a, b]);
+        let plan_a = layout.plan_of(a).unwrap();
+        let plan_b = layout.plan_of(b).unwrap();
+        assert!(plan_a.is_plan() && plan_b.is_plan() && plan_a != plan_b);
+        assert_eq!(layout.plan_level(plan_b), Some(b));
+        layout.sync_plans(&[a, b]);
+        assert_eq!(layout.plans().len(), 2, "made once");
+
+        layout.open_view(plan_b);
+        assert_eq!(layout.active_view(), Some(plan_b));
+        // 3D views keep their numbers.
+        assert_eq!(layout.new_3d_view(), ViewId(1));
+        assert_eq!(layout.views(), [ViewId::DEFAULT_3D, ViewId(1)]);
+
+        layout.sync_plans(&[a]);
+        assert_eq!(layout.plan_of(b), None);
+        assert!(!layout.open_views().contains(&plan_b), "its tab closed");
+        layout.open_view(plan_b);
+        assert!(!layout.open_views().contains(&plan_b), "it's gone");
+    }
+
+    #[test]
+    fn plan_views_are_not_restored_with_the_layout() {
+        let mut layout = Layout::default();
+        let level = ElementId::generate();
+        layout.sync_plans(&[level]);
+        layout.open_view(layout.plan_of(level).unwrap());
+        #[derive(Default)]
+        struct Memory(Option<String>);
+        impl eframe::Storage for Memory {
+            fn get_string(&self, _: &str) -> Option<String> {
+                self.0.clone()
+            }
+            fn set_string(&mut self, _: &str, value: String) {
+                self.0 = Some(value);
+            }
+            fn remove_string(&mut self, _: &str) {
+                self.0 = None;
+            }
+            fn flush(&mut self) {}
+        }
+        let mut saved = Memory::default();
+        eframe::set_value(&mut saved, "layout", &layout);
+        let restored = eframe::get_value::<Layout>(&saved, "layout")
+            .unwrap()
+            .repair();
+        assert!(restored.plans().is_empty());
+        assert_eq!(restored.open_views(), [ViewId::DEFAULT_3D]);
     }
 
     #[test]

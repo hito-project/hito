@@ -55,7 +55,7 @@ level-prompt-elevation = Enter the new level's elevation, such as 3.5 or 350 cm
 level-name-empty = A level needs a name
 level-name-taken = Another level is already called { $name }
 
-# The Wall tool (WA). Points are typed until plan views let them be clicked.
+# The Wall tool (WA). Points are clicked in a plan view or typed.
 wall-prompt-start = Specify the wall's start point, such as 0,0
 wall-prompt-next = Specify the next point, such as 5,0, @5,0 or @5<90. Esc ends the chain
 wall-same-point = The next point must differ from the last one
@@ -92,6 +92,7 @@ panel-project-browser = Project Browser
 panel-properties = Properties
 
 browser-views = Views (all)
+browser-floor-plans = Floor Plans
 browser-3d-views = 3D Views
 browser-levels = Levels
 browser-grids = Grids
@@ -127,6 +128,7 @@ delete-also-selected = { $count ->
 ## Views
 
 view-kind-3d = 3D View
+view-kind-floor-plan = Floor Plan
 # Revit's name for the default 3D view, the same in every language.
 view-default-3d = {"{"}3D{"}"}
 view-3d-numbered = 3D View { $number }

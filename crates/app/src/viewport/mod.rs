@@ -9,6 +9,7 @@
 pub mod camera;
 pub mod navigation;
 mod pick;
+pub mod plan;
 mod scene;
 mod view_cube;
 
@@ -20,6 +21,7 @@ use hito_core::ElementId;
 pub use camera::{Bounds, Camera, Projection};
 pub use navigation::Navigation;
 pub use pick::BoxKind;
+pub use plan::{Plan, PlanGrid, PlanOutput};
 pub use scene::Scene;
 
 use crate::i18n::I18n;
@@ -60,6 +62,12 @@ pub struct Viewport {
     /// Where the selection box being dragged started.
     box_start: Option<egui::Pos2>,
     target: Option<Target>,
+    /// Whether it's a plan view (#183), which looks straight down.
+    is_plan: bool,
+    /// Where the view was in the window when it last showed.
+    rect: Option<egui::Rect>,
+    /// What zooming to fit a plan view shows, as of its last frame.
+    plan_bounds: Option<Bounds>,
     /// How many times it has rendered, so tests can check that it did.
     pub renders: u64,
 }
@@ -126,6 +134,12 @@ impl Viewport {
     /// Zooms so the whole model shows, as Revit's Zoom to Fit. An empty
     /// model shows the area round the origin.
     pub fn zoom_to_fit(&mut self, scene: &Scene) {
+        if self.is_plan {
+            if let Some(bounds) = self.plan_bounds {
+                self.camera.fit(bounds, self.size);
+            }
+            return;
+        }
         let area = Bounds::new([-10.0, -10.0, 0.0], [10.0, 10.0, 3.0]);
         self.camera.fit(scene.bounds().unwrap_or(area), self.size);
     }
@@ -145,6 +159,7 @@ impl Viewport {
         let rect = ui.available_rect_before_wrap();
         let response = ui.allocate_rect(rect, egui::Sense::click_and_drag());
         self.hovered = response.hover_pos().is_some();
+        self.rect = Some(rect);
         // The image goes under the view cube, which draws next.
         let image = ui.painter().add(egui::Shape::Noop);
         self.size = DVec2::new(rect.width().into(), rect.height().into());

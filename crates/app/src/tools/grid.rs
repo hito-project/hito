@@ -3,8 +3,8 @@
 //! Like Revit's, it stays active until Esc, each grid its own undo step,
 //! and labels grids automatically: the first is `1`, and each new one
 //! follows the newest grid's label (`1` → `2`, `A` → `B`), skipping labels
-//! already taken. Labels are edited in the properties panel. Picking the
-//! points in a plan view comes with #183; until then they're typed (`0,0`).
+//! already taken. Labels are edited in the properties panel. The points
+//! are clicked in a plan view (#183) or typed (`0,0`).
 
 use hito_core::{ElementId, StoreError, StoreView, Transaction, Value};
 use hito_structural::{class, grid};
