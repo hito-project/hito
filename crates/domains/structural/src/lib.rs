@@ -29,6 +29,8 @@
 //!   column types share with beam types
 //! - [`column`]s: from a base level to a top level, on grid intersections
 //!   or anywhere
+//! - [`slab`]s: floors drawn by their boundary on a level, with their
+//!   types and openings, and the [`outline`]s they're drawn with
 //!
 //! Nothing here is specific to a country. Concrete grades and the formulas
 //! behind their properties come from regional packs, such as `hito-pack-ar`
@@ -40,8 +42,10 @@ mod geometry;
 pub mod grid;
 pub mod level;
 pub mod material;
+pub mod outline;
 mod read;
 pub mod section;
+pub mod slab;
 
 use hito_core::{ClassId, Recompute, Rule, Schema, SchemaError, SchemaRegistry, SchemaVersion};
 use hito_geometry::Generator;
@@ -67,12 +71,14 @@ pub fn schema() -> Schema {
         .chain(grid::classes())
         .chain(material::classes())
         .chain(section::classes())
-        .chain(column::classes());
+        .chain(column::classes())
+        .chain(slab::classes());
     let schema = classes.fold(schema, Schema::class);
     let relationships = level::relationships()
         .into_iter()
         .chain(section::relationships())
-        .chain(column::relationships());
+        .chain(column::relationships())
+        .chain(slab::relationships());
     relationships.fold(schema, Schema::relationship)
 }
 
@@ -82,6 +88,7 @@ pub fn recomputes() -> Vec<Recompute> {
     level::recomputes()
         .into_iter()
         .chain(column::recomputes())
+        .chain(slab::recomputes())
         .collect()
 }
 
@@ -93,6 +100,7 @@ pub fn rules() -> Vec<Rule> {
         .chain(material::rules())
         .chain(section::rules())
         .chain(column::rules())
+        .chain(slab::rules())
         .collect()
 }
 

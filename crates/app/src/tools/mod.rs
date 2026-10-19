@@ -6,4 +6,5 @@ pub mod column;
 pub mod grid;
 pub mod level;
 mod placement;
+pub mod slab;
 pub mod wall;

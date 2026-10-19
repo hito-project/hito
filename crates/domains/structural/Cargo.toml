@@ -8,8 +8,8 @@ license.workspace = true
 repository.workspace = true
 publish.workspace = true
 
-# A domain depends on the core and the geometry port: columns and beams
-# describe their bodies with it.
+# A domain depends on the core and the geometry port: columns, beams, slabs
+# and footings describe their bodies with it.
 [dependencies]
 hito-core.workspace = true
 hito-geometry.workspace = true

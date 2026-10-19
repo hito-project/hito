@@ -10,6 +10,7 @@ ribbon-tab-structure = Estructura
 ribbon-tab-view = Vista
 ribbon-tab-manage = Gestionar
 ribbon-group-structure = Estructura
+ribbon-group-opening = Aberturas
 ribbon-group-foundation = Fundaciones
 ribbon-group-datum = Referencia
 ribbon-group-create = Crear
@@ -22,6 +23,7 @@ command-beam = Viga
 command-wall = Muro
 command-column = Columna
 command-slab = Losa
+command-vertical-opening = Abertura vertical
 command-isolated-footing = Base aislada
 command-level = Nivel
 command-grid = Eje
@@ -63,6 +65,20 @@ wall-same-point = El punto siguiente tiene que ser distinto del anterior
 wall-type-generic = Genérico - 200 mm
 # El hormigón genérico de todo proyecto nuevo, sin resistencia: los hormigones con grado vienen de los paquetes regionales. Desde ahí es un dato.
 material-concrete-generic = Hormigón
+
+## Losas
+
+# Las herramientas Losa (SB) y Abertura vertical dibujan un contorno cerrado.
+# Los puntos se escriben hasta que las vistas en planta permitan marcarlos.
+slab-prompt-start = Indicar el primer punto del contorno de la losa, como 0,0
+slab-prompt-next = Indicar el punto siguiente, como 5,0, @5,0 o @5<90. Repetir el primer punto termina la losa
+opening-prompt-start = Indicar el primer punto de la abertura, dentro de una losa de este nivel
+opening-prompt-next = Indicar el punto siguiente, como 1,0, @1,0 o @1<90. Repetir el primer punto termina la abertura
+sketch-same-point = El punto siguiente tiene que ser distinto del anterior
+sketch-too-few = El contorno necesita al menos 3 puntos antes de cerrarse
+sketch-crossing = El contorno no puede cruzarse ni tocarse a sí mismo
+# El tipo de losa con el que empieza todo proyecto nuevo. Desde ahí es un dato.
+slab-type-generic = Genérico - 150 mm
 
 ## Ejes
 
