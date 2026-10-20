@@ -7,6 +7,7 @@
 //! as the [`Navigation`] setting says, and a view cube in its corner.
 
 pub mod camera;
+mod cut;
 pub mod navigation;
 mod pick;
 pub mod plan;
@@ -68,6 +69,8 @@ pub struct Viewport {
     rect: Option<egui::Rect>,
     /// What zooming to fit a plan view shows, as of its last frame.
     plan_bounds: Option<Bounds>,
+    /// What a plan view draws of the elements.
+    drawing: plan::Drawing,
     /// How many times it has rendered, so tests can check that it did.
     pub renders: u64,
 }
@@ -98,6 +101,21 @@ struct Target {
     depth: wgpu::TextureView,
     uniforms: wgpu::Buffer,
     group: wgpu::BindGroup,
+}
+
+/// What a click finds under the cursor, from a screen position in a view
+/// of a size, nearest first.
+type Under<'a> = &'a dyn Fn(&Scene, &Camera, DVec2, DVec2) -> Vec<ElementId>;
+/// What a box between two screen corners takes.
+type InBox<'a> = &'a dyn Fn(&Scene, &Camera, [DVec2; 2], BoxKind, DVec2) -> Vec<ElementId>;
+
+/// How a view finds what a click or a box picks: the 3D views from the
+/// meshes, plan views from what they draw.
+struct Picker<'a> {
+    /// Changes whenever what they find could.
+    revision: u64,
+    under: Under<'a>,
+    in_box: InBox<'a>,
 }
 
 /// The shader's `View`.
@@ -171,7 +189,12 @@ impl Viewport {
         if let Some(action) = view_cube::ui(ui, rect, &self.camera, i18n) {
             self.cube(action, scene);
         }
-        let picked = self.select(ui, &response, scene, tab);
+        let picker = Picker {
+            revision: scene.geometry_revision(),
+            under: &pick::under,
+            in_box: &pick::in_box,
+        };
+        let picked = self.select(ui, &response, scene, tab, &picker);
 
         let Some(rs) = render_state else {
             ui.painter().text(
@@ -209,12 +232,15 @@ impl Viewport {
     /// or the one Tab has cycled to among those overlapping there; a drag
     /// to the right draws a window box, a drag to the left a crossing box.
     /// Ctrl adds to the selection and Shift removes from it.
+    ///
+    /// `picker` finds what a click and a box pick.
     fn select(
         &mut self,
         ui: &egui::Ui,
         response: &egui::Response,
         scene: &mut Scene,
         tab: bool,
+        picker: &Picker<'_>,
     ) -> Option<Picked> {
         let origin = response.rect.min;
         let local = |p: egui::Pos2| DVec2::new((p.x - origin.x).into(), (p.y - origin.y).into());
@@ -223,9 +249,9 @@ impl Viewport {
 
         match response.hover_pos().filter(|_| !boxing) {
             Some(pointer) => {
-                let at = Some((pointer, self.camera, scene.geometry_revision()));
+                let at = Some((pointer, self.camera, picker.revision));
                 if self.under_at != at {
-                    self.under = pick::under(scene, &self.camera, local(pointer), self.size);
+                    self.under = (picker.under)(scene, &self.camera, local(pointer), self.size);
                     self.under_at = at;
                     self.cycle = 0;
                 }
@@ -262,7 +288,7 @@ impl Viewport {
         let kind = BoxKind::of_drag(corners[0], corners[1]);
         if response.drag_stopped_by(egui::PointerButton::Primary) {
             self.box_start = None;
-            let ids = pick::in_box(scene, &self.camera, corners, kind, self.size);
+            let ids = (picker.in_box)(scene, &self.camera, corners, kind, self.size);
             return Some(Picked { ids, mode });
         }
         // Revit draws a window box with a solid line and a crossing box

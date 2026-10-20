@@ -78,6 +78,9 @@ impl Tabs<'_> {
         if let Some(point) = output.point {
             self.point = Some((level, point));
         }
+        if let Some(picked) = output.picked {
+            self.picked = Some(picked);
+        }
     }
 
     /// Revit's project browser: the views, then the levels,

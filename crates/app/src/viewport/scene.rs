@@ -25,10 +25,10 @@ const FACE: [f32; 4] = [0.80, 0.80, 0.78, 1.0];
 const EDGE: [f32; 4] = [0.08, 0.08, 0.08, 1.0];
 /// Selected elements show in Revit's selection blue, faces tinted.
 const SELECTED_FACE: [f32; 4] = [0.55, 0.68, 0.95, 1.0];
-const SELECTED_EDGE: [f32; 4] = [0.0, 0.23, 0.74, 1.0];
+pub(super) const SELECTED_EDGE: [f32; 4] = [0.0, 0.23, 0.74, 1.0];
 /// The element a click would select has blue edges, as Revit's
 /// pre-selection highlight.
-const PREHIGHLIGHT_EDGE: [f32; 4] = [0.0, 0.47, 0.95, 1.0];
+pub(super) const PREHIGHLIGHT_EDGE: [f32; 4] = [0.0, 0.47, 0.95, 1.0];
 
 /// Edges between faces that meet at more than this angle are drawn. Lower
 /// angles are a curved surface's facets, or a flat face's triangles.
@@ -439,8 +439,23 @@ fn vertices(mesh: &Mesh, origin: DVec3) -> (Vec<Vertex>, Vec<Vertex>) {
         }
     }
 
+    let edges = creases(mesh, &normals)
+        .into_iter()
+        .flat_map(|(a, b)| [a, b])
+        .map(|i| Vertex {
+            position: at(i).into(),
+            normal: [0.0; 3],
+        })
+        .collect();
+    (faces, edges)
+}
+
+/// A mesh's edges, by their corners: where the mesh ends, or where two
+/// faces meet at a crease, given each triangle's normal. The 3D views draw
+/// them as lines, and plan views draw them for elements seen from above.
+pub(super) fn creases(mesh: &Mesh, normals: &[Vec3]) -> Vec<(u32, u32)> {
     let mut sides: HashMap<(u32, u32), Vec<Vec3>> = HashMap::new();
-    for (&[a, b, c], &normal) in mesh.triangles.iter().zip(&normals) {
+    for (&[a, b, c], &normal) in mesh.triangles.iter().zip(normals) {
         for (from, to) in [(a, b), (b, c), (c, a)] {
             sides
                 .entry((from.min(to), from.max(to)))
@@ -448,25 +463,30 @@ fn vertices(mesh: &Mesh, origin: DVec3) -> (Vec<Vertex>, Vec<Vertex>) {
                 .push(normal);
         }
     }
-    let mut edges = Vec::new();
-    let mut keys: Vec<_> = sides.keys().copied().collect();
-    keys.sort_unstable();
-    for key in keys {
-        let normals = &sides[&key];
-        let crease = match normals.as_slice() {
+    let mut edges: Vec<_> = sides
+        .into_iter()
+        .filter(|(_, normals)| match normals.as_slice() {
             [n1, n2] => n1.angle_between(*n2) > CREASE,
             _ => true,
-        };
-        if crease {
-            for i in [key.0, key.1] {
-                edges.push(Vertex {
-                    position: at(i).into(),
-                    normal: [0.0; 3],
-                });
-            }
-        }
-    }
-    (faces, edges)
+        })
+        .map(|(key, _)| key)
+        .collect();
+    edges.sort_unstable();
+    edges
+}
+
+/// Each triangle's normal, as a unit vector, or zero if it has no area.
+pub(super) fn normals(mesh: &Mesh) -> Vec<Vec3> {
+    let at = |i: u32| DVec3::from(mesh.positions[i as usize]);
+    mesh.triangles
+        .iter()
+        .map(|&[a, b, c]| {
+            (at(b) - at(a))
+                .cross(at(c) - at(a))
+                .normalize_or_zero()
+                .as_vec3()
+        })
+        .collect()
 }
 
 #[cfg(test)]
