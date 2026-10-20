@@ -154,6 +154,12 @@ impl WallGeom {
         self.depths[self.layers.len()]
     }
 
+    /// How far the middle of the wall's thickness is from the location
+    /// line, along `side`. Doors and windows sit there.
+    pub fn middle(&self) -> f64 {
+        self.exterior - self.width() / 2.0
+    }
+
     fn core_width(&self) -> f64 {
         self.depths[self.core.end] - self.depths[self.core.start]
     }
