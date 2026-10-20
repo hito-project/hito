@@ -72,6 +72,13 @@ grid-points-differ = El punto final debe ser distinto del inicial
 grid-name-empty = El eje necesita un rótulo
 grid-name-taken = Ya hay otro eje con el rótulo { $name }
 
+## Columnas
+
+# La herramienta Columna (CL). En el cruce de dos ejes, la columna sigue a los ejes.
+column-prompt-point = Indicar el centro de la columna, como 0,0. Esc termina
+# El tipo de columna con el que empieza todo proyecto nuevo. Desde ahí es un dato.
+column-type-generic = Rectangular - 300 x 300 mm
+
 ## Acciones de ventanas
 
 action-new-3d-view = Vista 3D

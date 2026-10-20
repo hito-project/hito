@@ -105,9 +105,12 @@ impl Shell {
                 .and_then(|s| eframe::get_value(s, NAVIGATION_KEY))
                 .unwrap_or_default(),
             viewports: HashMap::new(),
-            // The structural generators come with their elements (#37 to
-            // #41).
-            geometry: GeometryCache::new(Arc::new(Manifold), hito_architectural::generators()),
+            geometry: GeometryCache::new(
+                Arc::new(Manifold),
+                hito_structural::generators()
+                    .into_iter()
+                    .chain(hito_architectural::generators()),
+            ),
             scene: Scene::default(),
             commands: Session::new(registry()),
             command_line: Default::default(),
