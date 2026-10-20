@@ -85,9 +85,13 @@ jobs:
           rustup target add aarch64-apple-darwin x86_64-apple-darwin
       - uses: Swatinem/rust-cache@v2
       - name: Build
+        # manifold-csg-sys builds Manifold's C++ library with CMake but
+        # doesn't pass the target's architecture, so on this Apple silicon
+        # runner the Intel build would get an arm64 library and fail to
+        # link. CMake takes the architecture from CMAKE_OSX_ARCHITECTURES.
         run: |
-          cargo build --release --locked -p hito --target aarch64-apple-darwin
-          cargo build --release --locked -p hito --target x86_64-apple-darwin
+          CMAKE_OSX_ARCHITECTURES=arm64 cargo build --release --locked -p hito --target aarch64-apple-darwin
+          CMAKE_OSX_ARCHITECTURES=x86_64 cargo build --release --locked -p hito --target x86_64-apple-darwin
           lipo -create -output target/hito \
             target/aarch64-apple-darwin/release/hito \
             target/x86_64-apple-darwin/release/hito
