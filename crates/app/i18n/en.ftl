@@ -80,6 +80,13 @@ sketch-crossing = The boundary can't cross or touch itself
 # The slab type every new project starts with. It's data from then on.
 slab-type-generic = Generic - 150 mm
 
+## Footings
+
+# The Isolated footing tool. Centres are typed until plan views let them be clicked.
+footing-prompt-centre = Specify the footing's centre, such as 3,4 or @6,0
+# The footing type every new project starts with. It's data from then on.
+footing-type-generic = Rectangular - 1800 x 1200 x 450 mm
+
 ## Grids
 
 grid-prompt-start = Enter the grid's start point, such as 0,0
