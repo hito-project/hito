@@ -1,10 +1,18 @@
 //! Plan views (#183) in the shell: what a level's plan shows, read from
 //! the model, and what it's called.
 
+use glam::DVec2;
+use hito_architectural::opening::{self, OPENING};
 use hito_core::{ElementId, ElementStore, StoreView, Value};
 use hito_structural::{class, grid, level};
 
-use crate::viewport::{Plan, PlanGrid};
+use crate::viewport::plan::CUT_HEIGHT;
+use crate::viewport::{Plan, PlanGrid, Segment, Symbol};
+
+/// The largest angle one straight piece of a door's swing arc turns
+/// through: 5 degrees, so the arc looks round at any zoom a plan is read
+/// at.
+const ARC_STEP: f64 = std::f64::consts::PI / 36.0;
 
 /// Every level, lowest first, for each to have a plan view.
 pub(super) fn levels(store: &ElementStore) -> Vec<ElementId> {
@@ -41,6 +49,7 @@ pub(super) fn content(store: &ElementStore, level: ElementId) -> Plan {
             .map(|e| e.id())
             .filter(|&id| level::level_of(&view, id) == Some(level))
             .collect(),
+        symbols: symbols(&view, elevation + CUT_HEIGHT),
     }
 }
 
@@ -68,11 +77,123 @@ fn grids(view: &StoreView<'_>) -> Vec<PlanGrid> {
     grids
 }
 
+/// Every door's and window's plan symbol, cut at height `z`, as Revit
+/// draws them: the jambs heavy, as cut, and the leaf, its swing and the
+/// window's lines thin. A door or window the cut misses, such as a high
+/// window, gets an empty symbol, so it doesn't show.
+fn symbols(view: &StoreView<'_>, z: f64) -> Vec<Symbol> {
+    let class = hito_architectural::class(OPENING);
+    let registry = view.registry();
+    view.elements()
+        .filter(|e| registry.is_a(e.class(), &class))
+        .map(|e| {
+            let id = e.id();
+            let crossed = opening::cut(view, id).is_some_and(|c| c.bottom <= z && z <= c.top);
+            let symbol = crossed.then(|| opening::plan_symbol(view, id)).flatten();
+            let Some(symbol) = symbol else {
+                return Symbol {
+                    id,
+                    cut: Vec::new(),
+                    thin: Vec::new(),
+                };
+            };
+            let cut = symbol.outlines.iter().flat_map(|o| closed(o)).collect();
+            let lines = symbol.lines.iter().map(|&[a, b]| [a.into(), b.into()]);
+            let arcs = symbol.arcs.iter().flat_map(arc);
+            Symbol {
+                id,
+                cut,
+                thin: lines.chain(arcs).collect(),
+            }
+        })
+        .collect()
+}
+
+/// The sides of a closed outline.
+fn closed(outline: &[[f64; 2]]) -> Vec<Segment> {
+    let points: Vec<DVec2> = outline.iter().map(|&p| p.into()).collect();
+    let next = points.iter().cycle().skip(1);
+    points.iter().zip(next).map(|(&a, &b)| [a, b]).collect()
+}
+
+/// An arc as straight pieces, none turning more than [`ARC_STEP`].
+fn arc(arc: &opening::Arc) -> Vec<Segment> {
+    let steps = (arc.sweep.abs() / ARC_STEP).ceil().max(1.0) as usize;
+    let centre = DVec2::from(arc.centre);
+    let at = |i: usize| {
+        let angle = arc.start + arc.sweep * i as f64 / steps as f64;
+        centre + arc.radius * DVec2::from_angle(angle)
+    };
+    (0..steps).map(|i| [at(i), at(i + 1)]).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::i18n::{I18n, Locale};
+    use hito_core::SchemaRegistry;
+
+    use crate::command::{InputFormat, Session};
     use crate::project;
+    use crate::shell::registry;
+
+    /// A new project with a 6 m wall along x, a door on its interior side
+    /// (-y) at 2 m and a window at 4.5 m, placed as the tools place them.
+    fn door_and_window() -> ElementStore {
+        let i18n = I18n::new(Locale::En);
+        let mut schemas = SchemaRegistry::new();
+        hito_structural::register(&mut schemas).unwrap();
+        hito_architectural::register(&mut schemas).unwrap();
+        let mut store = project::new_project(schemas, &i18n);
+        let mut session = Session::new(registry());
+        let format = InputFormat::new();
+        for text in ["WA", "0,0", "6,0"] {
+            session.enter(text, &i18n, &format, &mut store);
+        }
+        session.cancel(&i18n);
+        for (command, point) in [("DR", "2,-0.05"), ("WN", "4.5,0")] {
+            session.enter(command, &i18n, &format, &mut store);
+            session.enter(point, &i18n, &format, &mut store);
+            session.cancel(&i18n);
+        }
+        store
+    }
+
+    fn of_kind(store: &ElementStore, symbols: &[Symbol], kind: &str) -> Symbol {
+        let class = hito_architectural::class(kind);
+        let found = symbols
+            .iter()
+            .find(|s| store.get(s.id).unwrap().class() == &class);
+        found.expect("a symbol").clone()
+    }
+
+    #[test]
+    fn doors_and_windows_draw_their_plan_symbol_where_the_cut_crosses_them() {
+        let store = door_and_window();
+        let level = levels(&store)[0];
+        let plan = content(&store, level);
+        assert_eq!(plan.symbols.len(), 2);
+
+        let door = of_kind(&store, &plan.symbols, opening::DOOR);
+        assert_eq!(door.cut.len(), 8, "two jambs, cut");
+        // The leaf, then the swing arc in 5 degree pieces, on the interior
+        // side the door was placed from.
+        assert_eq!(door.thin.len(), 1 + 18);
+        let ends = door.thin.iter().flatten();
+        assert!(ends.clone().all(|p| p.y < 1e-9), "swings to -y");
+        let arc = &door.thin[1..];
+        for pair in arc.windows(2) {
+            assert_eq!(pair[0][1], pair[1][0], "the arc is joined up");
+        }
+
+        let window = of_kind(&store, &plan.symbols, opening::WINDOW);
+        assert_eq!(window.cut.len(), 8, "two jambs, cut");
+        assert_eq!(window.thin.len(), 3, "both wall faces and the glass");
+
+        // Cut above them both, they don't show.
+        let high = symbols(&store.view(), 2.5);
+        assert!(high.iter().all(|s| s.cut.is_empty() && s.thin.is_empty()));
+    }
 
     #[test]
     fn a_plan_shows_every_grid_and_snaps_where_they_cross() {

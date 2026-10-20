@@ -257,3 +257,57 @@ fn a_plan_draws_what_its_cut_crosses_and_selects_with_the_3d_view() {
     h.run_steps(2);
     assert!(h.state().viewport(upper).unwrap().drawn().is_empty());
 }
+
+/// The doors and windows hosted by `wall`, in order along it, each with
+/// whether it's facing-flipped.
+fn openings(h: &Harness<'_, Shell>, wall: ElementId) -> Vec<(ElementId, bool)> {
+    use hito_architectural::opening;
+    let view = h.state().project().view();
+    let mut hosted: Vec<_> = opening::hosted(&view, wall)
+        .into_iter()
+        .map(|id| {
+            let along = opening::cut(&view, id).unwrap().from;
+            let flipped = view.property(id, opening::FACING_FLIPPED) == Some(&Value::Boolean(true));
+            (along, id, flipped)
+        })
+        .collect();
+    hosted.sort_by(|a, b| a.0.total_cmp(&b.0));
+    hosted.into_iter().map(|(_, id, f)| (id, f)).collect()
+}
+
+#[test]
+fn doors_and_windows_are_placed_by_clicking_a_wall_in_plan_and_draw_their_symbol() {
+    let mut h = window();
+    let plan = open_plan(&mut h, "Level 1");
+    let none = egui::Vec2::ZERO;
+    command_line(&mut h, "WA");
+    click_at(&mut h, plan, [0.0, 0.0, 0.0], none);
+    click_at(&mut h, plan, [8.0, 0.0, 0.0], none);
+    esc(&mut h);
+    let wall = walls(&h)[0];
+
+    // The wall runs along x, so its exterior is +y and its interior -y.
+    // A door swings to the side of the wall it's clicked on.
+    command_line(&mut h, "DR");
+    click_at(&mut h, plan, [2.0, -0.05, 0.0], none);
+    click_at(&mut h, plan, [4.0, 0.05, 0.0], none);
+    esc(&mut h);
+    command_line(&mut h, "WN");
+    click_at(&mut h, plan, [6.5, 0.0, 0.0], none);
+    esc(&mut h);
+    let placed = openings(&h, wall);
+    assert_eq!(placed.len(), 3, "two doors and a window");
+    let flips: Vec<_> = placed[..2].iter().map(|o| o.1).collect();
+    assert_eq!(flips, [false, true], "{placed:?}");
+
+    // The plan draws the wall, with its gaps, and each one's symbol.
+    let mut drawn = h.state().viewport(plan).unwrap().drawn();
+    drawn.sort();
+    let mut expected: Vec<_> = placed.iter().map(|o| o.0).chain([wall]).collect();
+    expected.sort();
+    assert_eq!(drawn, expected);
+
+    // A click on a door's swing selects the door.
+    click_at(&mut h, plan, [2.0, -0.5, 0.0], none);
+    assert_eq!(selected(&h), [placed[0].0]);
+}

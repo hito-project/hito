@@ -7,9 +7,9 @@
 //! stays active for the next one until Esc, and each door or window is its
 //! own transaction and undo step.
 //!
-//! Points are typed on the command line until plan views (#183) let them
-//! be clicked. A click will give the same thing: a point in plan on the
-//! active level, so it only has to feed [`Input::Point`].
+//! The point is clicked on a wall in a plan view (#183), or typed on the
+//! command line: both give the same [`Input::Point`], on the active level.
+//! The plan view then draws the door's or window's plan symbol.
 //!
 //! The wall is the nearest one on the active level whose body holds the
 //! point (see [`opening::wall_at`]). If the door or window would stick out
