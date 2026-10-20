@@ -10,6 +10,7 @@ ribbon-tab-structure = Structure
 ribbon-tab-view = View
 ribbon-tab-manage = Manage
 ribbon-group-structure = Structure
+ribbon-group-opening = Opening
 ribbon-group-foundation = Foundation
 ribbon-group-datum = Datum
 ribbon-group-create = Create
@@ -22,6 +23,7 @@ command-beam = Beam
 command-wall = Wall
 command-column = Column
 command-slab = Slab
+command-vertical-opening = Vertical
 command-isolated-footing = Isolated
 command-level = Level
 command-grid = Grid
@@ -63,6 +65,20 @@ wall-same-point = The next point must differ from the last one
 wall-type-generic = Generic - 200 mm
 # The generic concrete every new project starts with, with no strength: graded concrete comes with regional packs. It's data from then on.
 material-concrete-generic = Concrete
+
+## Slabs
+
+# The Slab tool (SB) and the Vertical opening tool sketch a closed boundary.
+# Points are typed until plan views let them be clicked.
+slab-prompt-start = Specify the slab boundary's first point, such as 0,0
+slab-prompt-next = Specify the next point, such as 5,0, @5,0 or @5<90. Enter the first point again to finish the slab
+opening-prompt-start = Specify the opening's first point, inside a slab on this level
+opening-prompt-next = Specify the next point, such as 1,0, @1,0 or @1<90. Enter the first point again to finish the opening
+sketch-same-point = The next point must differ from the last one
+sketch-too-few = A boundary needs at least 3 points before it closes
+sketch-crossing = The boundary can't cross or touch itself
+# The slab type every new project starts with. It's data from then on.
+slab-type-generic = Generic - 150 mm
 
 ## Grids
 

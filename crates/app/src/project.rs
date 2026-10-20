@@ -11,12 +11,11 @@ use crate::i18n::I18n;
 
 /// A new project: a physical model with one level at 0.00 m, named in the
 /// user's language ("Nivel 1"), so the first elements have a level to stand
-/// on, a generic concrete, a generic column type and, when the
-/// architectural schema is
-/// registered, a generic wall type. More levels are added with the Level
-/// command. The store has `schemas`, which must include the structural
-/// schema. Names are data from then on, so they don't change with the
-/// language.
+/// on, a generic concrete, generic column and slab types and, when the
+/// architectural schema is registered, a generic wall type. More levels
+/// are added with the Level command. The store has `schemas`, which must
+/// include the structural schema. Names are data from then on, so they
+/// don't change with the language.
 pub fn new_project(schemas: SchemaRegistry, i18n: &I18n) -> ElementStore {
     let mut store = ElementStore::new(schemas);
     let mut tx = store.transaction();
@@ -35,8 +34,19 @@ pub fn new_project(schemas: SchemaRegistry, i18n: &I18n) -> ElementStore {
     {
         generic_wall_type(&mut tx, i18n).expect("the generic wall type is valid");
     }
+    generic_slab_type(&mut tx, i18n).expect("the generic slab type is valid");
     tx.commit().expect("the default level is valid");
     store
+}
+
+/// One generic slab type, 15 cm of the generic concrete, as Revit's metric
+/// templates have a "Generic 150mm" floor, so the Slab tool works in a new
+/// project. Regional slab types come with regional packs (#167).
+fn generic_slab_type(tx: &mut Transaction<'_>, i18n: &I18n) -> Result<(), StoreError> {
+    let concrete = generic_concrete(tx, i18n)?;
+    let definitions = definitions_model(tx)?;
+    let name = i18n.tr("slab-type-generic");
+    hito_structural::slab::insert_type(tx, definitions, &name, 0.15, Some(concrete)).map(drop)
 }
 
 /// One generic wall type, 20 cm of a single structural layer, as Revit's

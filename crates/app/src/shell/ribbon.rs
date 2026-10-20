@@ -71,6 +71,10 @@ const TABS: &[RibbonTab] = &[
                 ],
             },
             Group {
+                title: "ribbon-group-opening",
+                items: &[Item::Command("VERTICALOPENING")],
+            },
+            Group {
                 title: "ribbon-group-foundation",
                 items: &[Item::Command("ISOLATEDFOOTING")],
             },

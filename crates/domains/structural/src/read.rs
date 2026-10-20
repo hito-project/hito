@@ -3,7 +3,7 @@
 //! reads so the geometry follows it. The architectural domain has the same
 //! helper for walls.
 
-use hito_core::{ClassId, ElementId, Relationship, SchemaRegistry, StoreView, Value};
+use hito_core::{ClassId, Element, ElementId, Relationship, SchemaRegistry, StoreView, Value};
 use hito_geometry::Inputs;
 
 pub(crate) trait Read<'a> {
@@ -12,6 +12,9 @@ pub(crate) trait Read<'a> {
     fn type_of(&self, id: ElementId) -> Option<ElementId>;
     fn property(&self, id: ElementId, name: &str) -> Option<&'a Value>;
     fn relationships_from(&self, id: ElementId) -> Vec<&'a Relationship>;
+    fn relationships_to(&self, id: ElementId) -> Vec<&'a Relationship>;
+    /// The element itself, for its aspects, such as a slab's boundary.
+    fn element(&self, id: ElementId) -> Option<&'a Element>;
 
     /// A [`Real`](Value::Real) property's value.
     fn real(&self, id: ElementId, name: &str) -> Option<f64> {
@@ -33,6 +36,14 @@ pub(crate) trait Read<'a> {
         let from = self.relationships_from(id).into_iter();
         from.filter(|r| r.class() == class)
             .map(Relationship::target)
+            .collect()
+    }
+
+    /// The sources of the relationships of type `class` to `id`.
+    fn sources(&self, id: ElementId, class: &ClassId) -> Vec<ElementId> {
+        let to = self.relationships_to(id).into_iter();
+        to.filter(|r| r.class() == class)
+            .map(Relationship::source)
             .collect()
     }
 
@@ -62,6 +73,14 @@ impl<'a> Read<'a> for StoreView<'a> {
     fn relationships_from(&self, id: ElementId) -> Vec<&'a Relationship> {
         StoreView::relationships_from(self, id).collect()
     }
+
+    fn relationships_to(&self, id: ElementId) -> Vec<&'a Relationship> {
+        StoreView::relationships_to(self, id).collect()
+    }
+
+    fn element(&self, id: ElementId) -> Option<&'a Element> {
+        self.get(id)
+    }
 }
 
 impl<'a> Read<'a> for Inputs<'a> {
@@ -83,5 +102,13 @@ impl<'a> Read<'a> for Inputs<'a> {
 
     fn relationships_from(&self, id: ElementId) -> Vec<&'a Relationship> {
         Inputs::relationships_from(self, id).collect()
+    }
+
+    fn relationships_to(&self, id: ElementId) -> Vec<&'a Relationship> {
+        Inputs::relationships_to(self, id).collect()
+    }
+
+    fn element(&self, id: ElementId) -> Option<&'a Element> {
+        self.get(id)
     }
 }

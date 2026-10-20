@@ -1,8 +1,9 @@
 //! Structural geometry: each element's body, from its parameters.
 
-use hito_geometry::{Frame, Generator, Solid};
+use hito_geometry::{Frame, Generator, Profile, Solid};
 
-use crate::{class, column};
+use crate::read::Read;
+use crate::{class, column, slab};
 
 /// The structural geometry generators.
 pub(crate) fn generators() -> Vec<Generator> {
@@ -20,5 +21,33 @@ pub(crate) fn generators() -> Vec<Generator> {
             depth: top - bottom,
         })
     });
-    vec![column]
+    // A slab is its boundary, less its openings, extruded from its bottom
+    // up to its top. Openings are holes in the profile, so no boolean is
+    // needed.
+    let slab = Generator::new(class(slab::SLAB), |inputs, slab| {
+        let outline = slab::read_boundary(inputs, slab.id());
+        let (bottom, top) = slab::read_elevations(inputs, slab.id())?;
+        let origin = *outline.first()?;
+        // Profiles are placed at the first corner, so a slab far from the
+        // origin keeps its precision.
+        let local = |points: Vec<[f64; 2]>| -> Vec<[f64; 2]> {
+            let at = |p: [f64; 2]| [p[0] - origin[0], p[1] - origin[1]];
+            points.into_iter().map(at).collect()
+        };
+        let mut openings = inputs.sources(slab.id(), &class(slab::OPENING_IN));
+        openings.sort();
+        let holes = openings
+            .into_iter()
+            .map(|o| local(slab::read_boundary(inputs, o)))
+            .collect();
+        Some(Solid::Extrusion {
+            profile: Profile::Polygon {
+                outline: local(outline),
+                holes,
+            },
+            frame: Frame::at([origin[0], origin[1], bottom]),
+            depth: top - bottom,
+        })
+    });
+    vec![column, slab]
 }
