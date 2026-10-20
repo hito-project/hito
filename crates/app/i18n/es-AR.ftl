@@ -7,6 +7,8 @@ app-title = HITO
 ## Fichas y grupos de la cinta
 
 ribbon-tab-structure = Estructura
+ribbon-tab-architecture = Arquitectura
+ribbon-group-build = Construir
 ribbon-tab-view = Vista
 ribbon-tab-manage = Gestionar
 ribbon-group-structure = Estructura
@@ -21,6 +23,8 @@ ribbon-group-settings = Configuración
 
 command-beam = Viga
 command-wall = Muro
+command-door = Puerta
+command-window = Ventana
 command-column = Columna
 command-slab = Losa
 command-vertical-opening = Abertura vertical
@@ -86,6 +90,13 @@ slab-type-generic = Genérico - 150 mm
 footing-prompt-centre = Indicar el centro de la base, como 3,4 o @6,0
 # El tipo de base con el que empieza todo proyecto nuevo. Desde ahí es un dato.
 footing-type-generic = Rectangular - 1800 x 1200 x 450 mm
+
+# Las herramientas Puerta (DR) y Ventana (WN). El punto se escribe hasta que las vistas en planta permitan marcarlo.
+door-prompt = Indicar un punto sobre un muro, como 2,0. La puerta abre hacia ese lado. Esc termina
+window-prompt = Indicar un punto sobre un muro, como 2,0. Esc termina
+# Los tipos de puerta y ventana con los que empieza todo proyecto nuevo. Desde ahí son datos.
+door-type-generic = Puerta simple - 80 × 205 cm
+window-type-generic = Ventana - 150 × 110 cm
 
 ## Ejes
 

@@ -7,6 +7,7 @@ pub mod column;
 pub mod footing;
 pub mod grid;
 pub mod level;
+pub mod opening;
 mod placement;
 pub mod slab;
 pub mod wall;

@@ -73,7 +73,25 @@ fn generic_wall_type(tx: &mut Transaction<'_>, i18n: &I18n) -> Result<(), StoreE
     let definitions = definitions_model(tx)?;
     let name = i18n.tr("wall-type-generic");
     let layers = [Layer::new(Function::Structure, 0.2).with_material(concrete)];
-    wall_type::insert(tx, definitions, &name, &layers).map(drop)
+    wall_type::insert(tx, definitions, &name, &layers)?;
+    starter_openings(tx, definitions, i18n)
+}
+
+/// The door and window types a new project starts with, one generic door
+/// and one generic window, so the Door and Window tools work, as Revit's
+/// templates load a few families. Named in the user's language.
+fn starter_openings(
+    tx: &mut Transaction<'_>,
+    definitions: ModelId,
+    i18n: &I18n,
+) -> Result<(), StoreError> {
+    use hito_architectural::opening_type::{self, Definition};
+    let door = Definition::door(i18n.tr("door-type-generic"), 0.8, 2.05);
+    let window = Definition::window(i18n.tr("window-type-generic"), 1.5, 1.1, 0.9);
+    for definition in [door, window] {
+        opening_type::insert(tx, definitions, &definition)?;
+    }
+    Ok(())
 }
 
 /// The project's generic concrete, added if it has none: a
