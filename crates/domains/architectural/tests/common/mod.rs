@@ -1,5 +1,5 @@
-//! A small project to draw walls in: two levels, two wall types and a test
-//! slab class to attach walls to.
+//! A small project to draw walls in: two levels, materials, two wall types
+//! and a test slab class to attach walls to.
 
 #![allow(dead_code)]
 
@@ -12,6 +12,7 @@ use hito_core::{
     SchemaRegistry, SchemaVersion, StoreError, Value,
 };
 use hito_structural::level::{self, HORIZONTAL_ELEMENT};
+use hito_structural::material::{self, CONCRETE, MATERIAL};
 
 pub struct Project {
     pub store: ElementStore,
@@ -33,23 +34,13 @@ pub fn slab_class() -> ClassId {
     ClassId::new("TestSlabs", "Slab")
 }
 
-/// A material, as #36 will add.
-pub fn material_class() -> ClassId {
-    ClassId::new("TestSlabs", "Material")
-}
-
 pub fn project() -> Project {
     let mut registry = SchemaRegistry::new();
     hito_architectural::register(&mut registry).unwrap();
-    let slabs = Schema::new("TestSlabs", SchemaVersion::new(1, 0, 0))
-        .class(ClassDef::new(
-            "Slab",
-            hito_structural::class(HORIZONTAL_ELEMENT),
-        ))
-        .class(
-            ClassDef::new("Material", ClassId::DEFINITION_ELEMENT)
-                .property("Name", hito_core::DataType::Text),
-        );
+    let slabs = Schema::new("TestSlabs", SchemaVersion::new(1, 0, 0)).class(ClassDef::new(
+        "Slab",
+        hito_structural::class(HORIZONTAL_ELEMENT),
+    ));
     registry.register(slabs).unwrap();
     let mut store = ElementStore::new(registry);
     let mut tx = store.transaction();
@@ -61,11 +52,13 @@ pub fn project() -> Project {
     };
     let ground = tx.insert(level("Planta baja", 0.0)).unwrap();
     let first = tx.insert(level("Primer piso", 3.0)).unwrap();
-    let material = |name: &str| Element::new(material_class(), model).with_property("Name", name);
-    let render = tx.insert(material("Revoque exterior")).unwrap();
-    let hollow_brick = tx.insert(material("Ladrillo hueco")).unwrap();
-    let plaster = tx.insert(material("Revoque interior")).unwrap();
-    let h25 = tx.insert(material("H-25")).unwrap();
+    let material = |class: &str, name: &str| {
+        Element::new(hito_structural::class(class), model).with_property(material::NAME, name)
+    };
+    let render = tx.insert(material(MATERIAL, "Revoque exterior")).unwrap();
+    let hollow_brick = tx.insert(material(MATERIAL, "Ladrillo hueco")).unwrap();
+    let plaster = tx.insert(material(MATERIAL, "Revoque interior")).unwrap();
+    let h25 = tx.insert(material(CONCRETE, "H-25")).unwrap();
     let brick = wall_type::insert(
         &mut tx,
         model,
