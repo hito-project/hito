@@ -26,6 +26,9 @@ pub enum InputError {
     Empty,
     NotAPoint,
     NotAQuantity,
+    /// The prompt wants an element clicked in a view, which can't be
+    /// typed.
+    NotAPick,
 }
 
 impl InputError {
@@ -35,6 +38,7 @@ impl InputError {
             InputError::Empty => "input-empty",
             InputError::NotAPoint => "input-not-a-point",
             InputError::NotAQuantity => "input-not-a-value",
+            InputError::NotAPick => "input-not-a-pick",
         }
     }
 }
@@ -72,6 +76,7 @@ impl InputFormat {
                 .map_err(|_| InputError::NotAQuantity),
             Wants::Point => self.point(text),
             Wants::PointFrom(base) => self.point_from(text, base),
+            Wants::Element(_) => Err(InputError::NotAPick),
         }
     }
 
@@ -102,7 +107,7 @@ impl InputFormat {
             }
             None => match self.point(relative)? {
                 Input::Point(offset) => offset,
-                Input::Quantity(_) => return Err(InputError::NotAPoint),
+                Input::Quantity(_) | Input::Element(_) => return Err(InputError::NotAPoint),
             },
         };
         Ok(Input::Point([0, 1, 2].map(|i| base[i] + offset[i])))

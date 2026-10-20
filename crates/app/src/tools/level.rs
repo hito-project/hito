@@ -43,7 +43,7 @@ impl Tool for LevelTool {
                 self.elevation = Some(elevation);
                 Next::Repeat
             }
-            Input::Point(_) => Next::Reject("input-not-a-value"),
+            Input::Point(_) | Input::Element(_) => Next::Reject("input-not-a-value"),
         }
     }
 

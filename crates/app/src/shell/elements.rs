@@ -265,7 +265,9 @@ pub(super) fn properties(
                         property: level::ELEVATION,
                         value: value.into(),
                     }),
-                    Ok(Input::Point(_)) => unreachable!("a quantity was asked for"),
+                    Ok(Input::Point(_) | Input::Element(_)) => {
+                        unreachable!("a quantity was asked for")
+                    }
                     Err(error) => elements.fail(i18n.tr(error.message())),
                 }
             }

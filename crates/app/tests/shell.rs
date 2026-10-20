@@ -446,7 +446,7 @@ impl Tool for Probe {
                 self.point = Some(point);
                 Next::Ask
             }
-            Input::Quantity(_) => Next::Done,
+            Input::Quantity(_) | Input::Element(_) => Next::Done,
         }
     }
 

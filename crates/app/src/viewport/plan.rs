@@ -76,6 +76,9 @@ pub struct Plan {
     /// The elements that draw a symbol instead of their mesh, such as doors
     /// and windows. An empty symbol hides the element.
     pub symbols: Vec<Symbol>,
+    /// While a tool asks for an element ([`Wants::Element`]), the ones it
+    /// takes: a click picks one of them, and nothing else.
+    pub pickable: BTreeSet<ElementId>,
 }
 
 /// A point a click snaps to when the cursor is on or near an outline
@@ -114,6 +117,8 @@ pub struct PlanOutput {
     pub point: Option<[f64; 3]>,
     /// What a click or a box selected, when no tool asks for a point.
     pub picked: Option<Picked>,
+    /// An element clicked for the running tool, when it asks for one.
+    pub element: Option<ElementId>,
 }
 
 /// What the cursor points at in a plan: a point on the level, and whether
@@ -301,7 +306,9 @@ impl Viewport {
 
         let pointing = matches!(wants, Some(Wants::Point | Wants::PointFrom(_)));
         let mut output = PlanOutput::default();
-        if pointing {
+        if let Some(Wants::Element(_)) = wants {
+            output.element = self.pick_ui(&response, scene, plan);
+        } else if pointing {
             if self.prehighlighting {
                 scene.set_prehighlight(None);
                 self.prehighlighting = false;
@@ -375,35 +382,11 @@ impl Viewport {
             let b = camera.project(b.extend(z), size)?;
             Some([a, b])
         };
-        let near_lines = |camera: &Camera, size, segments: &[Segment], at: DVec2| {
-            segments.iter().any(|&s| {
-                on_screen(camera, size, s).is_some_and(|s| cut::distance(at, s) <= PICK_RADIUS)
-            })
-        };
         let grid_line = |camera: &Camera, size, g: &PlanGrid| {
             on_screen(camera, size, [g.start.into(), g.end.into()])
         };
         let under = |scene: &Scene, camera: &Camera, at: DVec2, size: DVec2| {
-            let lifted = camera.lifted(top);
-            let mut ids: Vec<ElementId> = pick::under(scene, &lifted, at, size)
-                .into_iter()
-                .filter(|&id| drawing.get(id).is_some_and(|d| !d.cut.is_empty()))
-                .collect();
-            for drawn in &drawing.elements {
-                let lines = [&drawn.cut, &drawn.beyond];
-                if !ids.contains(&drawn.id) && lines.iter().any(|l| near_lines(camera, size, l, at))
-                {
-                    ids.push(drawn.id);
-                }
-            }
-            for grid in &plan.grids {
-                if grid_line(camera, size, grid)
-                    .is_some_and(|l| cut::distance(at, l) <= PICK_RADIUS)
-                {
-                    ids.push(grid.id);
-                }
-            }
-            ids
+            under(&drawing, scene, plan, camera, at, size)
         };
         let in_box =
             |scene: &Scene, camera: &Camera, corners: [DVec2; 2], kind: BoxKind, size: DVec2| {
@@ -436,6 +419,31 @@ impl Viewport {
         let picked = self.select(ui, response, scene, tab, &picker);
         self.drawing = drawing;
         picked
+    }
+
+    /// While a tool asks for an element: the one of [`Plan::pickable`]
+    /// under the cursor, as a click would select it, pre-highlighted, and
+    /// picked by a click.
+    fn pick_ui(
+        &mut self,
+        response: &egui::Response,
+        scene: &mut Scene,
+        plan: &Plan,
+    ) -> Option<ElementId> {
+        let found = response
+            .hover_pos()
+            .zip(self.rect)
+            .and_then(|(hover, rect)| {
+                let at = hover - rect.min;
+                let at = DVec2::new(at.x.into(), at.y.into());
+                let ids = under(&self.drawing, scene, plan, &self.camera, at, self.size);
+                ids.into_iter().find(|id| plan.pickable.contains(id))
+            });
+        if found.is_some() || self.prehighlighting {
+            scene.set_prehighlight(found);
+            self.prehighlighting = found.is_some();
+        }
+        found.filter(|_| response.clicked_by(egui::PointerButton::Primary))
     }
 
     /// Zooms with the wheel, pans with the wheel held down (a plan doesn't
@@ -576,6 +584,46 @@ fn pointed(viewport: &Viewport, plan: &Plan, local: DVec2) -> Pointed {
     }
 }
 
+/// What a click at `at` (points from the view's top-left corner) would
+/// select, nearest first: a cut element by clicking inside its outline,
+/// anything else drawn, and grids, by clicking on their lines.
+fn under(
+    drawing: &Drawing,
+    scene: &Scene,
+    plan: &Plan,
+    camera: &Camera,
+    at: DVec2,
+    size: DVec2,
+) -> Vec<ElementId> {
+    // Seen from above everything, so a ray from the eye meets the tallest
+    // element first.
+    let top = scene.bounds().map_or(0.0, |b| b.max.z) + 1.0;
+    let z = plan.elevation;
+    let on_screen = |[a, b]: Segment| {
+        let a = camera.project(a.extend(z), size)?;
+        let b = camera.project(b.extend(z), size)?;
+        Some([a, b])
+    };
+    let near = |s: Segment| on_screen(s).is_some_and(|s| cut::distance(at, s) <= PICK_RADIUS);
+    let lifted = camera.lifted(top);
+    let mut ids: Vec<ElementId> = pick::under(scene, &lifted, at, size)
+        .into_iter()
+        .filter(|&id| drawing.get(id).is_some_and(|d| !d.cut.is_empty()))
+        .collect();
+    for drawn in &drawing.elements {
+        let lines = [&drawn.cut, &drawn.beyond];
+        if !ids.contains(&drawn.id) && lines.iter().any(|l| l.iter().any(|&s| near(s))) {
+            ids.push(drawn.id);
+        }
+    }
+    for grid in &plan.grids {
+        if near([grid.start.into(), grid.end.into()]) {
+            ids.push(grid.id);
+        }
+    }
+    ids
+}
+
 /// How far `point` is from a closed outline: 0 inside it, or else the
 /// distance to its nearest side.
 fn distance_to_outline(point: DVec2, outline: &[DVec2]) -> f64 {
@@ -639,6 +687,7 @@ mod tests {
             centres: Vec::new(),
             from_above: BTreeSet::new(),
             symbols: Vec::new(),
+            pickable: BTreeSet::new(),
         };
         let mut viewport = Viewport::plan();
         viewport.size = SIZE;

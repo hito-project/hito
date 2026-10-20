@@ -18,7 +18,7 @@ mod input;
 mod matching;
 mod session;
 
-use hito_core::{Dimension, ElementId, StoreError, Transaction};
+use hito_core::{ClassId, Dimension, ElementId, StoreError, StoreView, Transaction};
 
 pub use input::{InputError, InputFormat};
 pub use matching::fold;
@@ -72,6 +72,15 @@ pub trait Tool {
     /// Takes the answer to the last prompt.
     fn input(&mut self, input: Input) -> Next;
 
+    /// Takes an element picked in a view, the answer to a prompt that
+    /// wants [`Wants::Element`] ([`Input::Element`]), with the model to
+    /// read it from. Tools that never ask for one keep the default, which
+    /// refuses it.
+    fn pick(&mut self, element: ElementId, model: &StoreView<'_>) -> Next {
+        let _ = (element, model);
+        Next::Reject("input-not-a-pick")
+    }
+
     /// Makes the tool's change, once [`Tool::input`] has returned
     /// [`Next::Done`] or [`Next::Repeat`]. An error discards the whole
     /// transaction.
@@ -120,6 +129,25 @@ pub enum Wants {
     /// A quantity of a dimension, such as a length, with or without units.
     /// [`Dimension::NONE`] is a plain number.
     Quantity(Dimension),
+    /// An element of one of these classes (or a class derived from one),
+    /// clicked in a plan view, such as the slab an opening cuts. It can't
+    /// be typed.
+    Element(&'static [ClassRef]),
+}
+
+/// A class named by its schema and its name, so a [`Prompt`] can name the
+/// classes it picks in a constant. [`ClassRef::id`] gives the core's
+/// [`ClassId`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClassRef {
+    pub schema: &'static str,
+    pub name: &'static str,
+}
+
+impl ClassRef {
+    pub fn id(self) -> ClassId {
+        ClassId::new(self.schema, self.name)
+    }
 }
 
 /// An answer to a prompt, in the core's SI units.
@@ -128,6 +156,9 @@ pub enum Input {
     /// X, Y and Z in metres. Z is 0 when only X and Y were given.
     Point([f64; 3]),
     Quantity(f64),
+    /// An element picked in a view, for [`Wants::Element`]. The session
+    /// gives it to [`Tool::pick`], with the model, not to [`Tool::input`].
+    Element(ElementId),
 }
 
 /// What a tool does after an answer.
