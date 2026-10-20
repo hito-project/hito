@@ -29,6 +29,8 @@
 //!   column types share with beam types
 //! - [`column`]s: from a base level to a top level, on grid intersections
 //!   or anywhere
+//! - [`beam`]s: drawn on a level between columns or points, following the
+//!   columns they frame into and stopping at their faces
 //! - [`slab`]s: floors drawn by their boundary on a level, with their
 //!   types and openings, and the [`outline`]s they're drawn with
 //! - isolated [`footing`]s: rectangular pads under columns or free on a
@@ -39,6 +41,7 @@
 //! for CIRSOC 201
 //! ([ADR 0008](https://github.com/hito-project/hito/blob/main/docs/decisions/0008-argentina-first-international-by-design.md)).
 
+pub mod beam;
 pub mod column;
 pub mod footing;
 mod geometry;
@@ -75,6 +78,7 @@ pub fn schema() -> Schema {
         .chain(material::classes())
         .chain(section::classes())
         .chain(column::classes())
+        .chain(beam::classes())
         .chain(slab::classes())
         .chain(footing::classes());
     let schema = classes.fold(schema, Schema::class);
@@ -82,6 +86,7 @@ pub fn schema() -> Schema {
         .into_iter()
         .chain(section::relationships())
         .chain(column::relationships())
+        .chain(beam::relationships())
         .chain(slab::relationships())
         .chain(footing::relationships());
     relationships.fold(schema, Schema::relationship)
@@ -93,6 +98,7 @@ pub fn recomputes() -> Vec<Recompute> {
     level::recomputes()
         .into_iter()
         .chain(column::recomputes())
+        .chain(beam::recomputes())
         .chain(slab::recomputes())
         .chain(footing::recomputes())
         .collect()
@@ -106,6 +112,7 @@ pub fn rules() -> Vec<Rule> {
         .chain(material::rules())
         .chain(section::rules())
         .chain(column::rules())
+        .chain(beam::rules())
         .chain(slab::rules())
         .chain(footing::rules())
         .collect()

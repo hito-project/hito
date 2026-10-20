@@ -3,7 +3,8 @@
 use hito_geometry::{Frame, Generator, Profile, Solid};
 
 use crate::read::Read;
-use crate::{class, column, footing, slab};
+use crate::section::Section;
+use crate::{beam, class, column, footing, slab};
 
 /// The structural geometry generators.
 pub(crate) fn generators() -> Vec<Generator> {
@@ -19,6 +20,22 @@ pub(crate) fn generators() -> Vec<Generator> {
             profile: section.profile(),
             frame,
             depth: top - bottom,
+        })
+    });
+    // A beam is its section swept along its line, hanging below it, between
+    // the faces of the columns it frames into.
+    let beam = Generator::new(class(beam::BEAM), |inputs, beam| {
+        let id = beam.id();
+        let Section::Rectangle { width, depth } = beam::read_section(inputs, id)? else {
+            return None;
+        };
+        let top = beam::read_top(inputs, id)?;
+        let (start, end) = beam::read_body_line(inputs, id)?;
+        let (x, y) = (width / 2.0, depth);
+        Some(Solid::Sweep {
+            profile: Profile::polygon([[-x, -y], [x, -y], [x, 0.0], [-x, 0.0]]),
+            start: [start[0], start[1], top],
+            end: [end[0], end[1], top],
         })
     });
     // A slab is its boundary, less its openings, extruded from its bottom
@@ -69,5 +86,5 @@ pub(crate) fn generators() -> Vec<Generator> {
             depth: top - bottom,
         })
     });
-    vec![column, slab, footing]
+    vec![column, beam, slab, footing]
 }

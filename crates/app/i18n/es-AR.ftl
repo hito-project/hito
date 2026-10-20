@@ -102,6 +102,15 @@ column-prompt-point = Indicar el centro de la columna, como 0,0. Esc termina
 # El tipo de columna con el que empieza todo proyecto nuevo. Desde ahí es un dato.
 column-type-generic = Rectangular - 300 x 300 mm
 
+## Vigas
+
+# La herramienta Viga (BM). Un extremo sobre una columna se apoya en ella y la sigue.
+beam-prompt-start = Indicar el punto inicial de la viga, como 0,0
+beam-prompt-end = Indicar el punto final de la viga, como 5,0, @5,0 o @5<90. Esc termina
+beam-same-point = El punto final tiene que ser distinto del inicial
+# El tipo de viga con el que empieza todo proyecto nuevo. Desde ahí es un dato.
+beam-type-generic = Rectangular - 200 x 400 mm
+
 ## Acciones de ventanas
 
 action-new-3d-view = Vista 3D
