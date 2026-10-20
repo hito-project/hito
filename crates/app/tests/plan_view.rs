@@ -377,3 +377,34 @@ fn columns_snap_to_grid_intersections_and_beams_frame_into_columns_clicked_near(
         [Some(columns[0]), Some(columns[1])]
     );
 }
+
+#[test]
+fn footings_clicked_on_or_near_columns_in_plan_go_under_them() {
+    use hito_structural::{column, footing};
+    let mut h = window();
+    let plan = open_plan(&mut h, "Level 1");
+    let none = egui::Vec2::ZERO;
+    command_line(&mut h, "CL");
+    click_at(&mut h, plan, [0.0, 0.0, 0.0], none);
+    click_at(&mut h, plan, [5.0, 0.0, 0.0], none);
+    esc(&mut h);
+    let columns = of_class(&h, column::COLUMN);
+    assert_eq!(columns.len(), 2);
+
+    // One click on each column, the second just off its face, and one
+    // away from both.
+    command_line(&mut h, "ISOLATEDFOOTING");
+    click_at(&mut h, plan, [0.05, 0.05, 0.0], none);
+    click_at(&mut h, plan, [5.15, 0.0, 0.0], egui::vec2(6.0, 0.0));
+    click_at(&mut h, plan, [2.5, 4.0, 0.0], none);
+    esc(&mut h);
+    let view = h.state().project().view();
+    let mut under: Vec<_> = footing::footings(&view)
+        .into_iter()
+        .map(|f| footing::column(&view, f))
+        .collect();
+    under.sort();
+    let mut expected = vec![None, Some(columns[0]), Some(columns[1])];
+    expected.sort();
+    assert_eq!(under, expected);
+}

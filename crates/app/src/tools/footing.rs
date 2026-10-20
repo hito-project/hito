@@ -5,16 +5,18 @@
 //! each footing its own transaction and undo step. Footings go on the
 //! active level (the level picked in the project browser, or else the
 //! lowest level), their top on it, with the project's first footing type
-//! until the type selector (#26) exists. Centres are typed on the command
-//! line (`3,4`, or `@6,0` from the last one) until plan views (#183) let
-//! them be clicked.
+//! until the type selector (#26) exists. Centres are clicked in a plan view
+//! (#183) or typed on the command line (`3,4`, or `@6,0` from the last
+//! one).
 //!
-//! Placing footings under columns ("At Columns" in Revit) needs columns
-//! (#37) and picking them, so it comes with them; the domain already
-//! places a footing under a column and keeps it there
-//! ([`Placement::under`]).
+//! A footing placed on a column that stands on the level goes under it,
+//! as Revit's "At Columns" does ([`Placement::under`]): it's centred on the
+//! column, its top at the column's base, and it follows the column. In
+//! plan, a click on or near a column snaps to its centre, so clicking
+//! columns one after another places a footing under each.
 
 use hito_core::{ElementId, StoreError, StoreView, Transaction};
+use hito_structural::column;
 use hito_structural::footing::{self, FOOTING_TYPE, Placement};
 use hito_structural::level::LEVEL;
 
@@ -76,7 +78,13 @@ impl Tool for FootingTool {
             .ok_or_else(|| StoreError::UnknownClass(hito_structural::class(LEVEL)))?;
         let footing_type = default_type(&view)
             .ok_or_else(|| StoreError::UnknownClass(hito_structural::class(FOOTING_TYPE)))?;
-        footing::insert(tx, model, &Placement::at(footing_type, level, centre)).map(drop)
+        // On a column standing on the level, it goes under the column, as
+        // Revit's "At Columns", and follows it.
+        let placement = match column::standing_at(&view, level, centre) {
+            Some(column) => Placement::under(footing_type, column),
+            None => Placement::at(footing_type, level, centre),
+        };
+        footing::insert(tx, model, &placement).map(drop)
     }
 }
 
@@ -88,6 +96,7 @@ fn default_type(view: &StoreView<'_>) -> Option<ElementId> {
 #[cfg(test)]
 mod tests {
     use hito_core::{ElementStore, SchemaRegistry, Value};
+    use hito_structural::column::COLUMN_TYPE;
     use hito_structural::level;
 
     use super::*;
@@ -160,6 +169,33 @@ mod tests {
         assert_eq!(level::level_of(&view, footings[0]), Some(ground));
         let (bottom, top) = footing::elevations(&view, footings[0]).unwrap();
         assert!(top.abs() < 1e-12 && (bottom + 0.45).abs() < 1e-12);
+    }
+
+    #[test]
+    fn a_footing_placed_on_a_column_goes_under_it() {
+        let mut f = Fixture::new();
+        let view = f.store.view();
+        let ground = level::levels(&view)[0].0;
+        let column_type = placement::first_of(&view, &hito_structural::class(COLUMN_TYPE));
+        let placement = column::Placement::new(column_type.unwrap(), ground, [3.0, 4.0])
+            .with_top(column::Top::Unconnected { height: 3.0 });
+        let mut tx = f.store.transaction();
+        let model = project::physical_model(&mut tx).unwrap();
+        let column = column::insert(&mut tx, model, &placement).unwrap();
+        tx.commit().unwrap();
+
+        f.enter("ISOLATEDFOOTING");
+        // Off the column's centre, but on it; then away from it.
+        assert!(matches!(f.enter("3.1,4.1"), Outcome::Committed(_)));
+        assert!(matches!(f.enter("8,8"), Outcome::Committed(_)));
+        f.session.cancel(&f.i18n);
+        let view = f.store.view();
+        let footings = footing::footings(&view);
+        assert_eq!(footings.len(), 2);
+        assert_eq!(footing::column(&view, footings[0]), Some(column));
+        assert_eq!(footing::centre(&view, footings[0]), Some([3.0, 4.0]));
+        assert_eq!(footing::column(&view, footings[1]), None, "free");
+        assert_eq!(footing::centre(&view, footings[1]), Some([8.0, 8.0]));
     }
 
     #[test]
