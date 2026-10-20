@@ -1,0 +1,149 @@
+---
+source: crates/adapters/pack-ar/tests/concrete.rs
+expression: render(&table())
+---
+NOT REVIEWED: no engineer has reviewed this table yet
+source cirsoc-101-2005: Reglamento CIRSOC 101, Reglamento Argentino de Cargas Permanentes y Sobrecargas Mínimas de Diseño para Edificios y otras Estructuras
+  edition: Julio 2005
+  url: https://www.inti.gob.ar/assets/uploads/files/cirsoc/vigencia-2013/area100/Reglamento-cirsoc101-completo.pdf
+  sha256: 528f50d546139af0db0640f5bcef08caa6f7699d175e35f3bbcedf4766dfea9e
+source cirsoc-201-2005: Reglamento CIRSOC 201, Reglamento Argentino de Estructuras de Hormigón
+  edition: Julio 2005
+  url: https://www.inti.gob.ar/assets/uploads/files/cirsoc/vigencia-2013/area100/area100a/reglamento201completo.pdf
+  sha256: 595188044a4b8070a6cab8972c6dcfa507ffee0fff3936aff61443de8d8cea9a
+source hito: HITO's own choice, not taken from a code
+
+H-15
+  use: plain concrete only (simples, sin armar)
+    Verified, cirsoc-201-2005: 2.3.2, Tabla 2.7 (p. Cap. 2 - 38)
+  compressive strength: 15 MPa (SI 15000000.0)
+    Verified, cirsoc-201-2005: 2.3.2, Tabla 2.7 (p. Cap. 2 - 38)
+  young modulus: 18,203 MPa (SI 18203000000.0)
+    Derived, cirsoc-201-2005: 8.5.1, expresión (8-1): Ec = 4700 √f'c, in MPa (p. Cap. 8 - 187); rounded to 1 MPa
+  unit weight: 23.5 kN/m³ (SI 23500.0)
+    Assumption, cirsoc-101-2005: Tabla 3.1, Hormigones: hormigón de cemento pórtland, arena y canto rodado o piedra partida, sin armar (p. Cap. 3 - 6)
+    note: The value is verified. H-15 is for unreinforced concrete only (Tabla 2.7), so the unreinforced row applies. Choosing the row for natural gravel or crushed stone (not basaltic, 25 kN/m³) is HITO's choice.
+  mass density: 2,396 kg/m³ (SI 2396.0)
+    Derived, cirsoc-101-2005: unit weight ÷ standard gravity (9.80665 m/s²), so self-weight is exactly the code's unit weight; rounded to 1 kg/m³
+  shading colour: #c8c8c8
+    Assumption, hito: a grey that darkens as the strength grows
+
+H-20
+  use: plain and reinforced concrete (simples y armados)
+    Verified, cirsoc-201-2005: 2.3.2, Tabla 2.7 (p. Cap. 2 - 38)
+  compressive strength: 20 MPa (SI 20000000.0)
+    Verified, cirsoc-201-2005: 2.3.2, Tabla 2.7 (p. Cap. 2 - 38)
+  young modulus: 21,019 MPa (SI 21019000000.0)
+    Derived, cirsoc-201-2005: 8.5.1, expresión (8-1): Ec = 4700 √f'c, in MPa (p. Cap. 8 - 187); rounded to 1 MPa
+  unit weight: 25.0 kN/m³ (SI 25000.0)
+    Assumption, cirsoc-101-2005: Tabla 3.1, Hormigones: hormigón de cemento pórtland, arena y canto rodado o piedra partida, armado (p. Cap. 3 - 6)
+    note: The value is verified. Using the reinforced row for every grade from H-20 up is HITO's choice, since these grades may also be used unreinforced (23.5 kN/m³), and so is choosing the row for natural gravel or crushed stone over basaltic aggregate.
+  mass density: 2,549 kg/m³ (SI 2549.0)
+    Derived, cirsoc-101-2005: unit weight ÷ standard gravity (9.80665 m/s²), so self-weight is exactly the code's unit weight; rounded to 1 kg/m³
+  shading colour: #b8b8b8
+    Assumption, hito: a grey that darkens as the strength grows
+
+H-25
+  use: plain, reinforced and prestressed concrete (simples, armados y pretensados)
+    Verified, cirsoc-201-2005: 2.3.2, Tabla 2.7 (p. Cap. 2 - 38)
+  compressive strength: 25 MPa (SI 25000000.0)
+    Verified, cirsoc-201-2005: 2.3.2, Tabla 2.7 (p. Cap. 2 - 38)
+  young modulus: 23,500 MPa (SI 23500000000.0)
+    Derived, cirsoc-201-2005: 8.5.1, expresión (8-1): Ec = 4700 √f'c, in MPa (p. Cap. 8 - 187); rounded to 1 MPa
+  unit weight: 25.0 kN/m³ (SI 25000.0)
+    Assumption, cirsoc-101-2005: Tabla 3.1, Hormigones: hormigón de cemento pórtland, arena y canto rodado o piedra partida, armado (p. Cap. 3 - 6)
+    note: The value is verified. Using the reinforced row for every grade from H-20 up is HITO's choice, since these grades may also be used unreinforced (23.5 kN/m³), and so is choosing the row for natural gravel or crushed stone over basaltic aggregate.
+  mass density: 2,549 kg/m³ (SI 2549.0)
+    Derived, cirsoc-101-2005: unit weight ÷ standard gravity (9.80665 m/s²), so self-weight is exactly the code's unit weight; rounded to 1 kg/m³
+  shading colour: #a8a8a8
+    Assumption, hito: a grey that darkens as the strength grows
+
+H-30
+  use: plain, reinforced and prestressed concrete (simples, armados y pretensados)
+    Verified, cirsoc-201-2005: 2.3.2, Tabla 2.7 (p. Cap. 2 - 38)
+  compressive strength: 30 MPa (SI 30000000.0)
+    Verified, cirsoc-201-2005: 2.3.2, Tabla 2.7 (p. Cap. 2 - 38)
+  young modulus: 25,743 MPa (SI 25743000000.0)
+    Derived, cirsoc-201-2005: 8.5.1, expresión (8-1): Ec = 4700 √f'c, in MPa (p. Cap. 8 - 187); rounded to 1 MPa
+  unit weight: 25.0 kN/m³ (SI 25000.0)
+    Assumption, cirsoc-101-2005: Tabla 3.1, Hormigones: hormigón de cemento pórtland, arena y canto rodado o piedra partida, armado (p. Cap. 3 - 6)
+    note: The value is verified. Using the reinforced row for every grade from H-20 up is HITO's choice, since these grades may also be used unreinforced (23.5 kN/m³), and so is choosing the row for natural gravel or crushed stone over basaltic aggregate.
+  mass density: 2,549 kg/m³ (SI 2549.0)
+    Derived, cirsoc-101-2005: unit weight ÷ standard gravity (9.80665 m/s²), so self-weight is exactly the code's unit weight; rounded to 1 kg/m³
+  shading colour: #989898
+    Assumption, hito: a grey that darkens as the strength grows
+
+H-35
+  use: plain, reinforced and prestressed concrete (simples, armados y pretensados)
+    Verified, cirsoc-201-2005: 2.3.2, Tabla 2.7 (p. Cap. 2 - 38)
+  compressive strength: 35 MPa (SI 35000000.0)
+    Verified, cirsoc-201-2005: 2.3.2, Tabla 2.7 (p. Cap. 2 - 38)
+  young modulus: 27,806 MPa (SI 27806000000.0)
+    Derived, cirsoc-201-2005: 8.5.1, expresión (8-1): Ec = 4700 √f'c, in MPa (p. Cap. 8 - 187); rounded to 1 MPa
+  unit weight: 25.0 kN/m³ (SI 25000.0)
+    Assumption, cirsoc-101-2005: Tabla 3.1, Hormigones: hormigón de cemento pórtland, arena y canto rodado o piedra partida, armado (p. Cap. 3 - 6)
+    note: The value is verified. Using the reinforced row for every grade from H-20 up is HITO's choice, since these grades may also be used unreinforced (23.5 kN/m³), and so is choosing the row for natural gravel or crushed stone over basaltic aggregate.
+  mass density: 2,549 kg/m³ (SI 2549.0)
+    Derived, cirsoc-101-2005: unit weight ÷ standard gravity (9.80665 m/s²), so self-weight is exactly the code's unit weight; rounded to 1 kg/m³
+  shading colour: #888888
+    Assumption, hito: a grey that darkens as the strength grows
+
+H-40
+  use: plain, reinforced and prestressed concrete (simples, armados y pretensados)
+    Verified, cirsoc-201-2005: 2.3.2, Tabla 2.7 (p. Cap. 2 - 38)
+  compressive strength: 40 MPa (SI 40000000.0)
+    Verified, cirsoc-201-2005: 2.3.2, Tabla 2.7 (p. Cap. 2 - 38)
+  young modulus: 29,725 MPa (SI 29725000000.0)
+    Derived, cirsoc-201-2005: 8.5.1, expresión (8-1): Ec = 4700 √f'c, in MPa (p. Cap. 8 - 187); rounded to 1 MPa
+  unit weight: 25.0 kN/m³ (SI 25000.0)
+    Assumption, cirsoc-101-2005: Tabla 3.1, Hormigones: hormigón de cemento pórtland, arena y canto rodado o piedra partida, armado (p. Cap. 3 - 6)
+    note: The value is verified. Using the reinforced row for every grade from H-20 up is HITO's choice, since these grades may also be used unreinforced (23.5 kN/m³), and so is choosing the row for natural gravel or crushed stone over basaltic aggregate.
+  mass density: 2,549 kg/m³ (SI 2549.0)
+    Derived, cirsoc-101-2005: unit weight ÷ standard gravity (9.80665 m/s²), so self-weight is exactly the code's unit weight; rounded to 1 kg/m³
+  shading colour: #787878
+    Assumption, hito: a grey that darkens as the strength grows
+
+H-45
+  use: plain, reinforced and prestressed concrete (simples, armados y pretensados)
+    Verified, cirsoc-201-2005: 2.3.2, Tabla 2.7 (p. Cap. 2 - 38)
+  compressive strength: 45 MPa (SI 45000000.0)
+    Verified, cirsoc-201-2005: 2.3.2, Tabla 2.7 (p. Cap. 2 - 38)
+  young modulus: 31,529 MPa (SI 31529000000.0)
+    Derived, cirsoc-201-2005: 8.5.1, expresión (8-1): Ec = 4700 √f'c, in MPa (p. Cap. 8 - 187); rounded to 1 MPa
+  unit weight: 25.0 kN/m³ (SI 25000.0)
+    Assumption, cirsoc-101-2005: Tabla 3.1, Hormigones: hormigón de cemento pórtland, arena y canto rodado o piedra partida, armado (p. Cap. 3 - 6)
+    note: The value is verified. Using the reinforced row for every grade from H-20 up is HITO's choice, since these grades may also be used unreinforced (23.5 kN/m³), and so is choosing the row for natural gravel or crushed stone over basaltic aggregate.
+  mass density: 2,549 kg/m³ (SI 2549.0)
+    Derived, cirsoc-101-2005: unit weight ÷ standard gravity (9.80665 m/s²), so self-weight is exactly the code's unit weight; rounded to 1 kg/m³
+  shading colour: #686868
+    Assumption, hito: a grey that darkens as the strength grows
+
+H-50
+  use: plain, reinforced and prestressed concrete (simples, armados y pretensados)
+    Verified, cirsoc-201-2005: 2.3.2, Tabla 2.7 (p. Cap. 2 - 38)
+  compressive strength: 50 MPa (SI 50000000.0)
+    Verified, cirsoc-201-2005: 2.3.2, Tabla 2.7 (p. Cap. 2 - 38)
+  young modulus: 33,234 MPa (SI 33234000000.0)
+    Derived, cirsoc-201-2005: 8.5.1, expresión (8-1): Ec = 4700 √f'c, in MPa (p. Cap. 8 - 187); rounded to 1 MPa
+  unit weight: 25.0 kN/m³ (SI 25000.0)
+    Assumption, cirsoc-101-2005: Tabla 3.1, Hormigones: hormigón de cemento pórtland, arena y canto rodado o piedra partida, armado (p. Cap. 3 - 6)
+    note: The value is verified. Using the reinforced row for every grade from H-20 up is HITO's choice, since these grades may also be used unreinforced (23.5 kN/m³), and so is choosing the row for natural gravel or crushed stone over basaltic aggregate.
+  mass density: 2,549 kg/m³ (SI 2549.0)
+    Derived, cirsoc-101-2005: unit weight ÷ standard gravity (9.80665 m/s²), so self-weight is exactly the code's unit weight; rounded to 1 kg/m³
+  shading colour: #585858
+    Assumption, hito: a grey that darkens as the strength grows
+
+H-60
+  use: plain, reinforced and prestressed concrete (simples, armados y pretensados)
+    Verified, cirsoc-201-2005: 2.3.2, Tabla 2.7 (p. Cap. 2 - 38)
+  compressive strength: 60 MPa (SI 60000000.0)
+    Verified, cirsoc-201-2005: 2.3.2, Tabla 2.7 (p. Cap. 2 - 38)
+  young modulus: 36,406 MPa (SI 36406000000.0)
+    Derived, cirsoc-201-2005: 8.5.1, expresión (8-1): Ec = 4700 √f'c, in MPa (p. Cap. 8 - 187); rounded to 1 MPa
+  unit weight: 25.0 kN/m³ (SI 25000.0)
+    Assumption, cirsoc-101-2005: Tabla 3.1, Hormigones: hormigón de cemento pórtland, arena y canto rodado o piedra partida, armado (p. Cap. 3 - 6)
+    note: The value is verified. Using the reinforced row for every grade from H-20 up is HITO's choice, since these grades may also be used unreinforced (23.5 kN/m³), and so is choosing the row for natural gravel or crushed stone over basaltic aggregate.
+  mass density: 2,549 kg/m³ (SI 2549.0)
+    Derived, cirsoc-101-2005: unit weight ÷ standard gravity (9.80665 m/s²), so self-weight is exactly the code's unit weight; rounded to 1 kg/m³
+  shading colour: #484848
+    Assumption, hito: a grey that darkens as the strength grows

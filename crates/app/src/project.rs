@@ -2,19 +2,20 @@
 //! and where new elements go.
 
 use hito_core::{
-    Element, ElementStore, Model, ModelId, ModelKind, SchemaRegistry, StoreError, StoreView,
-    Transaction,
+    Element, ElementId, ElementStore, Model, ModelId, ModelKind, SchemaRegistry, StoreError,
+    StoreView, Transaction, Value,
 };
-use hito_structural::{class, level};
+use hito_structural::{class, level, material};
 
 use crate::i18n::I18n;
 
 /// A new project: a physical model with one level at 0.00 m, named in the
 /// user's language ("Nivel 1"), so the first elements have a level to stand
-/// on, and, when the architectural schema is registered, a generic wall
-/// type. More levels are added with the Level command. The store has
-/// `schemas`, which must include the structural schema. Names are data from
-/// then on, so they don't change with the language.
+/// on, a generic concrete material and, when the architectural schema is
+/// registered, a generic wall type. More levels are added with the Level
+/// command. The store has `schemas`, which must include the structural
+/// schema. Names are data from then on, so they don't change with the
+/// language.
 pub fn new_project(schemas: SchemaRegistry, i18n: &I18n) -> ElementStore {
     let mut store = ElementStore::new(schemas);
     let mut tx = store.transaction();
@@ -23,6 +24,7 @@ pub fn new_project(schemas: SchemaRegistry, i18n: &I18n) -> ElementStore {
         .with_property(level::NAME, level_name(i18n, 1))
         .with_property(level::ELEVATION, 0.0);
     tx.insert(level).expect("the default level is valid");
+    generic_concrete(&mut tx, i18n).expect("the generic concrete is valid");
     if tx
         .view()
         .registry()
@@ -41,10 +43,48 @@ pub fn new_project(schemas: SchemaRegistry, i18n: &I18n) -> ElementStore {
 /// model. Regional wall types come with regional packs (#167).
 fn generic_wall_type(tx: &mut Transaction<'_>, i18n: &I18n) -> Result<(), StoreError> {
     use hito_architectural::wall_type::{self, Function, Layer};
-    let definitions = tx.insert_model(Model::new(ModelKind::Definition))?;
+    let definitions = definitions_model(tx)?;
     let name = i18n.tr("wall-type-generic");
     let layers = [Layer::new(Function::Structure, 0.2)];
     wall_type::insert(tx, definitions, &name, &layers).map(drop)
+}
+
+/// The project's generic concrete, added if it has none: a
+/// [`ConcreteMaterial`](hito_structural::material::CONCRETE) named in the
+/// user's language ("Hormigón"), with no strength, density or modulus, as
+/// no code defines a generic concrete. The generic types use it, so a
+/// generic structural wall is concrete. Graded concrete, such as CIRSOC
+/// 201's H-25, comes from regional packs.
+pub(crate) fn generic_concrete(
+    tx: &mut Transaction<'_>,
+    i18n: &I18n,
+) -> Result<ElementId, StoreError> {
+    let name = Value::Text(i18n.tr("material-concrete-generic"));
+    let concrete = class(material::CONCRETE);
+    let view = tx.view();
+    let registry = view.registry();
+    let existing = view.elements().find(|e| {
+        registry.is_a(e.class(), &concrete) && e.properties().get(material::NAME) == Some(&name)
+    });
+    if let Some(existing) = existing {
+        return Ok(existing.id());
+    }
+    let definitions = definitions_model(tx)?;
+    tx.insert(Element::new(concrete, definitions).with_property(material::NAME, name))
+}
+
+/// The definition model types and materials go in, added if the project
+/// has none.
+fn definitions_model(tx: &mut Transaction<'_>) -> Result<ModelId, StoreError> {
+    let existing = tx
+        .view()
+        .models()
+        .find(|m| m.kind() == ModelKind::Definition)
+        .map(Model::id);
+    match existing {
+        Some(model) => Ok(model),
+        None => tx.insert_model(Model::new(ModelKind::Definition)),
+    }
 }
 
 /// The physical model new elements go in, added if the project has none.
@@ -96,7 +136,36 @@ pub(crate) mod tests {
         assert_eq!(names, [name("Nivel 1")]);
         let elevations: Vec<_> = levels.iter().map(|(_, e)| *e).collect();
         assert_eq!(elevations, [0.0]);
-        assert_eq!(store.models().count(), 1);
+        // The physical model, and the definitions with the generic concrete.
+        assert_eq!(store.models().count(), 2);
+    }
+
+    #[test]
+    fn a_new_project_has_a_generic_concrete_with_no_strength() {
+        let mut store = structural(&I18n::new(Locale::EsAr));
+        let view = store.view();
+        let registry = view.registry();
+        let concretes: Vec<_> = view
+            .elements()
+            .filter(|e| registry.is_a(e.class(), &class(material::CONCRETE)))
+            .map(|e| e.id())
+            .collect();
+        let [concrete] = concretes[..] else {
+            panic!("one concrete: {concretes:?}");
+        };
+        assert_eq!(
+            store.property(concrete, material::NAME),
+            Some(&Value::Text("Hormigón".into()))
+        );
+        assert_eq!(
+            store.property(concrete, material::COMPRESSIVE_STRENGTH),
+            None
+        );
+
+        // Asking for it again finds the same one.
+        let i18n = I18n::new(Locale::EsAr);
+        let mut tx = store.transaction();
+        assert_eq!(generic_concrete(&mut tx, &i18n).unwrap(), concrete);
     }
 
     #[test]

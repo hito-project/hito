@@ -6,12 +6,13 @@
 //!
 //! ```
 //! use hito_core::SchemaRegistry;
-//! use hito_structural::{class, grid, level};
+//! use hito_structural::{class, grid, level, material};
 //!
 //! let mut registry = SchemaRegistry::new();
 //! hito_structural::register(&mut registry)?;
 //! assert!(registry.class(&class(level::LEVEL)).is_some());
 //! assert!(registry.class(&class(grid::GRID)).is_some());
+//! assert!(registry.class(&class(material::CONCRETE)).is_some());
 //! # Ok::<(), hito_core::SchemaError>(())
 //! ```
 //!
@@ -20,12 +21,17 @@
 //! - [`level`]s: named elevations that organise the building by floors, and
 //!   the elements attached to them
 //! - [`grid`]s: labelled lines that lay out the structure in plan
+//! - [`material`]s: concrete, with its strength, elastic modulus, density and
+//!   display colour
 //!
-//! Nothing here is specific to a country
+//! Nothing here is specific to a country. Concrete grades and the formulas
+//! behind their properties come from regional packs, such as `hito-pack-ar`
+//! for CIRSOC 201
 //! ([ADR 0008](https://github.com/hito-project/hito/blob/main/docs/decisions/0008-argentina-first-international-by-design.md)).
 
 pub mod grid;
 pub mod level;
+pub mod material;
 
 use hito_core::{ClassId, Recompute, Rule, Schema, SchemaError, SchemaRegistry, SchemaVersion};
 
@@ -45,7 +51,10 @@ pub fn class(name: &str) -> ClassId {
 /// The structural schema: every class and relationship type.
 pub fn schema() -> Schema {
     let schema = Schema::new(SCHEMA, VERSION);
-    let classes = level::classes().into_iter().chain(grid::classes());
+    let classes = level::classes()
+        .into_iter()
+        .chain(grid::classes())
+        .chain(material::classes());
     let schema = classes.fold(schema, Schema::class);
     level::relationships()
         .into_iter()
@@ -60,7 +69,11 @@ pub fn recomputes() -> Vec<Recompute> {
 
 /// The structural validation rules.
 pub fn rules() -> Vec<Rule> {
-    level::rules().into_iter().chain(grid::rules()).collect()
+    level::rules()
+        .into_iter()
+        .chain(grid::rules())
+        .chain(material::rules())
+        .collect()
 }
 
 /// Registers the structural schema, its recompute functions and its rules.
