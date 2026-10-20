@@ -92,8 +92,8 @@ pub struct Context<'a> {
     /// The user interface's language, for data the tool names in it, such
     /// as a new level's name.
     pub i18n: &'a I18n,
-    /// The level new elements go on: the one picked in the project
-    /// browser, until plan views (#183) make it the active view's level.
+    /// The level new elements go on: the active plan view's (#183), or
+    /// else the one picked in the project browser.
     /// `None` lets the tool choose, such as the lowest level.
     pub level: Option<ElementId>,
 }
@@ -109,7 +109,9 @@ pub struct Prompt {
 /// The kind of answer a prompt takes.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Wants {
-    /// A point, as coordinates. Picking it in a view comes with #29.
+    /// A point, as coordinates, typed or clicked in a plan view (#183). A
+    /// clicked point is in world coordinates, on the plan's level: its Z
+    /// is the level's elevation.
     Point,
     /// A point, which can also be typed relative to this one, as in
     /// AutoCAD: `@dx,dy` or `@length<angle`, the angle in degrees

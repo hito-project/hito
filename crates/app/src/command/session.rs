@@ -2,7 +2,7 @@
 
 use hito_core::{ChangeSet, ElementId, ElementStore};
 
-use super::{Command, Context, InputFormat, Next, Prompt, Registry, Run, Tool};
+use super::{Command, Context, Input, InputFormat, Next, Prompt, Registry, Run, Tool};
 use crate::i18n::I18n;
 use crate::shell::Action;
 
@@ -19,6 +19,8 @@ pub struct Session {
 struct Running {
     command: Command,
     tool: Box<dyn Tool>,
+    /// The level it was started with.
+    level: Option<ElementId>,
 }
 
 /// What a step of a command did, for the shell to follow up.
@@ -63,6 +65,12 @@ impl Session {
         self.running.as_ref().map(|r| &r.command)
     }
 
+    /// The level the running command was started with, which it places
+    /// elements on.
+    pub fn running_level(&self) -> Option<ElementId> {
+        self.running.as_ref().and_then(|r| r.level)
+    }
+
     /// What the running command asks for.
     pub fn prompt(&self) -> Option<Prompt> {
         self.running.as_ref().map(|r| r.tool.prompt())
@@ -90,6 +98,7 @@ impl Session {
                 self.running = Some(Running {
                     command,
                     tool: started(start, i18n, self.level),
+                    level: self.level,
                 });
                 Outcome::Nothing
             }
@@ -138,6 +147,16 @@ impl Session {
                 return Outcome::Nothing;
             }
         };
+        self.input(input, i18n, store)
+    }
+
+    /// Answers the running command's prompt with input that's already
+    /// read, such as a point clicked in a plan view, as typing it and
+    /// pressing Enter does. Does nothing if no command is running.
+    pub fn input(&mut self, input: Input, i18n: &I18n, store: &mut ElementStore) -> Outcome {
+        let Some(running) = &mut self.running else {
+            return Outcome::Nothing;
+        };
         self.message = None;
         match running.tool.input(input) {
             Next::Ask => Outcome::Nothing,
@@ -146,7 +165,11 @@ impl Session {
                 Outcome::Nothing
             }
             next @ (Next::Done | Next::Repeat) => {
-                let Running { command, tool } = self.running.take().expect("running");
+                let Running {
+                    command,
+                    tool,
+                    level,
+                } = self.running.take().expect("running");
                 let mut next_tool = match next {
                     Next::Repeat => tool.after_commit(),
                     _ => None,
@@ -162,8 +185,12 @@ impl Session {
                     }
                 };
                 if let (Next::Repeat, Run::Tool(start)) = (next, command.run) {
-                    let tool = next_tool.unwrap_or_else(|| started(start, i18n, self.level));
-                    self.running = Some(Running { command, tool });
+                    let tool = next_tool.unwrap_or_else(|| started(start, i18n, level));
+                    self.running = Some(Running {
+                        command,
+                        tool,
+                        level,
+                    });
                 }
                 outcome
             }
@@ -386,6 +413,37 @@ mod tests {
         f.session.cancel(&f.i18n);
         assert!(f.session.running().is_none());
         assert_eq!(f.store.models().count(), 2);
+    }
+
+    /// A clicked point answers a prompt as a typed one does.
+    #[test]
+    fn input_already_read_answers_the_prompt() {
+        let mut f = Fixture::new();
+        let point = Input::Point([1.0, 2.0, 0.5]);
+        let Fixture {
+            session,
+            i18n,
+            store,
+            ..
+        } = &mut f;
+        assert!(matches!(
+            session.input(point, i18n, store),
+            Outcome::Nothing
+        ));
+        let level = ElementId::generate();
+        session.set_level(Some(level));
+        session.start("PROBE", i18n);
+        session.set_level(None);
+        assert_eq!(session.running_level(), Some(level), "as it started");
+        session.input(point, i18n, store);
+        assert_eq!(
+            session.prompt().unwrap().wants,
+            Wants::Quantity(Dimension::LENGTH)
+        );
+        let Outcome::Committed(_) = session.input(Input::Quantity(2.0), i18n, store) else {
+            panic!("committed");
+        };
+        assert_eq!(store.models().count(), 1);
     }
 
     #[test]

@@ -3,8 +3,8 @@
 //! As in Revit, the tool draws a chain: each point after the first ends a
 //! wall and starts the next, and Esc ends the chain. Each wall is its own
 //! transaction and undo step, and joins the walls it touches as it's
-//! placed. Points are typed on the command line until plan views (#183) let
-//! them be clicked: absolute (`5,0`), or relative to the last point with a
+//! placed. Points are clicked in a plan view (#183) or typed on the command
+//! line: absolute (`5,0`), or relative to the last point with a
 //! typed length (`@4<90`, `@4,0`).
 //!
 //! Walls go on the active level (the level picked in the project browser,

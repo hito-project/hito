@@ -18,6 +18,7 @@ mod commands;
 mod elements;
 mod layout;
 mod panels;
+mod plans;
 mod ribbon;
 mod theme;
 
@@ -35,7 +36,7 @@ pub use layout::{Layout, Tab, ViewId};
 pub use ribbon::Action;
 pub use theme::Theme;
 
-use crate::command::{InputFormat, Outcome, Session};
+use crate::command::{Input, InputFormat, Outcome, Session};
 use crate::i18n::{I18n, Locale};
 use crate::project;
 use crate::selection::{Mode, Selection};
@@ -83,7 +84,7 @@ impl Shell {
     /// The window with the layout saved in `storage`, if there is one it can
     /// read, and its text in `locale`.
     pub fn restore(storage: Option<&dyn eframe::Storage>, locale: Locale) -> Self {
-        let layout = storage
+        let mut layout: Layout = storage
             .and_then(|s| eframe::get_value::<Layout>(s, LAYOUT_KEY))
             .map(Layout::repair)
             .unwrap_or_default();
@@ -92,6 +93,7 @@ impl Shell {
         hito_architectural::register(&mut schemas).expect("the architectural schema registers");
         let i18n = I18n::new(locale);
         let project = project::new_project(schemas, &i18n);
+        layout.sync_plans(&plans::levels(&project));
         Self {
             i18n,
             ribbon: Default::default(),
@@ -234,10 +236,33 @@ impl Shell {
         self.elements.forget_deleted(&self.project);
     }
 
-    /// The level placement tools put elements on: the selected level, if
-    /// it's the only element selected. Plan views (#183) will make it the
-    /// active view's level.
+    /// Answers the running command with a point clicked in the plan view
+    /// of `level`. A command started for another level starts again on
+    /// this one first, so what's placed goes on the level it's clicked on.
+    fn click_point(&mut self, level: ElementId, point: [f64; 3]) {
+        if self.commands.running_level() != Some(level)
+            && let Some(name) = self.commands.running().map(|c| c.name)
+        {
+            self.commands.set_level(Some(level));
+            let outcome = self.commands.start(name, &self.i18n);
+            self.follow(outcome);
+        }
+        let input = Input::Point(point);
+        let outcome = self.commands.input(input, &self.i18n, &mut self.project);
+        self.follow(outcome);
+    }
+
+    /// The level placement tools put elements on: the active view's, if
+    /// it's a plan view, as in Revit, or else the selected level, if it's
+    /// the only element selected.
     fn active_level(&self) -> Option<ElementId> {
+        let plan = self
+            .layout
+            .active_view()
+            .and_then(|v| self.layout.plan_level(v));
+        if plan.is_some() {
+            return plan;
+        }
         let level = hito_structural::class(hito_structural::level::LEVEL);
         let registry = self.project.registry();
         let picked = self.elements.selected()?;
@@ -340,6 +365,7 @@ impl eframe::App for Shell {
             self.edit(Edit::Delete(selected));
         }
         self.elements.forget_deleted(&self.project);
+        self.layout.sync_plans(&plans::levels(&self.project));
 
         let (layout, theme) = (&self.layout, self.theme);
         let state = ribbon::State {
@@ -374,6 +400,7 @@ impl eframe::App for Shell {
         let mut tabs = panels::Tabs {
             i18n: &self.i18n,
             views: self.layout.views().to_vec(),
+            plans: self.layout.plans().to_vec(),
             active_view: self.layout.active_view(),
             viewports: &mut self.viewports,
             scene: &mut self.scene,
@@ -385,13 +412,18 @@ impl eframe::App for Shell {
             elements: &mut self.elements,
             edits: Vec::new(),
             picked: None,
+            wants: self.commands.prompt().map(|p| p.wants),
+            point: None,
         };
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE)
             .show(ui, |ui| {
                 DockArea::new(&mut self.layout.dock).show_inside(ui, &mut tabs);
             });
-        let (open, edits, picked) = (tabs.open, tabs.edits, tabs.picked);
+        let (open, edits, picked, point) = (tabs.open, tabs.edits, tabs.picked, tabs.point);
+        if let Some((level, point)) = point {
+            self.click_point(level, point);
+        }
         if let Some(picked) = picked {
             self.elements.select(picked.ids, picked.mode);
         }
