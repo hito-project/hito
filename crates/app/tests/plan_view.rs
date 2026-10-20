@@ -311,3 +311,65 @@ fn doors_and_windows_are_placed_by_clicking_a_wall_in_plan_and_draw_their_symbol
     click_at(&mut h, plan, [2.0, -0.5, 0.0], none);
     assert_eq!(selected(&h), [placed[0].0]);
 }
+
+fn of_class(h: &Harness<'_, Shell>, name: &str) -> Vec<ElementId> {
+    let project = h.state().project();
+    let class = hito_structural::class(name);
+    let mut ids: Vec<_> = project
+        .elements()
+        .filter(|e| e.class() == &class)
+        .map(|e| e.id())
+        .collect();
+    ids.sort();
+    ids
+}
+
+#[test]
+fn columns_snap_to_grid_intersections_and_beams_frame_into_columns_clicked_near() {
+    use hito_structural::{beam, column};
+    let mut h = window();
+    command_line(&mut h, "LL");
+    command_line(&mut h, "3");
+    esc(&mut h);
+    let plan = open_plan(&mut h, "Level 1");
+    let none = egui::Vec2::ZERO;
+    command_line(&mut h, "GR");
+    click_at(&mut h, plan, [0.0, -3.0, 0.0], none);
+    click_at(&mut h, plan, [0.0, 3.0, 0.0], none);
+    esc(&mut h);
+
+    // A column clicked a few points off where two grids cross goes on
+    // both grids; one clicked away from any crossing is free.
+    command_line(&mut h, "GR");
+    click_at(&mut h, plan, [-3.0, 0.0, 0.0], none);
+    click_at(&mut h, plan, [9.0, 0.0, 0.0], none);
+    esc(&mut h);
+    command_line(&mut h, "CL");
+    click_at(&mut h, plan, [0.0, 0.0, 0.0], egui::vec2(5.0, -4.0));
+    click_at(&mut h, plan, [6.0, 0.0, 0.0], none);
+    esc(&mut h);
+    let columns = of_class(&h, column::COLUMN);
+    assert_eq!(columns.len(), 2);
+    {
+        let view = h.state().project().view();
+        assert!(column::grids(&view, columns[0]).is_some(), "on the grids");
+        assert_eq!(column::location(&view, columns[0]), Some([0.0, 0.0]));
+        assert!(column::grids(&view, columns[1]).is_none());
+    }
+
+    // On Level 2, the beam's start is clicked just off the first column's
+    // face, and its end inside the second column, off its centre. Both
+    // frame into their columns, from the Level 1 columns reaching up.
+    let upper = open_plan(&mut h, "Level 2");
+    command_line(&mut h, "BM");
+    click_at(&mut h, upper, [0.15, 0.0, 3.0], egui::vec2(6.0, 0.0));
+    click_at(&mut h, upper, [6.08, 0.05, 3.0], none);
+    esc(&mut h);
+    let beams = of_class(&h, beam::BEAM);
+    assert_eq!(beams.len(), 1);
+    let view = h.state().project().view();
+    assert_eq!(
+        beam::columns(&view, beams[0]),
+        [Some(columns[0]), Some(columns[1])]
+    );
+}

@@ -4,10 +4,14 @@
 use glam::DVec2;
 use hito_architectural::opening::{self, OPENING};
 use hito_core::{ElementId, ElementStore, StoreView, Value};
-use hito_structural::{class, grid, level};
+use hito_structural::section::{self, Section};
+use hito_structural::{class, column, grid, level};
 
 use crate::viewport::plan::CUT_HEIGHT;
-use crate::viewport::{Plan, PlanGrid, Segment, Symbol};
+use crate::viewport::{Centre, Plan, PlanGrid, Segment, Symbol};
+
+/// The sides of the polygon a round column snaps by.
+const CIRCLE_SIDES: usize = 32;
 
 /// The largest angle one straight piece of a door's swing arc turns
 /// through: 5 degrees, so the arc looks round at any zoom a plan is read
@@ -50,7 +54,49 @@ pub(super) fn content(store: &ElementStore, level: ElementId) -> Plan {
             .filter(|&id| level::level_of(&view, id) == Some(level))
             .collect(),
         symbols: symbols(&view, elevation + CUT_HEIGHT),
+        centres: centres(&view, elevation),
     }
+}
+
+/// The columns at `elevation`, standing on it or reaching up to it from
+/// below, for clicks on or near them to snap to their centres. What a
+/// beam's end frames into (`beam::column_at`), seen from the plan.
+fn centres(view: &StoreView<'_>, elevation: f64) -> Vec<Centre> {
+    column::columns(view)
+        .into_iter()
+        .filter(|&c| {
+            column::elevations(view, c).is_some_and(|(bottom, top)| {
+                bottom <= elevation + column::TOLERANCE && elevation <= top + column::TOLERANCE
+            })
+        })
+        .filter_map(|c| {
+            let point = column::location(view, c)?;
+            let section = section::of(view, c)?;
+            let rotation = match view.property(c, column::ROTATION) {
+                Some(Value::Real(r)) => *r,
+                _ => 0.0,
+            };
+            let local: Vec<DVec2> = match section {
+                Section::Rectangle { width, depth } => {
+                    let [w, d] = [width / 2.0, depth / 2.0];
+                    [(-w, -d), (w, -d), (w, d), (-w, d)].map(DVec2::from).into()
+                }
+                Section::Circle { diameter } => (0..CIRCLE_SIDES)
+                    .map(|i| {
+                        let angle = std::f64::consts::TAU * i as f64 / CIRCLE_SIDES as f64;
+                        diameter / 2.0 * DVec2::from_angle(angle)
+                    })
+                    .collect(),
+            };
+            let turn = DVec2::from_angle(rotation);
+            let centre = DVec2::from(point);
+            let outline = local
+                .into_iter()
+                .map(|p| (centre + turn.rotate(p)).into())
+                .collect();
+            Some(Centre { point, outline })
+        })
+        .collect()
 }
 
 /// Every grid with both ends, in the order they were drawn.

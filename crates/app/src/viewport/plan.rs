@@ -20,8 +20,8 @@
 //! A click selects as in the 3D views, in the same selection. While a
 //! placement tool asks for a point, a click gives it the point under the
 //! cursor instead, on the level, snapped to the nearest grid intersection
-//! within [`SNAP_RADIUS`]: the same answer as typing the point on the
-//! command line, so every tool takes clicks.
+//! or column centre within [`SNAP_RADIUS`]: the same answer as typing the
+//! point on the command line, so every tool takes clicks.
 
 use std::collections::BTreeSet;
 use std::hash::{Hash, Hasher};
@@ -39,8 +39,8 @@ use crate::command::Wants;
 /// Revit's metric templates.
 pub const CUT_HEIGHT: f64 = 1.2;
 
-/// How near a grid intersection the cursor snaps to it, in points, as
-/// Revit's snaps catch within a few pixels.
+/// How near a grid intersection or a column the cursor snaps to it, in
+/// points, as Revit's snaps catch within a few pixels.
 pub const SNAP_RADIUS: f64 = 10.0;
 
 /// How near a line a click picks it, in points.
@@ -65,12 +65,25 @@ pub struct Plan {
     pub grids: Vec<PlanGrid>,
     /// Where grids cross, which clicks snap to.
     pub snaps: Vec<[f64; 2]>,
+    /// The centres of the columns that stand on the level or reach up to
+    /// it, which a click on or near a column snaps to, so a beam's end
+    /// frames into the column.
+    pub centres: Vec<Centre>,
     /// The elements on the level, which show from above even where the
     /// cut misses them.
     pub on_level: BTreeSet<ElementId>,
     /// The elements that draw a symbol instead of their mesh, such as doors
     /// and windows. An empty symbol hides the element.
     pub symbols: Vec<Symbol>,
+}
+
+/// A point a click snaps to when the cursor is on or near an outline
+/// round it, such as a column's centre and its section.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Centre {
+    pub point: [f64; 2],
+    /// Closed, in plan.
+    pub outline: Vec<[f64; 2]>,
 }
 
 /// What an element draws in plan instead of its mesh: a door's or a
@@ -528,17 +541,23 @@ impl Viewport {
 }
 
 /// What a cursor at `local` (points from the view's top-left corner)
-/// points at on the plan: the nearest grid intersection within
-/// [`SNAP_RADIUS`], or else the point under it, on the level.
+/// points at on the plan: the nearest grid intersection or column centre
+/// within [`SNAP_RADIUS`], or else the point under it, on the level. A
+/// column is as near as its outline, so anywhere on it is nearest of all.
 fn pointed(viewport: &Viewport, plan: &Plan, local: DVec2) -> Pointed {
     let (camera, size, z) = (&viewport.camera, viewport.size, plan.elevation);
-    let nearest = plan
-        .snaps
-        .iter()
-        .filter_map(|&[x, y]| {
-            let screen = camera.project(DVec3::new(x, y, z), size)?;
-            Some((screen.distance(local), [x, y, z]))
-        })
+    let on_screen = |[x, y]: [f64; 2]| camera.project(DVec3::new(x, y, z), size);
+    let crossings = plan.snaps.iter().filter_map(|&[x, y]| {
+        let screen = on_screen([x, y])?;
+        Some((screen.distance(local), [x, y, z]))
+    });
+    let centres = plan.centres.iter().filter_map(|centre| {
+        let outline: Option<Vec<DVec2>> = centre.outline.iter().map(|&p| on_screen(p)).collect();
+        let [x, y] = centre.point;
+        Some((distance_to_outline(local, &outline?), [x, y, z]))
+    });
+    let nearest = crossings
+        .chain(centres)
         .filter(|(distance, _)| *distance <= SNAP_RADIUS)
         .min_by(|a, b| a.0.total_cmp(&b.0));
     match nearest {
@@ -554,6 +573,26 @@ fn pointed(viewport: &Viewport, plan: &Plan, local: DVec2) -> Pointed {
             }
         }
     }
+}
+
+/// How far `point` is from a closed outline: 0 inside it, or else the
+/// distance to its nearest side.
+fn distance_to_outline(point: DVec2, outline: &[DVec2]) -> f64 {
+    let sides = || outline.iter().zip(outline.iter().cycle().skip(1));
+    // Even-odd: a ray to the right crosses the outline an odd number of
+    // times from inside.
+    let crossings = sides()
+        .filter(|&(a, b)| {
+            (a.y > point.y) != (b.y > point.y)
+                && point.x < a.x + (point.y - a.y) / (b.y - a.y) * (b.x - a.x)
+        })
+        .count();
+    if crossings % 2 == 1 {
+        return 0.0;
+    }
+    sides()
+        .map(|(&a, &b)| cut::distance(point, [a, b]))
+        .fold(f64::INFINITY, f64::min)
 }
 
 /// What zooming to fit a plan shows: the elements and the grids, seen
@@ -596,6 +635,7 @@ mod tests {
                 },
             ],
             snaps: vec![[6.0, 0.0]],
+            centres: Vec::new(),
             on_level: BTreeSet::new(),
             symbols: Vec::new(),
         };
@@ -655,6 +695,44 @@ mod tests {
             crossing + DVec2::new(SNAP_RADIUS + 1.0, 0.0),
         );
         assert!(!far.snapped);
+    }
+
+    #[test]
+    fn on_or_near_a_column_it_snaps_to_its_centre() {
+        let (viewport, mut plan) = plan_view();
+        // A 40 cm column centred at (2, 3), off any grid intersection.
+        let [x, y, h] = [2.0, 3.0, 0.2];
+        plan.centres.push(Centre {
+            point: [x, y],
+            outline: vec![
+                [x - h, y - h],
+                [x + h, y - h],
+                [x + h, y + h],
+                [x - h, y + h],
+            ],
+        });
+        let centre = Pointed {
+            point: [x, y, 3.0],
+            snapped: true,
+        };
+        let inside = screen(&viewport, x + 0.15, y - 0.1);
+        assert_eq!(pointed(&viewport, &plan, inside), centre, "on it");
+        let face = screen(&viewport, x + h, y);
+        let near = face + DVec2::new(SNAP_RADIUS - 1.0, 0.0);
+        assert_eq!(pointed(&viewport, &plan, near), centre, "near its face");
+        let far = face + DVec2::new(SNAP_RADIUS + 1.0, 0.0);
+        assert!(!pointed(&viewport, &plan, far).snapped);
+    }
+
+    #[test]
+    fn distance_to_an_outline_is_nothing_inside_it() {
+        let square = [(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)].map(DVec2::from);
+        assert_eq!(distance_to_outline(DVec2::new(1.0, 1.5), &square), 0.0);
+        assert_eq!(distance_to_outline(DVec2::new(3.0, 1.0), &square), 1.0);
+        assert_eq!(
+            distance_to_outline(DVec2::new(-1.0, 3.0), &square),
+            2f64.sqrt()
+        );
     }
 
     #[test]
