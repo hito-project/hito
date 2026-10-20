@@ -34,7 +34,7 @@ pub(super) fn name(store: &ElementStore, level: ElementId) -> String {
 
 /// What the plan of `level` shows besides the elements' meshes: its
 /// elevation, every grid, since grids show in every plan as in Revit, and
-/// which elements are on the level.
+/// which elements show from above where the cut misses them.
 pub(super) fn content(store: &ElementStore, level: ElementId) -> Plan {
     let view = store.view();
     let elevation = match view.property(level, level::ELEVATION) {
@@ -48,14 +48,29 @@ pub(super) fn content(store: &ElementStore, level: ElementId) -> Plan {
             .into_iter()
             .map(|i| i.point)
             .collect(),
-        on_level: view
+        from_above: view
             .elements()
             .map(|e| e.id())
             .filter(|&id| level::level_of(&view, id) == Some(level))
+            .chain(reaching_up(&view, elevation))
             .collect(),
         symbols: symbols(&view, elevation + CUT_HEIGHT),
         centres: centres(&view, elevation),
     }
+}
+
+/// The columns that reach up to `elevation` from below it, such as a
+/// Level 1 column whose top is at Level 2. A plan shows them from above,
+/// so its beams can be placed by clicking them.
+fn reaching_up(view: &StoreView<'_>, elevation: f64) -> Vec<ElementId> {
+    column::columns(view)
+        .into_iter()
+        .filter(|&c| {
+            column::elevations(view, c).is_some_and(|(bottom, top)| {
+                bottom < elevation - column::TOLERANCE && elevation <= top + column::TOLERANCE
+            })
+        })
+        .collect()
 }
 
 /// The columns at `elevation`, standing on it or reaching up to it from

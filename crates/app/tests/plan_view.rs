@@ -361,6 +361,10 @@ fn columns_snap_to_grid_intersections_and_beams_frame_into_columns_clicked_near(
     // face, and its end inside the second column, off its centre. Both
     // frame into their columns, from the Level 1 columns reaching up.
     let upper = open_plan(&mut h, "Level 2");
+    h.run_steps(2);
+    let mut drawn = h.state().viewport(upper).unwrap().drawn();
+    drawn.sort();
+    assert_eq!(drawn, columns, "Level 1's columns show from above");
     command_line(&mut h, "BM");
     click_at(&mut h, upper, [0.15, 0.0, 3.0], egui::vec2(6.0, 0.0));
     click_at(&mut h, upper, [6.08, 0.05, 3.0], none);

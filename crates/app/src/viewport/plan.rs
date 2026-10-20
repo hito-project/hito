@@ -69,9 +69,10 @@ pub struct Plan {
     /// it, which a click on or near a column snaps to, so a beam's end
     /// frames into the column.
     pub centres: Vec<Centre>,
-    /// The elements on the level, which show from above even where the
-    /// cut misses them.
-    pub on_level: BTreeSet<ElementId>,
+    /// The elements that show from above, as thin lines, where the cut
+    /// misses them: those on the level, and the columns reaching up to it
+    /// from the level below, which its beams frame into.
+    pub from_above: BTreeSet<ElementId>,
     /// The elements that draw a symbol instead of their mesh, such as doors
     /// and windows. An empty symbol hides the element.
     pub symbols: Vec<Symbol>,
@@ -164,7 +165,7 @@ impl Plan {
         let mut h = std::hash::DefaultHasher::new();
         scene.geometry_revision().hash(&mut h);
         self.elevation.to_bits().hash(&mut h);
-        self.on_level.hash(&mut h);
+        self.from_above.hash(&mut h);
         for symbol in &self.symbols {
             symbol.id.hash(&mut h);
             for lines in [&symbol.cut, &symbol.thin] {
@@ -212,7 +213,7 @@ impl Drawing {
                     return shown.then_some(Drawn { id, cut, beyond });
                 }
                 let cut = cut::section(mesh, z);
-                let beyond = if cut.is_empty() && plan.on_level.contains(&id) {
+                let beyond = if cut.is_empty() && plan.from_above.contains(&id) {
                     cut::projection(mesh)
                 } else {
                     Vec::new()
@@ -636,7 +637,7 @@ mod tests {
             ],
             snaps: vec![[6.0, 0.0]],
             centres: Vec::new(),
-            on_level: BTreeSet::new(),
+            from_above: BTreeSet::new(),
             symbols: Vec::new(),
         };
         let mut viewport = Viewport::plan();
@@ -778,7 +779,7 @@ mod tests {
         };
         scene.insert(above, std::sync::Arc::new(high));
         let plan = Plan {
-            on_level: [standing, on_level].into(),
+            from_above: [standing, on_level].into(),
             ..Plan::default()
         };
         let mut drawing = Drawing::default();
