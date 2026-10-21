@@ -51,6 +51,7 @@ input-empty = Type an answer, or press Esc to cancel
 # is the decimal separator and a comma separates coordinates.
 input-not-a-point = Enter a point as x,y or x,y,z, such as 3.5,2
 input-not-a-value = Enter a value, such as 3.5 or 350 cm
+input-not-a-pick = Click the element in a plan view
 
 ## Levels
 

@@ -239,10 +239,11 @@ impl Shell {
         self.elements.forget_deleted(&self.project);
     }
 
-    /// Answers the running command with a point clicked in the plan view
-    /// of `level`. A command started for another level starts again on
-    /// this one first, so what's placed goes on the level it's clicked on.
-    fn click_point(&mut self, level: ElementId, point: [f64; 3]) {
+    /// Answers the running command with a point or an element clicked in
+    /// the plan view of `level`. A command started for another level starts
+    /// again on this one first, so what's placed goes on the level it's
+    /// clicked on.
+    fn click(&mut self, level: ElementId, input: Input) {
         if self.commands.running_level() != Some(level)
             && let Some(name) = self.commands.running().map(|c| c.name)
         {
@@ -250,7 +251,6 @@ impl Shell {
             let outcome = self.commands.start(name, &self.i18n);
             self.follow(outcome);
         }
-        let input = Input::Point(point);
         let outcome = self.commands.input(input, &self.i18n, &mut self.project);
         self.follow(outcome);
     }
@@ -416,16 +416,16 @@ impl eframe::App for Shell {
             edits: Vec::new(),
             picked: None,
             wants: self.commands.prompt().map(|p| p.wants),
-            point: None,
+            clicked: None,
         };
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE)
             .show(ui, |ui| {
                 DockArea::new(&mut self.layout.dock).show_inside(ui, &mut tabs);
             });
-        let (open, edits, picked, point) = (tabs.open, tabs.edits, tabs.picked, tabs.point);
-        if let Some((level, point)) = point {
-            self.click_point(level, point);
+        let (open, edits, picked, clicked) = (tabs.open, tabs.edits, tabs.picked, tabs.clicked);
+        if let Some((level, input)) = clicked {
+            self.click(level, input);
         }
         if let Some(picked) = picked {
             self.elements.select(picked.ids, picked.mode);

@@ -51,6 +51,7 @@ input-empty = Escribir una respuesta, o Esc para cancelar
 # el punto separa los decimales y la coma, las coordenadas.
 input-not-a-point = Ingresar un punto como x,y o x,y,z, por ejemplo 3.5,2
 input-not-a-value = Ingresar un valor, como 3.5 o 350 cm
+input-not-a-pick = Hacer clic en el elemento en una vista de planta
 
 ## Niveles
 

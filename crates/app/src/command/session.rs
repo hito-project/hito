@@ -152,13 +152,19 @@ impl Session {
 
     /// Answers the running command's prompt with input that's already
     /// read, such as a point clicked in a plan view, as typing it and
-    /// pressing Enter does. Does nothing if no command is running.
+    /// pressing Enter does. An element picked in a view goes to the tool's
+    /// [`Tool::pick`], with the model. Does nothing if no command is
+    /// running.
     pub fn input(&mut self, input: Input, i18n: &I18n, store: &mut ElementStore) -> Outcome {
         let Some(running) = &mut self.running else {
             return Outcome::Nothing;
         };
         self.message = None;
-        match running.tool.input(input) {
+        let next = match input {
+            Input::Element(element) => running.tool.pick(element, &store.view()),
+            input => running.tool.input(input),
+        };
+        match next {
             Next::Ask => Outcome::Nothing,
             Next::Reject(message) => {
                 self.message = Some(i18n.tr(message));
@@ -220,8 +226,9 @@ mod tests {
     use hito_core::{Dimension, Model, ModelKind, SchemaRegistry, StoreError, Transaction};
 
     use super::*;
-    use crate::command::{Input, Wants};
+    use crate::command::{ClassRef, Input, Wants};
     use crate::i18n::Locale;
+    use hito_core::StoreView;
 
     /// Asks for a point and a length, then adds a model.
     #[derive(Default)]
@@ -251,6 +258,7 @@ mod tests {
                 }
                 Input::Quantity(length) if length <= 0.0 => Next::Reject("probe-positive"),
                 Input::Quantity(_) => Next::Done,
+                Input::Element(_) => unreachable!("given to pick"),
             }
         }
 
@@ -292,6 +300,43 @@ mod tests {
         }
     }
 
+    /// Asks for a model element to be picked, then adds a model.
+    #[derive(Default)]
+    struct Choose {
+        picked: Option<ElementId>,
+    }
+
+    const ANY: &[ClassRef] = &[ClassRef {
+        schema: hito_core::ClassId::CORE_SCHEMA,
+        name: "Element",
+    }];
+
+    impl Tool for Choose {
+        fn prompt(&self) -> Prompt {
+            Prompt {
+                message: "choose-element",
+                wants: Wants::Element(ANY),
+            }
+        }
+
+        fn input(&mut self, _: Input) -> Next {
+            Next::Reject("choose-not-typed")
+        }
+
+        fn pick(&mut self, element: ElementId, model: &StoreView<'_>) -> Next {
+            if model.get(element).is_none() {
+                return Next::Reject("choose-unknown");
+            }
+            self.picked = Some(element);
+            Next::Done
+        }
+
+        fn commit(self: Box<Self>, tx: &mut Transaction<'_>) -> Result<(), StoreError> {
+            assert!(self.picked.is_some());
+            tx.insert_model(Model::new(ModelKind::Physical)).map(drop)
+        }
+    }
+
     struct Fixture {
         session: Session,
         i18n: I18n,
@@ -314,6 +359,12 @@ mod tests {
                     "command-level",
                     None,
                     Run::Tool(|| Box::new(Stamp::default())),
+                ),
+                (
+                    "CHOOSE",
+                    "command-grid",
+                    None,
+                    Run::Tool(|| Box::new(Choose::default())),
                 ),
                 ("COLUMN", "command-column", Some("CL"), Run::Unavailable),
                 (
@@ -444,6 +495,59 @@ mod tests {
             panic!("committed");
         };
         assert_eq!(store.models().count(), 1);
+    }
+
+    /// A picked element goes to the tool's `pick`, with the model, and
+    /// can't be typed.
+    #[test]
+    fn a_picked_element_answers_a_prompt_that_wants_one() {
+        let mut f = Fixture::new();
+        f.session.start("CHOOSE", &f.i18n);
+        f.enter("1,2");
+        assert!(f.session.message().is_some(), "can't be typed");
+        assert_eq!(f.session.running().map(|c| c.name), Some("CHOOSE"));
+
+        let Fixture {
+            session,
+            i18n,
+            store,
+            ..
+        } = &mut f;
+        let unknown = Input::Element(ElementId::generate());
+        assert!(matches!(
+            session.input(unknown, i18n, store),
+            Outcome::Nothing
+        ));
+        assert!(session.message().is_some(), "the tool refused it");
+
+        let mut tx = store.transaction();
+        let model = tx.insert_model(Model::new(ModelKind::Physical)).unwrap();
+        let level = hito_core::Element::new(hito_core::ClassId::ELEMENT, model);
+        let element = tx.insert(level).unwrap();
+        tx.commit().unwrap();
+        let Outcome::Committed(_) = session.input(Input::Element(element), i18n, store) else {
+            panic!("committed");
+        };
+        assert_eq!(store.models().count(), 2);
+    }
+
+    /// Tools that never ask for an element refuse one.
+    #[test]
+    fn tools_refuse_a_pick_by_default() {
+        let mut f = Fixture::new();
+        f.session.start("PROBE", &f.i18n);
+        let Fixture {
+            session,
+            i18n,
+            store,
+            ..
+        } = &mut f;
+        session.input(Input::Element(ElementId::generate()), i18n, store);
+        assert_eq!(
+            session.message(),
+            Some(i18n.tr("input-not-a-pick").as_str())
+        );
+        assert_eq!(session.prompt().unwrap().wants, Wants::Point, "asks again");
     }
 
     #[test]

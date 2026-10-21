@@ -11,7 +11,7 @@ use hito_core::{ElementId, ElementStore, Value};
 use super::elements::{self, Edit, Elements};
 use super::layout::{Tab, ViewId};
 use super::plans;
-use crate::command::{InputFormat, Wants};
+use crate::command::{Input, InputFormat, Wants};
 use crate::i18n::I18n;
 use crate::viewport::{Navigation, Picked, Scene, Viewport};
 
@@ -39,8 +39,9 @@ pub(super) struct Tabs<'a> {
     /// What the running command asks for, so a plan view can take a click
     /// as a point.
     pub wants: Option<Wants>,
-    /// A point clicked in a plan view this frame, and the plan's level.
-    pub point: Option<(ElementId, [f64; 3])>,
+    /// What was clicked in a plan view this frame for the running command,
+    /// a point or an element, and the plan's level.
+    pub clicked: Option<(ElementId, Input)>,
 }
 
 /// A view's name, as the project browser and its tab show it.
@@ -73,10 +74,16 @@ impl Tabs<'_> {
             return;
         };
         let viewport = self.viewports.entry(view).or_insert_with(Viewport::plan);
-        let plan = plans::content(self.project, level);
+        let mut plan = plans::content(self.project, level);
+        if let Some(Wants::Element(classes)) = self.wants {
+            plan.pickable = plans::of_classes(self.project, classes);
+        }
         let output = viewport.plan_ui(ui, self.scene, &plan, self.wants);
         if let Some(point) = output.point {
-            self.point = Some((level, point));
+            self.clicked = Some((level, Input::Point(point)));
+        }
+        if let Some(element) = output.element {
+            self.clicked = Some((level, Input::Element(element)));
         }
         if let Some(picked) = output.picked {
             self.picked = Some(picked);

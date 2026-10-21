@@ -1,12 +1,15 @@
 //! Plan views (#183) in the shell: what a level's plan shows, read from
 //! the model, and what it's called.
 
+use std::collections::BTreeSet;
+
 use glam::DVec2;
 use hito_architectural::opening::{self, OPENING};
 use hito_core::{ElementId, ElementStore, StoreView, Value};
 use hito_structural::section::{self, Section};
 use hito_structural::{class, column, grid, level};
 
+use crate::command::ClassRef;
 use crate::viewport::plan::CUT_HEIGHT;
 use crate::viewport::{Centre, Plan, PlanGrid, Segment, Symbol};
 
@@ -56,7 +59,20 @@ pub(super) fn content(store: &ElementStore, level: ElementId) -> Plan {
             .collect(),
         symbols: symbols(&view, elevation + CUT_HEIGHT),
         centres: centres(&view, elevation),
+        pickable: BTreeSet::new(),
     }
+}
+
+/// The elements of `classes`, or of classes derived from them: what a
+/// prompt that wants one of them can pick.
+pub(super) fn of_classes(store: &ElementStore, classes: &[ClassRef]) -> BTreeSet<ElementId> {
+    let registry = store.registry();
+    let classes: Vec<_> = classes.iter().map(|c| c.id()).collect();
+    store
+        .elements()
+        .filter(|e| classes.iter().any(|c| registry.is_a(e.class(), c)))
+        .map(|e| e.id())
+        .collect()
 }
 
 /// The columns that reach up to `elevation` from below it, such as a
