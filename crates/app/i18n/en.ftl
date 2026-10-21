@@ -215,6 +215,10 @@ parameter-foundation-thickness = Foundation Thickness
 parameter-default-sill-height = Default Sill Height
 parameter-frame-width = Frame Width
 parameter-frame-depth = Frame Depth
+parameter-x = Position X
+parameter-y = Position Y
+parameter-grid-offset-x = Offset from Grids X
+parameter-grid-offset-y = Offset from Grids Y
 
 ## Deleting elements
 

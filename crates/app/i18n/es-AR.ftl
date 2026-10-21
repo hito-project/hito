@@ -203,18 +203,22 @@ parameter-level-offset = Desfase de nivel
 parameter-height-offset = Desfase de altura desde nivel
 parameter-elevation-at-top = Elevación en parte superior
 parameter-elevation-at-bottom = Elevación en parte inferior
-parameter-sill-height = Altura de antepecho
-parameter-section-width = Ancho (b)
-parameter-section-depth = Alto (h)
+parameter-sill-height = Altura de alféizar
+parameter-section-width = Anchura (b)
+parameter-section-depth = Profundidad (h)
 parameter-diameter = Diámetro
-parameter-default-thickness = Espesor por defecto
-parameter-length = Largo
-parameter-width = Ancho
-parameter-height = Alto
-parameter-foundation-thickness = Espesor de la base
-parameter-default-sill-height = Altura de antepecho por defecto
-parameter-frame-width = Ancho del marco
-parameter-frame-depth = Profundidad del marco
+parameter-default-thickness = Grosor por defecto
+parameter-length = Longitud
+parameter-width = Anchura
+parameter-height = Altura
+parameter-foundation-thickness = Grosor de cimentación
+parameter-default-sill-height = Altura de alféizar por defecto
+parameter-frame-width = Anchura de marco
+parameter-frame-depth = Profundidad de marco
+parameter-x = Posición X
+parameter-y = Posición Y
+parameter-grid-offset-x = Desfase desde ejes X
+parameter-grid-offset-y = Desfase desde ejes Y
 
 ## Eliminar elementos
 

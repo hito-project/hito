@@ -53,6 +53,18 @@ pub enum Computed {
     When(fn(&StoreView<'_>, ElementId) -> bool),
 }
 
+/// When the panel shows a parameter.
+#[derive(Debug, Clone, Copy)]
+pub enum Shown {
+    Always,
+    /// Only when the element has a value, as a section type's width or its
+    /// diameter, depending on its shape.
+    WhenSet,
+    /// When this says so of every selected element, such as a column's
+    /// offsets from its grids while it's on grids.
+    When(fn(&StoreView<'_>, ElementId) -> bool),
+}
+
 /// One parameter as the panel shows it.
 #[derive(Debug, Clone, Copy)]
 pub struct Parameter {
@@ -63,9 +75,8 @@ pub struct Parameter {
     pub group: Group,
     pub editor: Editor,
     pub computed: Computed,
-    /// Shown only when the element has a value, as a section type's width
-    /// or its diameter, depending on its shape.
-    pub when_set: bool,
+    /// When the panel shows it.
+    pub shown: Shown,
 }
 
 const LENGTH: Editor = Editor::Quantity(Dimension::LENGTH);
@@ -83,7 +94,7 @@ const fn editable(
         group,
         editor,
         computed: Computed::Never,
-        when_set: false,
+        shown: Shown::Always,
     }
 }
 
@@ -94,7 +105,7 @@ const fn computed(property: &'static str, label: &'static str, group: Group) -> 
         group,
         editor: LENGTH,
         computed: Computed::Always,
-        when_set: false,
+        shown: Shown::Always,
     }
 }
 
@@ -110,13 +121,20 @@ const fn computed_when(
         group,
         editor: LENGTH,
         computed: Computed::When(when),
-        when_set: false,
+        shown: Shown::Always,
+    }
+}
+
+const fn shown_when(parameter: Parameter, when: fn(&StoreView<'_>, ElementId) -> bool) -> Parameter {
+    Parameter {
+        shown: Shown::When(when),
+        ..parameter
     }
 }
 
 const fn when_set(parameter: Parameter) -> Parameter {
     Parameter {
-        when_set: true,
+        shown: Shown::WhenSet,
         ..parameter
     }
 }
@@ -148,6 +166,17 @@ fn column_has_no_top_level(view: &StoreView<'_>, id: ElementId) -> bool {
 fn wall_top_is_fixed(view: &StoreView<'_>, id: ElementId) -> bool {
     use hito_architectural::{class, wall};
     has(view, id, &class(wall::TOP_LEVEL)) || has(view, id, &class(wall::TOP_ATTACHED_TO))
+}
+
+/// A column on two grids: its X and Y follow them, and its offsets from
+/// their intersection place it (#215 decision D).
+fn column_on_grids(view: &StoreView<'_>, id: ElementId) -> bool {
+    column::grids(view, id).is_some()
+}
+
+/// A footing under a column: it follows the column.
+fn footing_under_column(view: &StoreView<'_>, id: ElementId) -> bool {
+    footing::column(view, id).is_some()
 }
 
 fn wall_has_no_top_level(view: &StoreView<'_>, id: ElementId) -> bool {
@@ -217,6 +246,26 @@ const DESCRIBED: &[Described] = &[
                 Group::Constraints,
                 ANGLE,
             ),
+            computed_when(column::X, "parameter-x", Group::Constraints, column_on_grids),
+            computed_when(column::Y, "parameter-y", Group::Constraints, column_on_grids),
+            shown_when(
+                editable(
+                    column::GRID_OFFSET_X,
+                    "parameter-grid-offset-x",
+                    Group::Constraints,
+                    LENGTH,
+                ),
+                column_on_grids,
+            ),
+            shown_when(
+                editable(
+                    column::GRID_OFFSET_Y,
+                    "parameter-grid-offset-y",
+                    Group::Constraints,
+                    LENGTH,
+                ),
+                column_on_grids,
+            ),
         ],
     },
     Described {
@@ -255,11 +304,11 @@ const DESCRIBED: &[Described] = &[
         schema: STRUCTURAL,
         class: footing::FOOTING,
         parameters: &[
-            editable(
+            computed_when(
                 footing::HEIGHT_OFFSET,
                 "parameter-height-offset",
                 Group::Constraints,
-                LENGTH,
+                footing_under_column,
             ),
             editable(
                 footing::ROTATION,
@@ -267,6 +316,8 @@ const DESCRIBED: &[Described] = &[
                 Group::Constraints,
                 ANGLE,
             ),
+            computed_when(footing::X, "parameter-x", Group::Constraints, footing_under_column),
+            computed_when(footing::Y, "parameter-y", Group::Constraints, footing_under_column),
             computed(
                 footing::TOP_ELEVATION,
                 "parameter-elevation-at-top",
@@ -520,7 +571,11 @@ pub fn rows(view: &StoreView<'_>, elements: &[ElementId]) -> Vec<Row> {
                 computed,
             }
         })
-        .filter(|row| !(row.parameter.when_set && row.value == Shared::Same(None)))
+        .filter(|row| match row.parameter.shown {
+            Shown::Always => true,
+            Shown::WhenSet => row.value != Shared::Same(None),
+            Shown::When(when) => classes.iter().all(|(id, _)| when(view, *id)),
+        })
         .collect()
 }
 
@@ -653,8 +708,11 @@ mod tests {
                 "parameter-top-offset",
                 "parameter-unconnected-height",
                 "parameter-rotation",
+                "parameter-x",
+                "parameter-y",
             ]
         );
+        assert!(!row(&rows, "parameter-x").computed, "a free column moves");
         let height = row(&rows, "parameter-unconnected-height");
         assert_eq!(height.value, Shared::Same(Some(Value::Real(3.0))));
         assert!(!height.computed, "an unconnected column's height is typed");
@@ -682,6 +740,43 @@ mod tests {
         assert!(offset.computed, "still unused by the second column");
         let first = rows(&view, &f.columns[..1]);
         assert!(!row(&first, "parameter-top-offset").computed);
+    }
+
+    #[test]
+    fn a_column_on_grids_moves_by_its_offsets_from_them() {
+        use hito_structural::grid;
+        let mut f = fixture();
+        let base = level::levels(&f.store.view())[0].0;
+        let mut tx = f.store.transaction();
+        let model = project::physical_model(&mut tx).unwrap();
+        let line = |name: &str, [x0, y0, x1, y1]: [f64; 4]| {
+            Element::new(class(grid::GRID), model)
+                .with_property(grid::NAME, name)
+                .with_property(grid::START_X, x0)
+                .with_property(grid::START_Y, y0)
+                .with_property(grid::END_X, x1)
+                .with_property(grid::END_Y, y1)
+        };
+        let a = tx.insert(line("A", [0.0, -5.0, 0.0, 5.0])).unwrap();
+        let one = tx.insert(line("1", [-5.0, 0.0, 5.0, 0.0])).unwrap();
+        let placement = Placement::new(f.column_type, base, [0.0, 0.0]).on_grids([a, one]);
+        let on_grids = column::insert(&mut tx, model, &placement).unwrap();
+        tx.commit().unwrap();
+
+        let view = f.store.view();
+        let rows = rows(&view, &[on_grids]);
+        assert!(row(&rows, "parameter-x").computed, "#215 decision D");
+        assert!(!row(&rows, "parameter-grid-offset-x").computed);
+        // A free column has no offsets from grids.
+        let free = rows_of(&view, f.columns[0]);
+        assert!(free.iter().all(|r| r.parameter.label != "parameter-grid-offset-x"));
+        // Nor do they show when only some of the selection is on grids.
+        let both = super::rows(&view, &[on_grids, f.columns[0]]);
+        assert!(both.iter().all(|r| r.parameter.label != "parameter-grid-offset-y"));
+    }
+
+    fn rows_of(view: &StoreView<'_>, id: ElementId) -> Vec<Row> {
+        rows(view, &[id])
     }
 
     #[test]
