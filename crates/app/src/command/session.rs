@@ -14,6 +14,8 @@ pub struct Session {
     message: Option<String>,
     /// The level tools place elements on, given to them when they start.
     level: Option<ElementId>,
+    /// What is selected, given to the next tool the user starts.
+    selection: Vec<ElementId>,
 }
 
 struct Running {
@@ -43,12 +45,18 @@ impl Session {
             running: None,
             message: None,
             level: None,
+            selection: Vec::new(),
         }
     }
 
     /// Sets the level tools started from now on place elements on.
     pub fn set_level(&mut self, level: Option<ElementId>) {
         self.level = level;
+    }
+
+    /// Sets what is selected, for the next tool the user starts.
+    pub fn set_selection(&mut self, selection: impl IntoIterator<Item = ElementId>) {
+        self.selection = selection.into_iter().collect();
     }
 
     pub fn registry(&self) -> &Registry {
@@ -84,7 +92,9 @@ impl Session {
 
     /// Runs the command called `name`, cancelling the one running, as a
     /// ribbon button or a shortcut does in Revit.
-    pub fn start(&mut self, name: &str, i18n: &I18n) -> Outcome {
+    /// A tool that is ready at once ([`Tool::ready_at_start`]) commits
+    /// straight away.
+    pub fn start(&mut self, name: &str, i18n: &I18n, store: &mut ElementStore) -> Outcome {
         let Some(&command) = self.registry.get(name) else {
             return Outcome::Nothing;
         };
@@ -95,12 +105,20 @@ impl Session {
         match command.run {
             Run::Window(action) => Outcome::Window(action),
             Run::Tool(start) => {
+                // Only the tool the user starts gets the selection, not the
+                // ones the session starts again by itself.
+                let selection = std::mem::take(&mut self.selection);
+                let tool = started(start, i18n, self.level, &selection);
+                let ready = tool.ready_at_start(&store.view());
                 self.running = Some(Running {
                     command,
-                    tool: started(start, i18n, self.level),
+                    tool,
                     level: self.level,
                 });
-                Outcome::Nothing
+                match ready {
+                    true => self.finish(Next::Repeat, i18n, store),
+                    false => Outcome::Nothing,
+                }
             }
             Run::Unavailable => {
                 let label = i18n.tr(command.label);
@@ -132,7 +150,7 @@ impl Session {
             return match command {
                 Some(command) => {
                     let name = command.name;
-                    self.start(name, i18n)
+                    self.start(name, i18n, store)
                 }
                 None => {
                     self.message = Some(i18n.tr_with("command-unknown", "input", text.trim()));
@@ -164,6 +182,12 @@ impl Session {
             Input::Element(element) => running.tool.pick(element, &store.view()),
             input => running.tool.input(input),
         };
+        self.finish(next, i18n, store)
+    }
+
+    /// Follows up what the running tool said after its input: commits it
+    /// once it's done, and carries on with the next one if it repeats.
+    fn finish(&mut self, next: Next, i18n: &I18n, store: &mut ElementStore) -> Outcome {
         match next {
             Next::Ask => Outcome::Nothing,
             Next::Reject(message) => {
@@ -191,7 +215,7 @@ impl Session {
                     }
                 };
                 if let (Next::Repeat, Run::Tool(start)) = (next, command.run) {
-                    let tool = next_tool.unwrap_or_else(|| started(start, i18n, level));
+                    let tool = next_tool.unwrap_or_else(|| started(start, i18n, level, &[]));
                     self.running = Some(Running {
                         command,
                         tool,
@@ -215,9 +239,18 @@ impl Session {
 }
 
 /// A new tool from its command's factory, started.
-fn started(start: fn() -> Box<dyn Tool>, i18n: &I18n, level: Option<ElementId>) -> Box<dyn Tool> {
+fn started(
+    start: fn() -> Box<dyn Tool>,
+    i18n: &I18n,
+    level: Option<ElementId>,
+    selection: &[ElementId],
+) -> Box<dyn Tool> {
     let mut tool = start();
-    tool.start(&Context { i18n, level });
+    tool.start(&Context {
+        i18n,
+        level,
+        selection,
+    });
     tool
 }
 
@@ -427,7 +460,7 @@ mod tests {
     #[test]
     fn cancelling_changes_nothing() {
         let mut f = Fixture::new();
-        f.session.start("PROBE", &f.i18n);
+        f.session.start("PROBE", &f.i18n, &mut f.store);
         f.enter("1,2");
         f.session.cancel(&f.i18n);
         assert!(f.session.running().is_none());
@@ -441,8 +474,8 @@ mod tests {
     #[test]
     fn starting_another_command_cancels_the_running_one() {
         let mut f = Fixture::new();
-        f.session.start("PROBE", &f.i18n);
-        let outcome = f.session.start("TILEVIEWS", &f.i18n);
+        f.session.start("PROBE", &f.i18n, &mut f.store);
+        let outcome = f.session.start("TILEVIEWS", &f.i18n, &mut f.store);
         assert!(matches!(outcome, Outcome::Window(Action::TileViews)));
         assert!(f.session.running().is_none());
     }
@@ -450,7 +483,7 @@ mod tests {
     #[test]
     fn a_repeating_tool_commits_each_element_and_stays_active() {
         let mut f = Fixture::new();
-        f.session.start("STAMP", &f.i18n);
+        f.session.start("STAMP", &f.i18n, &mut f.store);
         for n in 1..=2 {
             let Outcome::Committed(changes) = f.enter("3 m") else {
                 panic!("committed");
@@ -483,7 +516,7 @@ mod tests {
         ));
         let level = ElementId::generate();
         session.set_level(Some(level));
-        session.start("PROBE", i18n);
+        session.start("PROBE", i18n, store);
         session.set_level(None);
         assert_eq!(session.running_level(), Some(level), "as it started");
         session.input(point, i18n, store);
@@ -502,7 +535,7 @@ mod tests {
     #[test]
     fn a_picked_element_answers_a_prompt_that_wants_one() {
         let mut f = Fixture::new();
-        f.session.start("CHOOSE", &f.i18n);
+        f.session.start("CHOOSE", &f.i18n, &mut f.store);
         f.enter("1,2");
         assert!(f.session.message().is_some(), "can't be typed");
         assert_eq!(f.session.running().map(|c| c.name), Some("CHOOSE"));
@@ -535,7 +568,7 @@ mod tests {
     #[test]
     fn tools_refuse_a_pick_by_default() {
         let mut f = Fixture::new();
-        f.session.start("PROBE", &f.i18n);
+        f.session.start("PROBE", &f.i18n, &mut f.store);
         let Fixture {
             session,
             i18n,

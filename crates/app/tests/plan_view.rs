@@ -410,6 +410,36 @@ fn footings_clicked_on_or_near_columns_in_plan_go_under_them() {
 }
 
 #[test]
+fn footings_go_under_the_columns_selected_when_the_tool_starts() {
+    use hito_structural::{column, footing};
+    let mut h = window();
+    let plan = open_plan(&mut h, "Level 1");
+    let none = egui::Vec2::ZERO;
+    command_line(&mut h, "CL");
+    click_at(&mut h, plan, [0.0, 0.0, 0.0], none);
+    click_at(&mut h, plan, [5.0, 0.0, 0.0], none);
+    esc(&mut h);
+    let columns = of_class(&h, column::COLUMN);
+    // Both selected, as a click and a Ctrl click in the plan do.
+    h.state_mut()
+        .select(columns.iter().copied(), hito::selection::Mode::Replace);
+    h.run_steps(1);
+    let mut picked = selected(&h);
+    picked.sort();
+    assert_eq!(picked, columns);
+
+    command_line(&mut h, "ISOLATEDFOOTING");
+    let view = h.state().project().view();
+    let mut under: Vec<_> = footing::footings(&view)
+        .into_iter()
+        .map(|f| footing::column(&view, f))
+        .collect();
+    under.sort();
+    assert_eq!(under, columns.iter().copied().map(Some).collect::<Vec<_>>());
+    assert!(h.state().commands().running().is_some(), "carries on");
+}
+
+#[test]
 fn a_vertical_opening_cuts_the_slab_picked_in_plan() {
     use hito_structural::slab;
     let mut h = window();
