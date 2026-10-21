@@ -166,6 +166,59 @@ properties-label = Label
 properties-name = Name
 properties-elevation = Elevation
 properties-edit-failed = The change could not be made
+# The type selector at the top of the panel, and the type editor.
+properties-type = Type
+# A value that differs between the selected elements.
+properties-varies = (varies)
+properties-edit-type = Edit Type
+type-editor-title = Type Properties
+type-editor-warning = { $count ->
+    [one] Changes apply to the 1 element of this type.
+   *[other] Changes apply to all { $count } elements of this type.
+}
+action-ok = OK
+action-apply = Apply
+
+# The selection's class, as the panel's title shows it.
+class-wall = Wall
+class-door = Door
+class-window = Window
+class-column = Column
+class-beam = Beam
+class-slab = Slab
+class-slab-opening = Opening
+class-footing = Isolated Footing
+
+# Revit's parameter groups and parameters.
+group-constraints = Constraints
+group-construction = Construction
+group-structural = Structural
+group-dimensions = Dimensions
+parameter-base-offset = Base Offset
+parameter-top-offset = Top Offset
+parameter-unconnected-height = Unconnected Height
+parameter-structural = Structural
+parameter-rotation = Rotation
+parameter-level-offset = Level Offset
+parameter-height-offset = Height Offset From Level
+parameter-elevation-at-top = Elevation at Top
+parameter-elevation-at-bottom = Elevation at Bottom
+parameter-sill-height = Sill Height
+parameter-section-width = Width (b)
+parameter-section-depth = Depth (h)
+parameter-diameter = Diameter
+parameter-default-thickness = Default Thickness
+parameter-length = Length
+parameter-width = Width
+parameter-height = Height
+parameter-foundation-thickness = Foundation Thickness
+parameter-default-sill-height = Default Sill Height
+parameter-frame-width = Frame Width
+parameter-frame-depth = Frame Depth
+parameter-x = Position X
+parameter-y = Position Y
+parameter-grid-offset-x = Offset from Grids X
+parameter-grid-offset-y = Offset from Grids Y
 
 ## Deleting elements
 

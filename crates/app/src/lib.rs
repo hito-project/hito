@@ -8,6 +8,7 @@
 
 pub mod command;
 pub mod i18n;
+pub mod parameters;
 pub mod project;
 pub mod selection;
 pub mod shell;

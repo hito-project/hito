@@ -22,10 +22,19 @@ fn window() -> Harness<'static, Shell> {
     h
 }
 
+/// The command line's text field: the lowest text field in the window,
+/// since the command line runs along its bottom edge. The properties panel
+/// and the options bar show text fields of their own above it.
+fn command_input<'h>(h: &'h Harness<'_, Shell>) -> egui_kittest::Node<'h> {
+    let inputs = h.get_all_by_role(Role::TextInput);
+    let lowest = inputs.max_by(|a, b| a.rect().bottom().total_cmp(&b.rect().bottom()));
+    lowest.expect("the command line")
+}
+
 fn command_line(h: &mut Harness<'_, Shell>, text: &str) {
-    h.get_by_role(Role::TextInput).focus();
+    command_input(h).focus();
     h.run_steps(1);
-    h.get_by_role(Role::TextInput).type_text(text);
+    command_input(h).type_text(text);
     h.run_steps(1);
     h.key_press(egui::Key::Enter);
     h.run_steps(2);

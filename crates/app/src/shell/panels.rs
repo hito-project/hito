@@ -6,11 +6,12 @@ use std::collections::HashMap;
 use eframe::egui;
 use eframe::egui_wgpu::RenderState;
 
-use hito_core::{ElementId, ElementStore, Value};
+use hito_core::{ElementId, ElementStore};
 
 use super::elements::{self, Edit, Elements};
 use super::layout::{Tab, ViewId};
 use super::plans;
+use super::properties;
 use crate::command::{Input, InputFormat, Wants};
 use crate::i18n::I18n;
 use crate::viewport::{Navigation, Picked, Scene, Viewport};
@@ -145,16 +146,16 @@ impl Tabs<'_> {
             .show(ui, |ui| ui.weak(tr("browser-none")));
     }
 
-    /// The selection's properties, editable for a single level or grid, or
-    /// with nothing selected the active view's, as in Revit. Editing the
-    /// others comes with #26.
+    /// The selection's properties, editable, or with nothing selected the
+    /// active view's, as in Revit.
     fn properties(&mut self, ui: &mut egui::Ui) {
         let (store, edits) = (self.project, &mut self.edits);
         if elements::properties(ui, self.i18n, self.input, store, self.elements, edits) {
             return;
         }
         if !self.elements.selection().is_empty() {
-            return self.selected_properties(ui);
+            let (store, edits) = (self.project, &mut self.edits);
+            return properties::selection(ui, self.i18n, self.input, store, self.elements, edits);
         }
         let Some(view) = self.active_view else {
             ui.weak(self.i18n.tr("properties-no-view"));
@@ -173,68 +174,6 @@ impl Tabs<'_> {
                 ui.label(self.name_of(view)).labelled_by(label.id);
                 ui.end_row();
             });
-    }
-
-    /// The selected elements' class and properties, as Revit shows them:
-    /// one element's name, or with several their class and how many, or
-    /// "Common" if they're of different classes. With several, a property
-    /// they all have shows its value if it's the same in all of them and
-    /// is blank if it varies.
-    fn selected_properties(&mut self, ui: &mut egui::Ui) {
-        let elements: Vec<_> = self
-            .elements
-            .selection()
-            .ids()
-            .iter()
-            .filter_map(|&id| self.project.get(id))
-            .collect();
-        let Some(first) = elements.first() else {
-            return;
-        };
-        let class = first.class();
-        let same_class = elements.iter().all(|e| e.class() == class);
-        // Class names aren't translated yet: domains will give their
-        // classes labels (#26).
-        let title = match (elements.len(), same_class) {
-            (1, _) => class.name().to_owned(),
-            (n, true) => format!("{} ({n})", class.name()),
-            (n, false) => self.i18n.tr_with("properties-common", "count", n),
-        };
-        ui.strong(title);
-        egui::Grid::new("selected-properties")
-            .num_columns(2)
-            .striped(true)
-            .show(ui, |ui| {
-                for (name, value) in first.properties() {
-                    let values: Option<Vec<_>> =
-                        elements.iter().map(|e| e.properties().get(name)).collect();
-                    let Some(values) = values else {
-                        continue;
-                    };
-                    let shown = if values.iter().all(|v| *v == value) {
-                        show(value)
-                    } else {
-                        String::new()
-                    };
-                    let label = ui.label(name);
-                    ui.label(shown).labelled_by(label.id);
-                    ui.end_row();
-                }
-            });
-    }
-}
-
-/// A property's value as text. Lengths show in metres, as the model stores
-/// them, until project units (#55) format them.
-fn show(value: &Value) -> String {
-    match value {
-        Value::Boolean(b) => b.to_string(),
-        Value::Integer(i) => i.to_string(),
-        Value::Real(x) => {
-            let text = format!("{x:.4}");
-            text.trim_end_matches('0').trim_end_matches('.').to_owned()
-        }
-        Value::Text(text) => text.clone(),
     }
 }
 

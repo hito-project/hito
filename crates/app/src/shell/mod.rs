@@ -19,6 +19,7 @@ mod elements;
 mod layout;
 mod panels;
 mod plans;
+mod properties;
 mod ribbon;
 mod theme;
 
@@ -169,6 +170,12 @@ impl Shell {
         &self.project
     }
 
+    /// The model, to change it directly, as a test sets up a project. The
+    /// 3D views don't follow such a change; the window's own edits do.
+    pub fn project_mut(&mut self) -> &mut ElementStore {
+        &mut self.project
+    }
+
     /// The renderer of an open 3D view, once it has been shown.
     pub fn viewport(&self, view: ViewId) -> Option<&Viewport> {
         self.viewports.get(&view)
@@ -311,21 +318,27 @@ impl Shell {
     fn edit(&mut self, edit: Edit) {
         self.elements.clear_error();
         match edit {
-            Edit::Set {
-                element,
-                property,
-                value,
-            } => {
-                // Undo (#19) lists it by this name, with the property.
-                let command = Command::new("SETPROPERTY").with_parameter("Property", property);
+            Edit::Set { elements, values } => {
+                // Undo (#19) lists it by this name, with the properties.
+                let names: Vec<_> = values.iter().map(|(name, _)| *name).collect();
+                let command =
+                    Command::new("SETPROPERTY").with_parameter("Property", names.join(", "));
                 let mut tx = self.project.transaction_for(command);
-                match tx
-                    .set_property(element, property, value)
-                    .and_then(|()| tx.commit())
-                {
-                    Ok(changes) => self.committed(&changes),
-                    Err(_) => self.elements.fail(self.i18n.tr("properties-edit-failed")),
-                }
+                let set = elements.iter().try_for_each(|&element| {
+                    let mut values = values.iter();
+                    values
+                        .try_for_each(|(name, value)| tx.set_property(element, name, value.clone()))
+                });
+                let result = set.and_then(|()| tx.commit());
+                self.commit(result);
+            }
+            Edit::SetType { elements, type_id } => {
+                let mut tx = self.project.transaction_for(Command::new("CHANGETYPE"));
+                let set = elements
+                    .iter()
+                    .try_for_each(|&element| tx.set_type(element, type_id));
+                let result = set.and_then(|()| tx.commit());
+                self.commit(result);
             }
             Edit::Delete(selected) => {
                 let view = self.project.view();
@@ -344,6 +357,14 @@ impl Shell {
                     self.delete(&selected);
                 }
             }
+        }
+    }
+
+    /// Shows a committed edit, or says it couldn't be made.
+    fn commit(&mut self, result: Result<ChangeSet, hito_core::StoreError>) {
+        match result {
+            Ok(changes) => self.committed(&changes),
+            Err(_) => self.elements.fail(self.i18n.tr("properties-edit-failed")),
         }
     }
 
@@ -474,6 +495,13 @@ impl eframe::App for Shell {
             elements::confirm_delete(ui.ctx(), i18n, project, &mut self.elements)
         {
             self.delete(&selected);
+        }
+        let mut edits = Vec::new();
+        let (i18n, input, project) = (&self.i18n, &self.input, &self.project);
+        let elements = &mut self.elements;
+        properties::type_editor(ui.ctx(), i18n, input, project, elements, &mut edits);
+        for edit in edits {
+            self.edit(edit);
         }
         self.layout.track_focus();
 
