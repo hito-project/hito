@@ -36,7 +36,7 @@ pub use layout::{Layout, Tab, ViewId};
 pub use ribbon::Action;
 pub use theme::Theme;
 
-use crate::command::{Input, InputFormat, Outcome, Session};
+use crate::command::{Input, InputFormat, Outcome, Session, Wants};
 use crate::i18n::{I18n, Locale};
 use crate::project;
 use crate::selection::{Mode, Selection};
@@ -181,6 +181,28 @@ impl Shell {
             .set_selection(self.elements.selection().ids().iter().copied());
         let outcome = self.commands.start(name, &self.i18n, &mut self.project);
         self.follow(outcome);
+        self.go_to_plan();
+    }
+
+    /// Opens the running tool's level's plan view, or brings it to the
+    /// front, if the tool wants a point or an element clicked and a 3D view
+    /// is active, as Revit's Go To View does for sketches (#229).
+    fn go_to_plan(&mut self) {
+        let wants = self.commands.prompt().map(|p| p.wants);
+        if !wants.is_some_and(Wants::is_clicked) {
+            return;
+        }
+        let active = self.layout.active_view();
+        if active.is_some_and(|v| self.layout.plan_level(v).is_some()) {
+            return;
+        }
+        let plan = self
+            .commands
+            .running_level()
+            .and_then(|level| self.layout.plan_of(level));
+        if let Some(plan) = plan {
+            self.layout.open_view(plan);
+        }
     }
 
     /// Cancels the running command, as Esc does. With no command running,
@@ -222,10 +244,14 @@ impl Shell {
         // For a command typed by name; an answer to a prompt ignores it.
         self.commands
             .set_selection(self.elements.selection().ids().iter().copied());
+        let starting = self.commands.running().is_none();
         let outcome = self
             .commands
             .enter(text, &self.i18n, &self.input, &mut self.project);
         self.follow(outcome);
+        if starting {
+            self.go_to_plan();
+        }
     }
 
     fn follow(&mut self, outcome: Outcome) {
@@ -263,20 +289,21 @@ impl Shell {
 
     /// The level placement tools put elements on: the active view's, if
     /// it's a plan view, as in Revit, or else the selected level, if it's
-    /// the only element selected.
+    /// the only element selected, or else the lowest. A tool started in 3D
+    /// opens this level's plan (#229).
     fn active_level(&self) -> Option<ElementId> {
         let plan = self
             .layout
             .active_view()
             .and_then(|v| self.layout.plan_level(v));
-        if plan.is_some() {
-            return plan;
-        }
         let level = hito_structural::class(hito_structural::level::LEVEL);
         let registry = self.project.registry();
-        let picked = self.elements.selected()?;
-        let element = self.project.get(picked)?;
-        registry.is_a(element.class(), &level).then_some(picked)
+        let selected = self.elements.selected().filter(|&picked| {
+            let element = self.project.get(picked);
+            element.is_some_and(|e| registry.is_a(e.class(), &level))
+        });
+        plan.or(selected)
+            .or_else(|| plans::levels(&self.project).first().copied())
     }
 
     /// Makes a change the user asked for in the browser or the properties,
@@ -507,7 +534,8 @@ mod tests {
     #[test]
     fn deleting_a_level_asks_first_when_elements_go_with_it() {
         let (mut h, level, column) = window_with_a_column();
-        h.get_by_label("Level 1").click();
+        // The level under Levels, after its plan under Floor Plans.
+        h.query_all_by_label("Level 1").last().unwrap().click();
         h.run_steps(2);
         h.key_press(egui::Key::Delete);
         h.run_steps(2);
