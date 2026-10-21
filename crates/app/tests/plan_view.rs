@@ -408,3 +408,32 @@ fn footings_clicked_on_or_near_columns_in_plan_go_under_them() {
     expected.sort();
     assert_eq!(under, expected);
 }
+
+#[test]
+fn a_vertical_opening_cuts_the_slab_picked_in_plan() {
+    use hito_structural::slab;
+    let mut h = window();
+    let plan = open_plan(&mut h, "Level 1");
+    command_line(&mut h, "SB");
+    for point in ["0,0", "6,0", "6,4", "0,4", "0,0"] {
+        command_line(&mut h, point);
+    }
+    esc(&mut h);
+    let floor = slab::slabs(&h.state().project().view())[0];
+
+    // Clicking empty space picks nothing; clicking the slab's edge picks it.
+    command_line(&mut h, "VERTICALOPENING");
+    let none = egui::Vec2::ZERO;
+    click_at(&mut h, plan, [3.0, 8.0, 0.0], none);
+    let asks_for_slab = |h: &Harness<'_, Shell>| {
+        h.state().commands().prompt().map(|p| p.message) == Some("opening-prompt-slab")
+    };
+    assert!(asks_for_slab(&h));
+    click_at(&mut h, plan, [3.0, 0.0, 0.0], none);
+    assert!(!asks_for_slab(&h), "picked");
+    for point in ["1,1", "2,1", "2,3", "1,3", "1,1"] {
+        command_line(&mut h, point);
+    }
+    esc(&mut h);
+    assert_eq!(slab::openings(&h.state().project().view(), floor).len(), 1);
+}

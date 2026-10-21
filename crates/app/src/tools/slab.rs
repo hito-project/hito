@@ -5,20 +5,18 @@
 //! after the first ends one line and starts the next, and typing the first
 //! point again closes the boundary and finishes the slab. A point that
 //! would make the boundary cross or touch itself is refused as it's typed.
-//! Points are typed on the command line until plan views (#183) let them be
-//! clicked: absolute (`5,0`), or relative to the last point (`@4<90`,
-//! `@4,0`). Picking the boundary from walls or beams needs clicking, so it
-//! comes with plan views too.
+//! Points are clicked in a plan view (#183) or typed on the command line:
+//! absolute (`5,0`), or relative to the last point (`@4<90`, `@4,0`).
 //!
 //! Slabs go on the active level (the level picked in the project browser,
 //! or else the lowest level), their top on it, with the project's first
 //! slab type until the type selector (#26) exists. Each slab is one
 //! transaction and one undo step, and the tool stays active for the next.
 //!
-//! The Vertical opening tool, as Revit's Opening > Vertical, sketches an
-//! opening the same way and cuts it from the slab on the active level that
-//! has it inside. Until plan views let the slab be picked, that slab is
-//! found by where the opening is drawn.
+//! The Vertical opening tool, as Revit's Opening > Vertical, first asks
+//! for the slab to cut, picked in a plan view, and then sketches the
+//! opening the same way. It stays active for more openings in the same
+//! slab until Esc.
 
 use hito_core::{ElementId, StoreError, StoreView, Transaction};
 use hito_structural::level::LEVEL;
@@ -26,8 +24,14 @@ use hito_structural::outline::{self, Point, TOLERANCE};
 use hito_structural::slab::{self, Placement, SLAB, SLAB_TYPE};
 
 use super::placement;
-use crate::command::{Context, Input, Next, Prompt, Tool, Wants};
+use crate::command::{ClassRef, Context, Input, Next, Prompt, Tool, Wants};
 use crate::project;
+
+/// What the Vertical opening tool picks first.
+const SLABS: &[ClassRef] = &[ClassRef {
+    schema: hito_structural::SCHEMA,
+    name: SLAB,
+}];
 
 /// Starts the Slab tool.
 pub fn start() -> Box<dyn Tool> {
@@ -49,6 +53,8 @@ enum Target {
 struct SketchTool {
     target: Target,
     level: Option<ElementId>,
+    /// The slab an opening cuts, once it's picked.
+    host: Option<ElementId>,
     corners: Vec<Point>,
 }
 
@@ -57,6 +63,7 @@ impl SketchTool {
         Self {
             target,
             level: None,
+            host: None,
             corners: Vec::new(),
         }
     }
@@ -69,6 +76,12 @@ impl Tool for SketchTool {
 
     fn prompt(&self) -> Prompt {
         let (first, next) = match self.target {
+            Target::Opening if self.host.is_none() => {
+                return Prompt {
+                    message: "opening-prompt-slab",
+                    wants: Wants::Element(SLABS),
+                };
+            }
             Target::Slab => ("slab-prompt-start", "slab-prompt-next"),
             Target::Opening => ("opening-prompt-start", "opening-prompt-next"),
         };
@@ -82,6 +95,19 @@ impl Tool for SketchTool {
                 wants: Wants::PointFrom([x, y, 0.0]),
             },
         }
+    }
+
+    fn pick(&mut self, element: ElementId, model: &StoreView<'_>) -> Next {
+        let wants_slab = self.target == Target::Opening && self.host.is_none();
+        let class = hito_structural::class(SLAB);
+        let is_slab = model
+            .get(element)
+            .is_some_and(|e| model.registry().is_a(e.class(), &class));
+        if !wants_slab || !is_slab {
+            return Next::Reject("opening-pick-a-slab");
+        }
+        self.host = Some(element);
+        Next::Ask
     }
 
     fn input(&mut self, input: Input) -> Next {
@@ -108,25 +134,31 @@ impl Tool for SketchTool {
         }
     }
 
+    /// An opening's next one goes in the same slab; a slab's starts again.
+    fn after_commit(&self) -> Option<Box<dyn Tool>> {
+        Some(Box::new(SketchTool {
+            corners: Vec::new(),
+            ..self.clone()
+        }))
+    }
+
     fn commit(self: Box<Self>, tx: &mut Transaction<'_>) -> Result<(), StoreError> {
         let model = project::physical_model(tx)?;
         let view = tx.view();
-        // Without a level or a slab type, the command fails and says so.
-        let level = placement::base_level(&view, self.level)
-            .ok_or_else(|| StoreError::UnknownClass(hito_structural::class(LEVEL)))?;
         match self.target {
             Target::Slab => {
+                // Without a level or a slab type, the command fails and
+                // says so.
+                let level = placement::base_level(&view, self.level)
+                    .ok_or_else(|| StoreError::UnknownClass(hito_structural::class(LEVEL)))?;
                 let slab_type = default_type(&view)
                     .ok_or_else(|| StoreError::UnknownClass(hito_structural::class(SLAB_TYPE)))?;
                 let placement = Placement::new(slab_type, level, &self.corners);
                 slab::insert(tx, model, &placement).map(drop)
             }
             Target::Opening => {
-                let host = slab::slabs_around(&view, level, &self.corners)
-                    .first()
-                    .copied();
-                let host =
-                    host.ok_or_else(|| StoreError::UnknownClass(hito_structural::class(SLAB)))?;
+                let host = self.host.expect("the slab is picked first");
+                // The slab's rules refuse an opening that isn't inside it.
                 slab::insert_opening(tx, model, host, &self.corners).map(drop)
             }
         }
@@ -198,6 +230,17 @@ mod tests {
                 store,
             } = self;
             session.enter(text, i18n, format, store)
+        }
+
+        /// Picks an element, as a click in a plan view does.
+        fn pick(&mut self, element: ElementId) -> Outcome {
+            let Self {
+                session,
+                i18n,
+                store,
+                ..
+            } = self;
+            session.input(Input::Element(element), i18n, store)
         }
 
         fn enter_all(&mut self, points: &[&str]) -> Vec<Outcome> {
@@ -290,25 +333,44 @@ mod tests {
     }
 
     #[test]
-    fn a_vertical_opening_cuts_the_slab_it_is_drawn_in() {
+    fn a_vertical_opening_cuts_the_slab_picked_first() {
         let mut f = Fixture::new();
         f.enter("SB");
         f.enter_all(&["0,0", "6,0", "6,4", "0,4", "0,0"]);
+        f.enter_all(&["10,0", "16,0", "16,4", "10,0"]);
         f.session.cancel(&f.i18n);
-        let floor = f.slabs()[0];
+        let [floor, other] = f.slabs()[..] else {
+            panic!("two slabs");
+        };
 
         f.enter("VERTICALOPENING");
+        assert_eq!(
+            f.session.prompt().unwrap(),
+            Prompt {
+                message: "opening-prompt-slab",
+                wants: Wants::Element(SLABS),
+            }
+        );
+        // The slab can't be typed, and only a slab can be picked.
+        f.enter("1,1");
+        assert_eq!(f.session.prompt().unwrap().message, "opening-prompt-slab");
+        let level = level::levels(&f.store.view())[0].0;
+        f.pick(level);
+        assert!(f.session.message().is_some());
+        f.pick(floor);
         assert_eq!(f.session.prompt().unwrap().message, "opening-prompt-start");
         let outcomes = f.enter_all(&["1,1", "@1,0", "@0,2", "@-1,0", "1,1"]);
         assert!(matches!(outcomes[4], Outcome::Committed(_)));
-        let openings = slab::openings(&f.store.view(), floor);
-        assert_eq!(openings.len(), 1);
+        assert_eq!(slab::openings(&f.store.view(), floor).len(), 1);
 
-        // Outside every slab, the opening can't be made.
-        let outcomes = f.enter_all(&["10,10", "11,10", "11,11", "10,10"]);
+        // The next opening goes in the same slab, so one outside it, even
+        // inside another slab, can't be made.
+        assert_eq!(f.session.prompt().unwrap().message, "opening-prompt-start");
+        let outcomes = f.enter_all(&["11,1", "12,1", "12,2", "11,1"]);
         assert!(matches!(outcomes[3], Outcome::Nothing));
         assert!(f.session.message().is_some());
         assert_eq!(slab::openings(&f.store.view(), floor).len(), 1);
+        assert!(slab::openings(&f.store.view(), other).is_empty());
     }
 
     #[test]
