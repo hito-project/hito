@@ -854,3 +854,86 @@ fn drawn_walls_show_in_the_3d_view() {
         );
     }
 }
+
+/// The contextual tab's buttons, by the text after their mark.
+fn contextual_button(h: &mut Harness<'_, Shell>, text: &str) {
+    h.get_by(|node| node.role() == Role::Button && node.label().is_some_and(|l| l.ends_with(text)))
+        .click();
+    h.run_steps(2);
+}
+
+/// While a tool runs, a contextual "Modify | Place …" tab comes to the
+/// front with Finish and Cancel, as in Revit, and the tab before comes
+/// back when the tool ends.
+#[test]
+fn a_running_tool_shows_a_contextual_tab_with_finish_and_cancel() {
+    let mut h = window();
+    ribbon_tab(&mut h, "View");
+    command_line(&mut h, "CL");
+    assert!(h.query_by_label_contains("Modify | Place").is_some());
+    assert!(h.query_by_label_contains("Column").is_some());
+    assert!(
+        h.query_by_role_and_label(Role::Button, "3D View").is_none(),
+        "the contextual tab shows"
+    );
+    command_line(&mut h, "0,0");
+    contextual_button(&mut h, "Finish");
+    assert_eq!(prompt(&h), None, "Finish ended the tool");
+    assert_eq!(h.state().commands().message(), None, "not cancelled");
+    assert!(h.query_by_label_contains("Modify | Place").is_none());
+    assert!(
+        h.query_by_role_and_label(Role::Button, "3D View").is_some(),
+        "back on the View tab"
+    );
+
+    // Cancel drops a wall's start point, as Esc does.
+    command_line(&mut h, "WA");
+    command_line(&mut h, "0,0");
+    contextual_button(&mut h, "Cancel");
+    assert_eq!(prompt(&h), None);
+    assert_eq!(h.state().commands().message(), Some("*Cancel*"));
+    assert!(walls(&h).is_empty());
+}
+
+/// A slab sketch is finished with Finish, or with Enter, with no need to
+/// type its first point again; the tool then ends, as Revit's sketch mode.
+#[test]
+fn a_slab_sketch_is_finished_with_finish_or_enter() {
+    use hito_structural::slab;
+    let mut h = window();
+    command_line(&mut h, "SB");
+    assert!(shows(&h, "Modify | Create Floor Boundary"));
+    for point in ["0,0", "6,0", "6,4"] {
+        command_line(&mut h, point);
+    }
+    contextual_button(&mut h, "Finish");
+    assert_eq!(slab::slabs(&h.state().project().view()).len(), 1);
+    assert_eq!(prompt(&h), None, "the tool ended");
+
+    // Enter on the empty command line finishes the next one.
+    command_line(&mut h, "SB");
+    for point in ["10,0", "16,0", "16,4"] {
+        command_line(&mut h, point);
+    }
+    h.key_press(egui::Key::Enter);
+    h.run_steps(2);
+    assert_eq!(slab::slabs(&h.state().project().view()).len(), 2);
+    assert_eq!(prompt(&h), None);
+
+    // And so does Enter with nothing focused.
+    command_line(&mut h, "SB");
+    for point in ["20,0", "26,0", "26,4"] {
+        command_line(&mut h, point);
+    }
+    h.ctx.memory_mut(|m| {
+        if let Some(id) = m.focused() {
+            m.surrender_focus(id);
+        }
+    });
+    h.run_steps(2);
+    assert!(h.ctx.memory(|m| m.focused().is_none()), "nothing focused");
+    h.key_press(egui::Key::Enter);
+    h.run_steps(2);
+    assert_eq!(slab::slabs(&h.state().project().view()).len(), 3);
+    assert_eq!(prompt(&h), None);
+}

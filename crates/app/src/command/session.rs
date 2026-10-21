@@ -116,7 +116,7 @@ impl Session {
                     level: self.level,
                 });
                 match ready {
-                    true => self.finish(Next::Repeat, i18n, store),
+                    true => self.follow_up(Next::Repeat, i18n, store),
                     false => Outcome::Nothing,
                 }
             }
@@ -131,7 +131,8 @@ impl Session {
     /// Takes what was typed and entered on the command line: the answer to
     /// the running command's prompt, or else a command to run, by label,
     /// name or alias. A partial name runs the first command it completes
-    /// to, as in AutoCAD.
+    /// to, as in AutoCAD. Nothing typed, while a command runs, finishes it
+    /// ([`Session::finish`]), as Enter ends a command in AutoCAD.
     pub fn enter(
         &mut self,
         text: &str,
@@ -158,6 +159,9 @@ impl Session {
                 }
             };
         };
+        if text.trim().is_empty() {
+            return self.finish(i18n, store);
+        }
         let input = match format.parse(text, running.tool.prompt().wants) {
             Ok(input) => input,
             Err(error) => {
@@ -182,12 +186,12 @@ impl Session {
             Input::Element(element) => running.tool.pick(element, &store.view()),
             input => running.tool.input(input),
         };
-        self.finish(next, i18n, store)
+        self.follow_up(next, i18n, store)
     }
 
     /// Follows up what the running tool said after its input: commits it
     /// once it's done, and carries on with the next one if it repeats.
-    fn finish(&mut self, next: Next, i18n: &I18n, store: &mut ElementStore) -> Outcome {
+    fn follow_up(&mut self, next: Next, i18n: &I18n, store: &mut ElementStore) -> Outcome {
         match next {
             Next::Ask => Outcome::Nothing,
             Next::Reject(message) => {
@@ -225,6 +229,30 @@ impl Session {
                 outcome
             }
         }
+    }
+
+    /// Finishes the running command, as the contextual tab's Finish button
+    /// does ([`Tool::finish`]): a sketch is committed and the command
+    /// ends; a placement tool just ends, dropping anything half drawn.
+    /// Does nothing if no command is running.
+    pub fn finish(&mut self, i18n: &I18n, store: &mut ElementStore) -> Outcome {
+        let Some(running) = &mut self.running else {
+            return Outcome::Nothing;
+        };
+        self.message = None;
+        match running.tool.finish() {
+            None => {
+                self.running = None;
+                Outcome::Nothing
+            }
+            Some(next) => self.follow_up(next, i18n, store),
+        }
+    }
+
+    /// The message key of the contextual tab's title the running tool
+    /// asks for ([`Tool::tab_title`]), if it asks for one.
+    pub fn tab_title(&self) -> Option<&'static str> {
+        self.running.as_ref().and_then(|r| r.tool.tab_title())
     }
 
     /// Cancels the running command, as Esc does. Its input so far is
@@ -469,6 +497,31 @@ mod tests {
             Some(f.i18n.tr("command-cancelled").as_str())
         );
         assert_eq!(f.store.models().count(), 0);
+    }
+
+    /// Finish, or Enter with nothing typed, ends a tool that has nothing
+    /// to finish, dropping what it was given so far.
+    #[test]
+    fn finishing_a_placement_tool_ends_it() {
+        let mut f = Fixture::new();
+        f.session.start("PROBE", &f.i18n, &mut f.store);
+        assert_eq!(f.session.tab_title(), None, "titled by the command");
+        f.enter("1,2");
+        let outcome = f.session.finish(&f.i18n, &mut f.store);
+        assert!(matches!(outcome, Outcome::Nothing));
+        assert!(f.session.running().is_none());
+        assert_eq!(f.session.message(), None, "not cancelled");
+        assert_eq!(f.store.models().count(), 0);
+
+        f.session.start("STAMP", &f.i18n, &mut f.store);
+        f.enter("3 m");
+        assert!(matches!(f.enter("  "), Outcome::Nothing));
+        assert!(f.session.running().is_none(), "Enter finished it");
+        assert_eq!(f.store.models().count(), 1, "what was placed stays");
+
+        // With no command running, Finish does nothing.
+        let outcome = f.session.finish(&f.i18n, &mut f.store);
+        assert!(matches!(outcome, Outcome::Nothing));
     }
 
     #[test]

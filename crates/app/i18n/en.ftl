@@ -201,3 +201,15 @@ view-cube-home = Home
 view-cube-go-home = Go Home
 view-perspective = Perspective
 view-orthographic = Orthographic
+
+## The contextual tab, while a tool runs (#230)
+
+# Revit's contextual tab for a placement tool, such as "Modify | Place Column".
+tab-modify-place = Modify | Place { $command }
+# Revit's sketch mode tabs, for the Slab and Vertical opening tools.
+tab-create-floor-boundary = Modify | Create Floor Boundary
+tab-create-opening-boundary = Modify | Create Opening Boundary
+ribbon-group-mode = Mode
+# Finish makes a sketch's slab or opening and ends the tool; Cancel is Esc.
+ribbon-finish = Finish
+ribbon-cancel = Cancel
