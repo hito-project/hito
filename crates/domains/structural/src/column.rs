@@ -233,6 +233,19 @@ pub fn columns(store: &StoreView<'_>) -> Vec<ElementId> {
     columns
 }
 
+/// The column standing on `level` (its base level) whose section contains
+/// `point` in plan, the oldest if several do. What a footing placed at a
+/// point on a column goes under.
+pub fn standing_at(store: &StoreView<'_>, level: ElementId, point: [f64; 2]) -> Option<ElementId> {
+    columns(store).into_iter().find(|&c| {
+        let on_level = store.targets(c, &class(ATTACHED_TO_LEVEL)).first() == Some(&level);
+        let inside = read_section(store, c)
+            .zip(to_section(store, c, point))
+            .is_some_and(|(section, local)| section.contains(local));
+        on_level && inside
+    })
+}
+
 /// The column classes.
 pub(crate) fn classes() -> [ClassDef; 2] {
     let column_type = ClassDef::new(COLUMN_TYPE, class(SECTION_TYPE));

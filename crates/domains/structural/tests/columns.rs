@@ -214,6 +214,27 @@ fn section_types_must_be_complete_and_uniquely_named() {
 }
 
 #[test]
+fn the_column_standing_at_a_point_is_found_on_its_section_and_its_level() {
+    let mut p = project();
+    let column = p.column([2.0, 1.0]);
+    let turned = Placement::new(p.rectangular, p.ground, [6.0, 1.0]).with_rotation(FRAC_PI_2);
+    let turned = p.insert(turned).unwrap();
+    let view = p.store.view();
+    let at = |level, point| column::standing_at(&view, level, point);
+    // 30 cm along x and 40 cm along y, so 15 cm and 20 cm from the centre.
+    assert_eq!(at(p.ground, [2.14, 1.19]), Some(column), "on its section");
+    assert_eq!(at(p.ground, [2.16, 1.0]), None, "off it");
+    assert_eq!(
+        at(p.first, [2.0, 1.0]),
+        None,
+        "it stands on the ground floor"
+    );
+    // Turned a quarter, its 40 cm run along x.
+    assert_eq!(at(p.ground, [6.19, 1.0]), Some(turned));
+    assert_eq!(at(p.ground, [6.0, 1.19]), None);
+}
+
+#[test]
 fn columns_follow_their_levels() {
     let mut p = project();
     let column = p.column([0.0, 0.0]);
