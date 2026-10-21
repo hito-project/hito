@@ -213,3 +213,25 @@ ribbon-group-mode = Mode
 # Finish makes a sketch's slab or opening and ends the tool; Cancel is Esc.
 ribbon-finish = Finish
 ribbon-cancel = Cancel
+
+## The options bar, under the ribbon (#230)
+
+# Revit's options bar starts a column's or a wall's row with "Height", then
+# its top: unconnected, or a level above.
+option-top = Height
+option-unconnected = Unconnected
+option-unconnected-height = Unconnected Height
+option-height-positive = The height must be more than 0
+option-location-line = Location Line
+location-line-wall-centerline = Wall Centerline
+location-line-core-centerline = Core Centerline
+location-line-finish-face-exterior = Finish Face: Exterior
+location-line-finish-face-interior = Finish Face: Interior
+location-line-core-face-exterior = Core Face: Exterior
+location-line-core-face-interior = Core Face: Interior
+# A slab's top above its level, Revit's property name. Revit keeps it in the
+# properties; here it's on the options bar too.
+option-height-offset-from-level = Height Offset From Level
+# A beam's top above its level.
+option-level-offset = Level Offset
+option-unknown = This tool has no such option

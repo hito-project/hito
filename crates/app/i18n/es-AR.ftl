@@ -210,3 +210,20 @@ tab-create-opening-boundary = Modificar | Crear contorno de abertura
 ribbon-group-mode = Modo
 ribbon-finish = Finalizar
 ribbon-cancel = Cancelar
+
+## La barra de opciones, debajo de la cinta (#230)
+
+option-top = Altura
+option-unconnected = Sin conexión
+option-unconnected-height = Altura sin conexión
+option-height-positive = La altura tiene que ser mayor que 0
+option-location-line = Línea de ubicación
+location-line-wall-centerline = Línea central del muro
+location-line-core-centerline = Línea central del núcleo
+location-line-finish-face-exterior = Cara de acabado: exterior
+location-line-finish-face-interior = Cara de acabado: interior
+location-line-core-face-exterior = Cara de núcleo: exterior
+location-line-core-face-interior = Cara de núcleo: interior
+option-height-offset-from-level = Desfase de altura desde nivel
+option-level-offset = Desfase de nivel
+option-unknown = Esta herramienta no tiene esa opción

@@ -1,8 +1,13 @@
 //! Running commands: the command line's state between keystrokes.
 
-use hito_core::{ChangeSet, ElementId, ElementStore};
+use std::collections::HashMap;
 
-use super::{Command, Context, Input, InputFormat, Next, Prompt, Registry, Run, Tool};
+use hito_core::{ChangeSet, ElementId, ElementStore, StoreView};
+
+use super::{
+    Command, Context, Input, InputFormat, Next, OptionValue, Prompt, Registry, Run, Tool,
+    ToolOption,
+};
 use crate::i18n::I18n;
 use crate::shell::Action;
 
@@ -16,6 +21,9 @@ pub struct Session {
     level: Option<ElementId>,
     /// What is selected, given to the next tool the user starts.
     selection: Vec<ElementId>,
+    /// The options set for each command, by its name, given to its tool
+    /// each time it starts, until the program closes.
+    remembered: HashMap<&'static str, Vec<(&'static str, OptionValue)>>,
 }
 
 struct Running {
@@ -46,6 +54,7 @@ impl Session {
             message: None,
             level: None,
             selection: Vec::new(),
+            remembered: HashMap::new(),
         }
     }
 
@@ -108,7 +117,8 @@ impl Session {
                 // Only the tool the user starts gets the selection, not the
                 // ones the session starts again by itself.
                 let selection = std::mem::take(&mut self.selection);
-                let tool = started(start, i18n, self.level, &selection);
+                let mut tool = started(start, i18n, self.level, &selection);
+                self.recall(command.name, tool.as_mut());
                 let ready = tool.ready_at_start(&store.view());
                 self.running = Some(Running {
                     command,
@@ -219,7 +229,8 @@ impl Session {
                     }
                 };
                 if let (Next::Repeat, Run::Tool(start)) = (next, command.run) {
-                    let tool = next_tool.unwrap_or_else(|| started(start, i18n, level, &[]));
+                    let mut tool = next_tool.unwrap_or_else(|| started(start, i18n, level, &[]));
+                    self.recall(command.name, tool.as_mut());
                     self.running = Some(Running {
                         command,
                         tool,
@@ -255,6 +266,41 @@ impl Session {
         self.running.as_ref().and_then(|r| r.tool.tab_title())
     }
 
+    /// The running tool's options, for the options bar ([`Tool::options`]).
+    /// None with no command running.
+    pub fn options(&self, model: &StoreView<'_>) -> Vec<ToolOption> {
+        self.running
+            .as_ref()
+            .map(|r| r.tool.options(model))
+            .unwrap_or_default()
+    }
+
+    /// Sets one of the running tool's options, as the options bar does, and
+    /// remembers it for the next time the command starts. A value the tool
+    /// refuses says why on the command line.
+    pub fn set_option(&mut self, key: &'static str, value: OptionValue, i18n: &I18n) {
+        let Some(running) = &mut self.running else {
+            return;
+        };
+        match running.tool.set_option(key, value.clone()) {
+            Ok(()) => {
+                self.message = None;
+                let remembered = self.remembered.entry(running.command.name).or_default();
+                remembered.retain(|(k, _)| *k != key);
+                remembered.push((key, value));
+            }
+            Err(message) => self.message = Some(i18n.tr(message)),
+        }
+    }
+
+    /// Gives a tool starting for `command` the options last set for it.
+    fn recall(&self, command: &str, tool: &mut dyn Tool) {
+        for (key, value) in self.remembered.get(command).into_iter().flatten() {
+            // A value that no longer fits is left as the tool starts.
+            let _ = tool.set_option(key, value.clone());
+        }
+    }
+
     /// Cancels the running command, as Esc does. Its input so far is
     /// dropped and the model doesn't change.
     pub fn cancel(&mut self, i18n: &I18n) {
@@ -287,7 +333,7 @@ mod tests {
     use hito_core::{Dimension, Model, ModelKind, SchemaRegistry, StoreError, Transaction};
 
     use super::*;
-    use crate::command::{ClassRef, Input, Wants};
+    use crate::command::{ClassRef, Input, OptionValue, ToolOption, Wants};
     use crate::i18n::Locale;
     use hito_core::StoreView;
 
@@ -333,6 +379,8 @@ mod tests {
     #[derive(Default)]
     struct Stamp {
         started_in: Option<Locale>,
+        /// An option, for the options bar.
+        size: f64,
     }
 
     impl Tool for Stamp {
@@ -349,6 +397,31 @@ mod tests {
 
         fn input(&mut self, _: Input) -> Next {
             Next::Repeat
+        }
+
+        fn options(&self, _: &StoreView<'_>) -> Vec<ToolOption> {
+            vec![ToolOption {
+                key: "stamp-size",
+                value: OptionValue::Quantity {
+                    value: self.size,
+                    dimension: Dimension::LENGTH,
+                },
+                enabled: true,
+            }]
+        }
+
+        fn set_option(
+            &mut self,
+            key: &'static str,
+            value: OptionValue,
+        ) -> Result<(), &'static str> {
+            match (key, value.quantity()) {
+                ("stamp-size", Some(size)) if size > 0.0 => {
+                    self.size = size;
+                    Ok(())
+                }
+                _ => Err("stamp-bad-size"),
+            }
         }
 
         fn commit(self: Box<Self>, tx: &mut Transaction<'_>) -> Result<(), StoreError> {
@@ -522,6 +595,39 @@ mod tests {
         // With no command running, Finish does nothing.
         let outcome = f.session.finish(&f.i18n, &mut f.store);
         assert!(matches!(outcome, Outcome::Nothing));
+    }
+
+    /// An option set on the options bar stays for the next element, and
+    /// for the next time the command starts, until the program closes.
+    #[test]
+    fn options_are_remembered_for_each_command() {
+        let mut f = Fixture::new();
+        assert!(
+            f.session.options(&f.store.view()).is_empty(),
+            "none running"
+        );
+        f.session.start("STAMP", &f.i18n, &mut f.store);
+        let size = |value| OptionValue::Quantity {
+            value,
+            dimension: Dimension::LENGTH,
+        };
+        let shown = |f: &Fixture| f.session.options(&f.store.view())[0].value.quantity();
+        assert_eq!(shown(&f), Some(0.0));
+        f.session.set_option("stamp-size", size(-1.0), &f.i18n);
+        assert!(f.session.message().is_some(), "refused");
+        f.session.set_option("stamp-size", size(2.0), &f.i18n);
+        assert_eq!(f.session.message(), None);
+        f.enter("3 m");
+        assert_eq!(shown(&f), Some(2.0), "for the next element");
+        f.session.cancel(&f.i18n);
+        f.session.start("STAMP", &f.i18n, &mut f.store);
+        assert_eq!(shown(&f), Some(2.0), "the next time it starts");
+
+        // A tool with no options has none to set, and says so.
+        f.session.start("PROBE", &f.i18n, &mut f.store);
+        assert!(f.session.options(&f.store.view()).is_empty());
+        f.session.set_option("stamp-size", size(2.0), &f.i18n);
+        assert!(f.session.message().is_some());
     }
 
     #[test]

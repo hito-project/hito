@@ -10,16 +10,17 @@
 //! Columns go on the active level (the level picked in the project
 //! browser, or else the lowest level), up to the next level above it, or
 //! 3 m high and unconnected if there's none, as Revit's options bar starts
-//! with "Height". They use the project's first column type until the type
-//! selector (#26) exists.
+//! with "Height". The options bar changes that, as Revit's: the top goes
+//! to any level above, or is unconnected at a height typed there. They use
+//! the project's first column type until the type selector (#26) exists.
 
-use hito_core::{ElementId, StoreError, Transaction};
+use hito_core::{ElementId, StoreError, StoreView, Transaction};
 use hito_structural::column::{self, COLUMN_TYPE, Placement, Top};
 use hito_structural::grid;
 use hito_structural::level::LEVEL;
 
-use super::placement::{base_level, first_of, level_above};
-use crate::command::{Context, Input, Next, Prompt, Tool, Wants};
+use super::placement::{TopOption, base_level, first_of};
+use crate::command::{Context, Input, Next, OptionValue, Prompt, Tool, ToolOption, Wants};
 use crate::project;
 
 /// Starts the Column tool.
@@ -31,6 +32,8 @@ pub fn start() -> Box<dyn Tool> {
 struct ColumnTool {
     level: Option<ElementId>,
     point: Option<[f64; 2]>,
+    /// The options bar's top: a level above, or unconnected at a height.
+    top: TopOption,
 }
 
 impl Tool for ColumnTool {
@@ -53,12 +56,23 @@ impl Tool for ColumnTool {
         Next::Repeat
     }
 
-    /// The next column goes on the same level.
+    /// The next column goes on the same level, with the same options.
     fn after_commit(&self) -> Option<Box<dyn Tool>> {
         Some(Box::new(ColumnTool {
-            level: self.level,
             point: None,
+            ..*self
         }))
+    }
+
+    /// Revit's Height and top: up to a level above, or unconnected.
+    fn options(&self, model: &StoreView<'_>) -> Vec<ToolOption> {
+        self.top
+            .options(model, base_level(model, self.level))
+            .to_vec()
+    }
+
+    fn set_option(&mut self, key: &'static str, value: OptionValue) -> Result<(), &'static str> {
+        self.top.set(key, &value).unwrap_or(Err("option-unknown"))
     }
 
     fn commit(self: Box<Self>, tx: &mut Transaction<'_>) -> Result<(), StoreError> {
@@ -70,9 +84,11 @@ impl Tool for ColumnTool {
             .ok_or_else(|| StoreError::UnknownClass(hito_structural::class(LEVEL)))?;
         let column_type = first_of(&view, &hito_structural::class(COLUMN_TYPE))
             .ok_or_else(|| StoreError::UnknownClass(hito_structural::class(COLUMN_TYPE)))?;
-        let top = match level_above(&view, base) {
+        let top = match self.top.level(&view, base) {
             Some(level) => Top::Level { level, offset: 0.0 },
-            None => Top::Unconnected { height: 3.0 },
+            None => Top::Unconnected {
+                height: self.top.height(),
+            },
         };
         let mut placement = Placement::new(column_type, base, point).with_top(top);
         if let Some(crossing) = grid::intersection_near(&view, point, column::TOLERANCE) {
@@ -212,6 +228,94 @@ mod tests {
         let view = f.store.view();
         assert_eq!(level::level_of(&view, upper), Some(second));
         assert_eq!(column::elevations(&view, upper), Some((2.8, 5.6)));
+    }
+
+    /// The options bar's top: any level above, or unconnected at a height,
+    /// remembered the next time the tool starts.
+    #[test]
+    fn the_options_bar_sets_the_top_level_or_the_height() {
+        use crate::command::{Choice, OptionValue};
+        use crate::tools::placement::{HEIGHT, TOP, UNCONNECTED};
+        let mut f = Fixture::new();
+        f.add_level("Nivel 2", 2.8);
+        f.add_level("Nivel 3", 5.6);
+        f.enter("CL");
+        let options = f.session.options(&f.store.view());
+        let [top, height] = &options[..] else {
+            panic!("two options: {options:?}");
+        };
+        assert_eq!(top.key, TOP);
+        let OptionValue::Choice { selected, choices } = &top.value else {
+            panic!("a choice");
+        };
+        assert_eq!(*selected, 1, "the level above");
+        let names: Vec<_> = choices
+            .iter()
+            .map(|c| match c {
+                Choice::Key(key) => key.to_string(),
+                Choice::Element { name, .. } => name.clone(),
+            })
+            .collect();
+        assert_eq!(names, [UNCONNECTED, "Nivel 2", "Nivel 3"]);
+        assert_eq!(height.key, HEIGHT);
+        assert!(!height.enabled, "only while unconnected");
+
+        let to = |selected| OptionValue::Choice {
+            selected,
+            choices: choices.clone(),
+        };
+        f.session.set_option(TOP, to(2), &f.i18n);
+        f.enter("0,0");
+        let view = f.store.view();
+        assert_eq!(column::elevations(&view, f.columns()[0]), Some((0.0, 5.6)));
+
+        f.session.set_option(TOP, to(0), &f.i18n);
+        let length = |value| OptionValue::Quantity {
+            value,
+            dimension: hito_core::Dimension::LENGTH,
+        };
+        f.session.set_option(HEIGHT, length(-1.0), &f.i18n);
+        assert!(f.session.message().is_some(), "refused");
+        f.session.set_option(HEIGHT, length(4.2), &f.i18n);
+        assert!(f.session.options(&f.store.view())[1].enabled);
+        f.session.cancel(&f.i18n);
+
+        // Remembered the next time.
+        f.enter("CL");
+        f.enter("2,0");
+        let view = f.store.view();
+        assert_eq!(column::elevations(&view, f.columns()[1]), Some((0.0, 4.2)));
+    }
+
+    /// A remembered top level that isn't above the base any more falls
+    /// back to the level above.
+    #[test]
+    fn a_remembered_top_level_below_the_base_falls_back_to_the_level_above() {
+        use crate::command::OptionValue;
+        use crate::tools::placement::TOP;
+        let mut f = Fixture::new();
+        let second = f.add_level("Nivel 2", 2.8);
+        f.add_level("Nivel 3", 5.6);
+        f.enter("CL");
+        let OptionValue::Choice { choices, .. } =
+            f.session.options(&f.store.view())[0].value.clone()
+        else {
+            panic!("a choice");
+        };
+        // Up to Nivel 2, from the ground.
+        let value = OptionValue::Choice {
+            selected: 1,
+            choices,
+        };
+        f.session.set_option(TOP, value, &f.i18n);
+        f.session.cancel(&f.i18n);
+
+        // On Nivel 2, Nivel 2 can't be the top: Nivel 3 is.
+        f.session.set_level(Some(second));
+        f.enter("CL");
+        f.enter("0,0");
+        let view = f.store.view();
+        assert_eq!(column::elevations(&view, f.columns()[0]), Some((2.8, 5.6)));
     }
 
     #[test]

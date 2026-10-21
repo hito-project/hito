@@ -22,10 +22,17 @@ fn window() -> Harness<'static, Shell> {
     h
 }
 
+/// The command line's text field, found by its egui ID: the options bar
+/// has text fields too, while some tools run.
+fn command_line_field<'a>(h: &'a Harness<'_, Shell>) -> egui_kittest::Node<'a> {
+    let id = egui::Id::new("command-line").accesskit_id();
+    h.get_by(move |node| node.locate().0 == id)
+}
+
 fn command_line(h: &mut Harness<'_, Shell>, text: &str) {
-    h.get_by_role(Role::TextInput).focus();
+    command_line_field(h).focus();
     h.run_steps(1);
-    h.get_by_role(Role::TextInput).type_text(text);
+    command_line_field(h).type_text(text);
     h.run_steps(1);
     h.key_press(egui::Key::Enter);
     h.run_steps(2);
@@ -346,7 +353,9 @@ fn columns_snap_to_grid_intersections_and_beams_frame_into_columns_clicked_near(
     {
         let view = h.state().project().view();
         assert!(column::grids(&view, columns[0]).is_some(), "on the grids");
-        assert_eq!(column::location(&view, columns[0]), Some([0.0, 0.0]));
+        // Where the clicked grids cross, to rounding.
+        let at = column::location(&view, columns[0]).unwrap();
+        assert!(close(at, [0.0, 0.0], 1e-9), "{at:?}");
         assert!(column::grids(&view, columns[1]).is_none());
     }
 

@@ -9,16 +9,23 @@
 //!
 //! Walls go on the active level (the level picked in the project browser,
 //! or else the lowest level), up to the next level above it, or 3 m high
-//! and unconnected if there's none, as Revit's options bar starts. They use
-//! the project's first wall type until the type selector (#26) exists.
+//! and unconnected if there's none, on their centreline, as Revit's options
+//! bar starts. The options bar changes that, as Revit's: the top goes to
+//! any level above, or is unconnected at a height typed there, and the
+//! points drawn are any of the six location lines. Walls use the project's
+//! first wall type until the type selector (#26) exists.
 
-use hito_architectural::wall::{self, Placement, Top};
+use hito_architectural::wall::{self, LocationLine, Placement, Top};
 use hito_architectural::wall_type::WALL_TYPE;
-use hito_core::{Element, ElementId, StoreError, StoreView, Transaction};
-use hito_structural::level::{self, LEVEL};
+use hito_core::{ElementId, StoreError, StoreView, Transaction};
+use hito_structural::level::LEVEL;
 
-use crate::command::{Context, Input, Next, Prompt, Tool, Wants};
+use super::placement::{TopOption, base_level, first_of};
+use crate::command::{Choice, Context, Input, Next, OptionValue, Prompt, Tool, ToolOption, Wants};
 use crate::project;
+
+/// The options bar's location line.
+pub const LOCATION_LINE: &str = "option-location-line";
 
 /// Starts the Wall tool.
 pub fn start() -> Box<dyn Tool> {
@@ -30,6 +37,9 @@ struct WallTool {
     level: Option<ElementId>,
     start: Option<[f64; 3]>,
     end: Option<[f64; 3]>,
+    /// The options bar's top: a level above, or unconnected at a height.
+    top: TopOption,
+    location_line: LocationLine,
 }
 
 impl Tool for WallTool {
@@ -69,13 +79,48 @@ impl Tool for WallTool {
         }
     }
 
-    /// The next wall of the chain starts where this one ends.
+    /// The next wall of the chain starts where this one ends, with the
+    /// same options.
     fn after_commit(&self) -> Option<Box<dyn Tool>> {
         Some(Box::new(WallTool {
-            level: self.level,
             start: self.end,
             end: None,
+            ..*self
         }))
+    }
+
+    /// Revit's Height and top, and Location Line.
+    fn options(&self, model: &StoreView<'_>) -> Vec<ToolOption> {
+        let mut options = self
+            .top
+            .options(model, base_level(model, self.level))
+            .to_vec();
+        let selected = LocationLine::ALL
+            .iter()
+            .position(|&l| l == self.location_line)
+            .unwrap_or(0);
+        options.push(ToolOption {
+            key: LOCATION_LINE,
+            value: OptionValue::Choice {
+                selected,
+                choices: LocationLine::ALL.map(|l| Choice::Key(label(l))).to_vec(),
+            },
+            enabled: true,
+        });
+        options
+    }
+
+    fn set_option(&mut self, key: &'static str, value: OptionValue) -> Result<(), &'static str> {
+        if let Some(result) = self.top.set(key, &value) {
+            return result;
+        }
+        let chosen = match (key, value.chosen()) {
+            (LOCATION_LINE, Some(Choice::Key(chosen))) => chosen,
+            _ => return Err("option-unknown"),
+        };
+        let line = LocationLine::ALL.into_iter().find(|&l| label(l) == chosen);
+        self.location_line = line.ok_or("option-unknown")?;
+        Ok(())
     }
 
     fn commit(self: Box<Self>, tx: &mut Transaction<'_>) -> Result<(), StoreError> {
@@ -89,13 +134,30 @@ impl Tool for WallTool {
             .ok_or_else(|| StoreError::UnknownClass(hito_structural::class(LEVEL)))?;
         let wall_type = default_type(&view)
             .ok_or_else(|| StoreError::UnknownClass(hito_architectural::class(WALL_TYPE)))?;
-        let top = match level_above(&view, base) {
+        let top = match self.top.level(&view, base) {
             Some(level) => Top::Level { level, offset: 0.0 },
-            None => Top::Unconnected { height: 3.0 },
+            None => Top::Unconnected {
+                height: self.top.height(),
+            },
         };
         let plan = |p: [f64; 3]| [p[0], p[1]];
-        let placement = Placement::new(wall_type, base, plan(start), plan(end)).with_top(top);
+        let placement = Placement::new(wall_type, base, plan(start), plan(end))
+            .with_top(top)
+            .with_location_line(self.location_line);
         wall::insert(tx, model, &placement).map(drop)
+    }
+}
+
+/// The message key of a location line's name, as Revit's options bar
+/// lists them.
+fn label(line: LocationLine) -> &'static str {
+    match line {
+        LocationLine::WallCenterline => "location-line-wall-centerline",
+        LocationLine::CoreCenterline => "location-line-core-centerline",
+        LocationLine::FinishFaceExterior => "location-line-finish-face-exterior",
+        LocationLine::FinishFaceInterior => "location-line-finish-face-interior",
+        LocationLine::CoreFaceExterior => "location-line-core-face-exterior",
+        LocationLine::CoreFaceInterior => "location-line-core-face-interior",
     }
 }
 
@@ -103,41 +165,17 @@ fn plan_distance(a: [f64; 3], b: [f64; 3]) -> f64 {
     (a[0] - b[0]).hypot(a[1] - b[1])
 }
 
-/// The level walls go on: the active one if it still exists, or else the
-/// lowest.
-fn base_level(view: &StoreView<'_>, active: Option<ElementId>) -> Option<ElementId> {
-    let levels = level::levels(view);
-    let exists = |id: &ElementId| levels.iter().any(|(l, _)| l == id);
-    active
-        .filter(exists)
-        .or_else(|| levels.first().map(|(id, _)| *id))
-}
-
-/// The lowest level above `base`, if any.
-fn level_above(view: &StoreView<'_>, base: ElementId) -> Option<ElementId> {
-    let levels = level::levels(view);
-    let (_, elevation) = levels.iter().find(|(id, _)| *id == base)?;
-    let above = levels
-        .iter()
-        .find(|(_, e)| *e > elevation + wall::TOLERANCE);
-    above.map(|(id, _)| *id)
-}
-
 /// The wall type new walls get: the project's first.
 fn default_type(view: &StoreView<'_>) -> Option<ElementId> {
-    let registry = view.registry();
-    let class = hito_architectural::class(WALL_TYPE);
-    view.elements()
-        .filter(|e| registry.is_a(e.class(), &class))
-        .map(Element::id)
-        .min()
+    first_of(view, &hito_architectural::class(WALL_TYPE))
 }
 
 #[cfg(test)]
 mod tests {
     use hito_architectural::footprint::End;
     use hito_architectural::join;
-    use hito_core::{ElementStore, SchemaRegistry, Value};
+    use hito_core::{Element, ElementStore, SchemaRegistry, Value};
+    use hito_structural::level;
 
     use super::*;
     use crate::command::{Command, InputFormat, Outcome, Registry, Run, Session};
@@ -267,6 +305,49 @@ mod tests {
             Wants::PointFrom([1.0, 1.0, 0.0])
         );
         assert!(f.walls().is_empty());
+    }
+
+    #[test]
+    fn the_options_bar_sets_the_height_and_the_location_line() {
+        use crate::tools::placement::{HEIGHT, TOP};
+        let mut f = Fixture::new();
+        f.add_level("Nivel 2", 2.8);
+        f.enter("WA");
+        let options = f.session.options(&f.store.view());
+        let keys: Vec<_> = options.iter().map(|o| o.key).collect();
+        assert_eq!(keys, [TOP, HEIGHT, LOCATION_LINE]);
+        let choice = |key, selected| {
+            let option = options.iter().find(|o| o.key == key).unwrap();
+            let OptionValue::Choice { choices, .. } = &option.value else {
+                panic!("a choice");
+            };
+            OptionValue::Choice {
+                selected,
+                choices: choices.clone(),
+            }
+        };
+        f.session.set_option(TOP, choice(TOP, 0), &f.i18n);
+        let height = OptionValue::Quantity {
+            value: 2.5,
+            dimension: hito_core::Dimension::LENGTH,
+        };
+        f.session.set_option(HEIGHT, height, &f.i18n);
+        // Finish Face: Interior.
+        f.session
+            .set_option(LOCATION_LINE, choice(LOCATION_LINE, 3), &f.i18n);
+        assert_eq!(f.session.message(), None);
+        for point in ["0,0", "5,0", "5,4"] {
+            f.enter(point);
+        }
+        f.session.cancel(&f.i18n);
+        let walls = f.walls();
+        assert_eq!(walls.len(), 2, "the chain kept the options");
+        for wall in walls {
+            let height = f.store.property(wall, wall::HEIGHT);
+            assert_eq!(height, Some(&Value::Real(2.5)));
+            let line = f.store.property(wall, wall::LOCATION_LINE);
+            assert_eq!(line, Some(&Value::Text("FinishFaceInterior".into())));
+        }
     }
 
     #[test]
