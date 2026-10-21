@@ -14,13 +14,16 @@
 //! follows it. Beams use the project's first beam type until the type
 //! selector (#26) exists.
 
-use hito_core::{ElementId, StoreError, StoreView, Transaction};
+use hito_core::{Dimension, ElementId, StoreError, StoreView, Transaction};
 use hito_structural::beam::{self, BEAM_TYPE, End, Placement};
 use hito_structural::level::{self, LEVEL};
 
 use super::placement::{base_level, first_of};
-use crate::command::{Context, Input, Next, Prompt, Tool, Wants};
+use crate::command::{Context, Input, Next, OptionValue, Prompt, Tool, ToolOption, Wants};
 use crate::project;
+
+/// The options bar's offset from the beam's level.
+pub const OFFSET: &str = "option-level-offset";
 
 /// Starts the Beam tool.
 pub fn start() -> Box<dyn Tool> {
@@ -32,6 +35,9 @@ struct BeamTool {
     level: Option<ElementId>,
     start: Option<[f64; 3]>,
     end: Option<[f64; 3]>,
+    /// The options bar's offset: how far the beam's top is above its
+    /// level.
+    offset: f64,
 }
 
 impl Tool for BeamTool {
@@ -71,10 +77,36 @@ impl Tool for BeamTool {
         }
     }
 
+    /// The beam's offset from its level. Revit keeps it in the properties
+    /// (Start and End Level Offset); it's here until they show the beam
+    /// being placed (#26).
+    fn options(&self, model: &StoreView<'_>) -> Vec<ToolOption> {
+        let _ = model;
+        vec![ToolOption {
+            key: OFFSET,
+            value: OptionValue::Quantity {
+                value: self.offset,
+                dimension: Dimension::LENGTH,
+            },
+            enabled: true,
+        }]
+    }
+
+    fn set_option(&mut self, key: &'static str, value: OptionValue) -> Result<(), &'static str> {
+        match (key, value.quantity()) {
+            (OFFSET, Some(offset)) => {
+                self.offset = offset;
+                Ok(())
+            }
+            _ => Err("option-unknown"),
+        }
+    }
+
     /// The next beam goes on the same level.
     fn after_commit(&self) -> Option<Box<dyn Tool>> {
         Some(Box::new(BeamTool {
             level: self.level,
+            offset: self.offset,
             ..BeamTool::default()
         }))
     }
@@ -96,7 +128,8 @@ impl Tool for BeamTool {
             None => End::Point([p[0], p[1]]),
         };
         // Both ends on the same column fails, as the rules refuse it.
-        let placement = Placement::new(beam_type, level, end_at(start), end_at(end));
+        let placement =
+            Placement::new(beam_type, level, end_at(start), end_at(end)).with_offset(self.offset);
         beam::insert(tx, model, &placement).map(drop)
     }
 }
@@ -225,6 +258,28 @@ mod tests {
             .map(|b| beam::line(&view, b).unwrap())
             .collect();
         assert_eq!(lines, [([0.0, 0.0], [5.0, 0.0]), ([0.0, 4.0], [5.0, 4.0])]);
+    }
+
+    #[test]
+    fn the_options_bar_sets_the_offset_from_the_level() {
+        let mut f = Fixture::new();
+        f.enter("BM");
+        let options = f.session.options(&f.store.view());
+        assert_eq!(options.len(), 1);
+        assert_eq!(options[0].key, OFFSET);
+        let offset = OptionValue::Quantity {
+            value: -0.2,
+            dimension: Dimension::LENGTH,
+        };
+        f.session.set_option(OFFSET, offset, &f.i18n);
+        for point in ["0,0", "5,0", "0,4", "5,4"] {
+            f.enter(point);
+        }
+        f.session.cancel(&f.i18n);
+        for beam in f.beams() {
+            let offset = f.store.property(beam, hito_structural::level::LEVEL_OFFSET);
+            assert_eq!(offset, Some(&hito_core::Value::Real(-0.2)), "both beams");
+        }
     }
 
     #[test]

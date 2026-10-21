@@ -17,6 +17,7 @@ mod command_line;
 mod commands;
 mod elements;
 mod layout;
+mod options_bar;
 mod panels;
 mod plans;
 mod ribbon;
@@ -448,6 +449,17 @@ impl eframe::App for Shell {
             Some(Pressed::Finish) => self.finish(),
             Some(Pressed::Cancel) => self.cancel(),
             None => {}
+        }
+
+        let options = self.commands.options(&self.project.view());
+        let changed = egui::Panel::top("options-bar")
+            .exact_size(options_bar::HEIGHT)
+            .show(ui, |ui| {
+                options_bar::ui(ui, &self.i18n, &self.input, &options)
+            })
+            .inner;
+        if let Some((key, value)) = changed {
+            self.commands.set_option(key, value, &self.i18n);
         }
 
         let request = egui::Panel::bottom("command-line")

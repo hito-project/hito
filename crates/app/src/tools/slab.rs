@@ -31,15 +31,21 @@
 //! until Esc.
 
 use hito_architectural::wall::{self, WALL};
-use hito_core::{ElementId, StoreError, StoreView, Transaction};
+use hito_core::{Dimension, ElementId, StoreError, StoreView, Transaction};
 use hito_structural::beam::{self, BEAM};
 use hito_structural::level::LEVEL;
 use hito_structural::outline::{self, Point, TOLERANCE};
 use hito_structural::slab::{self, Placement, SLAB, SLAB_TYPE};
 
 use super::placement;
-use crate::command::{ClassRef, Context, Input, Next, Prompt, Tool, Wants};
+use crate::command::{
+    ClassRef, Context, Input, Next, OptionValue, Prompt, Tool, ToolOption, Wants,
+};
 use crate::project;
+
+/// The options bar's Height Offset From Level, for a slab: how far its top
+/// is above its level.
+pub const HEIGHT_OFFSET: &str = "option-height-offset-from-level";
 
 /// What the Vertical opening tool picks first.
 const SLABS: &[ClassRef] = &[ClassRef {
@@ -96,6 +102,8 @@ struct SketchTool {
     host: Option<ElementId>,
     items: Vec<Item>,
     closed: bool,
+    /// The options bar's Height Offset From Level, for a slab.
+    offset: f64,
 }
 
 impl SketchTool {
@@ -106,6 +114,7 @@ impl SketchTool {
             host: None,
             items: Vec::new(),
             closed: false,
+            offset: 0.0,
         }
     }
 
@@ -210,6 +219,33 @@ impl Tool for SketchTool {
         })
     }
 
+    /// A slab's Height Offset From Level. Revit keeps it in the
+    /// properties; it's here until they show the slab being placed (#26).
+    fn options(&self, model: &StoreView<'_>) -> Vec<ToolOption> {
+        let _ = model;
+        match self.target {
+            Target::Slab => vec![ToolOption {
+                key: HEIGHT_OFFSET,
+                value: OptionValue::Quantity {
+                    value: self.offset,
+                    dimension: Dimension::LENGTH,
+                },
+                enabled: true,
+            }],
+            Target::Opening => Vec::new(),
+        }
+    }
+
+    fn set_option(&mut self, key: &'static str, value: OptionValue) -> Result<(), &'static str> {
+        match (self.target, key, value.quantity()) {
+            (Target::Slab, HEIGHT_OFFSET, Some(offset)) => {
+                self.offset = offset;
+                Ok(())
+            }
+            _ => Err("option-unknown"),
+        }
+    }
+
     fn tab_title(&self) -> Option<&'static str> {
         Some(match self.target {
             Target::Slab => "tab-create-floor-boundary",
@@ -238,7 +274,7 @@ impl Tool for SketchTool {
                     .ok_or_else(|| StoreError::UnknownClass(hito_structural::class(LEVEL)))?;
                 let slab_type = default_type(&view)
                     .ok_or_else(|| StoreError::UnknownClass(hito_structural::class(SLAB_TYPE)))?;
-                let placement = Placement::new(slab_type, level, &corners);
+                let placement = Placement::new(slab_type, level, &corners).with_offset(self.offset);
                 slab::insert(tx, model, &placement).map(drop)
             }
             Target::Opening => {
@@ -638,6 +674,28 @@ mod tests {
             f.store.property(slab, slab::TOP_ELEVATION),
             Some(&Value::Real(2.8))
         );
+    }
+
+    #[test]
+    fn the_options_bar_sets_the_height_offset_from_level() {
+        let mut f = Fixture::new();
+        f.enter("SB");
+        let options = f.session.options(&f.store.view());
+        assert_eq!(options.len(), 1);
+        assert_eq!(options[0].key, HEIGHT_OFFSET);
+        let offset = OptionValue::Quantity {
+            value: -0.05,
+            dimension: Dimension::LENGTH,
+        };
+        f.session.set_option(HEIGHT_OFFSET, offset, &f.i18n);
+        f.enter_all(&["0,0", "5,0", "5,5", "0,0"]);
+        let (_, top) = slab::elevations(&f.store.view(), f.slabs()[0]).unwrap();
+        assert!((top + 0.05).abs() < 1e-12, "{top}");
+
+        // A vertical opening has no options.
+        f.session.cancel(&f.i18n);
+        f.enter("VERTICALOPENING");
+        assert!(f.session.options(&f.store.view()).is_empty());
     }
 
     #[test]

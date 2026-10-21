@@ -347,11 +347,18 @@ fn the_3d_view_renders_with_wgpu() {
     assert!(close, "pixel {pixel:?}, background {background:?}");
 }
 
+/// The command line's text field, found by its egui ID: the options bar
+/// has text fields too, while some tools run.
+fn command_line_field<'a>(h: &'a Harness<'_, Shell>) -> egui_kittest::Node<'a> {
+    let id = egui::Id::new("command-line").accesskit_id();
+    h.get_by(move |node| node.locate().0 == id)
+}
+
 /// Types `text` in the command line and presses Enter.
 fn command_line(h: &mut Harness<'_, Shell>, text: &str) {
-    h.get_by_role(Role::TextInput).focus();
+    command_line_field(h).focus();
     h.run_steps(1);
-    h.get_by_role(Role::TextInput).type_text(text);
+    command_line_field(h).type_text(text);
     h.run_steps(1);
     h.key_press(egui::Key::Enter);
     h.run_steps(2);
@@ -742,7 +749,7 @@ fn grid(h: &Harness<'_, Shell>, label: &str) -> Option<hito_structural::grid::Gr
 
 /// Types `text` in the focused command line and presses Enter.
 fn answer(h: &mut Harness<'_, Shell>, text: &str) {
-    h.get_by_role(Role::TextInput).type_text(text);
+    command_line_field(h).type_text(text);
     h.key_press(egui::Key::Enter);
     h.run_steps(2);
 }
@@ -936,4 +943,69 @@ fn a_slab_sketch_is_finished_with_finish_or_enter() {
     h.run_steps(2);
     assert_eq!(slab::slabs(&h.state().project().view()).len(), 3);
     assert_eq!(prompt(&h), None);
+}
+
+/// The options bar shows the running tool's values, changed by clicking
+/// and typing in it, and remembers them the next time the tool runs.
+#[test]
+fn the_options_bar_sets_a_walls_height_and_remembers_it() {
+    let mut h = window();
+    add_level(&mut h, "3");
+    command_line(&mut h, "WA");
+    let height = |h: &Harness<'_, Shell>| {
+        h.get_by_role_and_label(Role::TextInput, "Unconnected Height")
+            .value()
+    };
+    assert_eq!(height(&h).as_deref(), Some("3 m"));
+    h.get_by_role_and_label(Role::ComboBox, "Height").click();
+    h.run_steps(2);
+    h.get_by_label("Unconnected").click();
+    h.run_steps(2);
+
+    // Typed in the options bar as in the properties.
+    set_property(&mut h, "Unconnected Height", "250 cm");
+    assert_eq!(
+        prompt(&h),
+        Some("wall-prompt-start"),
+        "Enter there doesn't finish"
+    );
+    assert_eq!(height(&h).as_deref(), Some("2.5 m"));
+
+    command_line(&mut h, "0,0");
+    command_line(&mut h, "5,0");
+    h.key_press(egui::Key::Escape);
+    h.run_steps(2);
+    let wall = walls(&h)[0];
+    assert_eq!(
+        h.state()
+            .project()
+            .property(wall, hito_architectural::wall::HEIGHT),
+        Some(&hito_core::Value::Real(2.5))
+    );
+
+    // Remembered the next time.
+    command_line(&mut h, "WA");
+    assert_eq!(height(&h).as_deref(), Some("2.5 m"));
+}
+
+/// With no tool running, the options bar is there, empty, so the views
+/// don't move when a tool starts.
+#[test]
+fn the_options_bar_keeps_its_place_with_no_tool_running() {
+    let mut h = window();
+    let top = |h: &Harness<'_, Shell>| h.get_by_label("View Name").rect().top();
+    let before = top(&h);
+    command_line(&mut h, "WA");
+    assert!(
+        h.query_by_role_and_label(Role::ComboBox, "Location Line")
+            .is_some()
+    );
+    assert_eq!(top(&h), before);
+    h.key_press(egui::Key::Escape);
+    h.run_steps(2);
+    assert!(
+        h.query_by_role_and_label(Role::ComboBox, "Location Line")
+            .is_none()
+    );
+    assert_eq!(top(&h), before);
 }
