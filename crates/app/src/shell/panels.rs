@@ -75,7 +75,7 @@ impl Tabs<'_> {
         };
         let viewport = self.viewports.entry(view).or_insert_with(Viewport::plan);
         let mut plan = plans::content(self.project, level);
-        if let Some(Wants::Element(classes)) = self.wants {
+        if let Some(classes) = self.wants.and_then(Wants::classes) {
             plan.pickable = plans::of_classes(self.project, classes);
         }
         let output = viewport.plan_ui(ui, self.scene, &plan, self.wants);

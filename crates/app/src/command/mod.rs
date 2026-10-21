@@ -147,6 +147,37 @@ pub enum Wants {
     /// clicked in a plan view, such as the slab an opening cuts. It can't
     /// be typed.
     Element(&'static [ClassRef]),
+    /// A point, as [`Wants::Point`] or, with `from`, [`Wants::PointFrom`],
+    /// or else an element of one of `classes` clicked in a plan view: a
+    /// click on such an element picks it, and a click anywhere else gives
+    /// the point. Such as a slab's boundary, drawn or picked from walls.
+    PointOrElement {
+        from: Option<[f64; 3]>,
+        classes: &'static [ClassRef],
+    },
+}
+
+impl Wants {
+    /// The classes a click in a plan view picks, if it picks elements.
+    pub fn classes(self) -> Option<&'static [ClassRef]> {
+        match self {
+            Wants::Element(classes) | Wants::PointOrElement { classes, .. } => Some(classes),
+            _ => None,
+        }
+    }
+
+    /// How a point is asked for, if one is: [`Wants::Point`] or
+    /// [`Wants::PointFrom`].
+    pub fn point(self) -> Option<Wants> {
+        match self {
+            Wants::Point | Wants::PointFrom(_) => Some(self),
+            Wants::PointOrElement { from: None, .. } => Some(Wants::Point),
+            Wants::PointOrElement {
+                from: Some(base), ..
+            } => Some(Wants::PointFrom(base)),
+            Wants::Quantity(_) | Wants::Element(_) => None,
+        }
+    }
 }
 
 /// A class named by its schema and its name, so a [`Prompt`] can name the

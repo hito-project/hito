@@ -160,6 +160,11 @@ impl WallGeom {
         self.exterior - self.width() / 2.0
     }
 
+    /// How far the interior face is from the location line, along `side`.
+    pub fn interior(&self) -> f64 {
+        self.exterior - self.width()
+    }
+
     fn core_width(&self) -> f64 {
         self.depths[self.core.end] - self.depths[self.core.start]
     }

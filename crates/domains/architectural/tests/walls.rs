@@ -77,6 +77,33 @@ fn deleting_a_wall_type_deletes_its_layers_and_walls() {
 }
 
 #[test]
+fn the_interior_face_is_right_of_the_wall_unless_it_is_flipped() {
+    let mut p = project();
+    let centred = |p: &Project| {
+        p.placement(p.brick, [0.0, 0.0], [5.0, 0.0])
+            .with_location_line(LocationLine::WallCenterline)
+    };
+    let plain = p.place(&centred(&p)).unwrap();
+    let flipped = p.place(&centred(&p).flipped(true)).unwrap();
+    let on_face = centred(&p).with_location_line(LocationLine::FinishFaceInterior);
+    let on_face = p.place(&on_face).unwrap();
+    let view = p.store.view();
+    let face = |wall| wall::interior_face(&view, wall).unwrap();
+
+    // Looking along +x, the exterior is on the left (+y), so the interior
+    // face is half the wall's thickness to the right.
+    let (a, b) = face(plain);
+    assert!(a[1] < 0.0 && close(a[1], b[1]), "{a:?} {b:?}");
+    assert!(close(a[0], 0.0) && close(b[0], 5.0), "along the wall");
+    // Flipped, it's on the other side.
+    let (c, _) = face(flipped);
+    assert!(close(c[1], -a[1]));
+    // On the interior face's own location line, it's the line itself.
+    let (d, e) = face(on_face);
+    assert!(close(d[1], 0.0) && close(e[1], 0.0));
+}
+
+#[test]
 fn an_unconnected_wall_stands_on_its_level_plus_offset() {
     let mut p = project();
     let placement = p
