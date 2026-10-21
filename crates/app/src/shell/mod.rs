@@ -177,7 +177,9 @@ impl Shell {
     /// Runs the command called `name`, as its ribbon button does.
     pub fn run(&mut self, name: &str) {
         self.commands.set_level(self.active_level());
-        let outcome = self.commands.start(name, &self.i18n);
+        self.commands
+            .set_selection(self.elements.selection().ids().iter().copied());
+        let outcome = self.commands.start(name, &self.i18n, &mut self.project);
         self.follow(outcome);
     }
 
@@ -217,6 +219,9 @@ impl Shell {
 
     fn enter(&mut self, text: &str) {
         self.commands.set_level(self.active_level());
+        // For a command typed by name; an answer to a prompt ignores it.
+        self.commands
+            .set_selection(self.elements.selection().ids().iter().copied());
         let outcome = self
             .commands
             .enter(text, &self.i18n, &self.input, &mut self.project);
@@ -248,7 +253,8 @@ impl Shell {
             && let Some(name) = self.commands.running().map(|c| c.name)
         {
             self.commands.set_level(Some(level));
-            let outcome = self.commands.start(name, &self.i18n);
+            self.commands.set_selection([]);
+            let outcome = self.commands.start(name, &self.i18n, &mut self.project);
             self.follow(outcome);
         }
         let outcome = self.commands.input(input, &self.i18n, &mut self.project);

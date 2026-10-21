@@ -94,6 +94,16 @@ pub trait Tool {
     fn after_commit(&self) -> Option<Box<dyn Tool>> {
         None
     }
+
+    /// Whether the tool already has what it needs once it has started, so
+    /// the session commits it at once, as after [`Next::Repeat`], before
+    /// its first prompt. Such as the Isolated footing tool started with
+    /// columns selected, which places one under each. `false`, the
+    /// default, for tools that ask first.
+    fn ready_at_start(&self, model: &StoreView<'_>) -> bool {
+        let _ = model;
+        false
+    }
 }
 
 /// What a tool knows about where it runs, given to [`Tool::start`].
@@ -105,6 +115,10 @@ pub struct Context<'a> {
     /// else the one picked in the project browser.
     /// `None` lets the tool choose, such as the lowest level.
     pub level: Option<ElementId>,
+    /// What was selected when the user started the command, such as the
+    /// columns to place footings under. Empty when the session starts a
+    /// tool again by itself, for the next element or on another level.
+    pub selection: &'a [ElementId],
 }
 
 /// What a tool asks for, shown on the command line.
