@@ -77,7 +77,9 @@ material-concrete-generic = Hormigón
 # Los puntos se escriben hasta que las vistas en planta permitan marcarlos.
 slab-prompt-start = Indicar el primer punto del contorno de la losa, como 0,0
 slab-prompt-next = Indicar el punto siguiente, como 5,0, @5,0 o @5<90. Repetir el primer punto termina la losa
-opening-prompt-start = Indicar el primer punto de la abertura, dentro de una losa de este nivel
+opening-prompt-slab = Elegir en una vista de planta la losa donde va la abertura
+opening-pick-a-slab = Elegir una losa
+opening-prompt-start = Indicar el primer punto de la abertura, dentro de la losa
 opening-prompt-next = Indicar el punto siguiente, como 1,0, @1,0 o @1<90. Repetir el primer punto termina la abertura
 sketch-same-point = El punto siguiente tiene que ser distinto del anterior
 sketch-too-few = El contorno necesita al menos 3 puntos antes de cerrarse

@@ -77,7 +77,9 @@ material-concrete-generic = Concrete
 # Points are typed until plan views let them be clicked.
 slab-prompt-start = Specify the slab boundary's first point, such as 0,0
 slab-prompt-next = Specify the next point, such as 5,0, @5,0 or @5<90. Enter the first point again to finish the slab
-opening-prompt-start = Specify the opening's first point, inside a slab on this level
+opening-prompt-slab = Pick the slab to cut the opening in, in a plan view
+opening-pick-a-slab = Pick a slab
+opening-prompt-start = Specify the opening's first point, inside the slab
 opening-prompt-next = Specify the next point, such as 1,0, @1,0 or @1<90. Enter the first point again to finish the opening
 sketch-same-point = The next point must differ from the last one
 sketch-too-few = A boundary needs at least 3 points before it closes
