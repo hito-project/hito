@@ -2,11 +2,14 @@
 //! [parameters](crate::parameters) their classes describe, as Revit's
 //! properties palette: the type selector at the top, then the selection's
 //! name and an Edit Type button, then its parameters by group. Each value
-//! typed is one transaction, so one undo step, for every selected element.
+//! typed or picked is one transaction, so one undo step, for every
+//! selected element.
 //!
 //! Edit Type opens the type editor, Revit's Type Properties dialog: its
 //! changes apply to every element of the type, which it warns about, and
-//! are made together when the user presses OK or Apply.
+//! are made together when the user presses OK or Apply. Duplicate makes a
+//! copy of the type to edit, which the selection takes on OK, and Rename
+//! renames the type, each asking for the name in a Name dialog.
 
 use eframe::egui;
 use hito_core::{Dimension, ElementId, ElementStore, StoreView, Value};
@@ -14,26 +17,65 @@ use hito_core::{Dimension, ElementId, ElementStore, StoreView, Value};
 use super::elements::{self, Edit, Elements};
 use crate::command::{Input, InputFormat, Wants};
 use crate::i18n::I18n;
-use crate::parameters::{self, Editor, Row, Shared};
+use crate::parameters::{self, Current, Editor, Label, NameProblem, Parameter, Row, Shared};
 
 /// The type editor, while it's open.
 #[derive(Debug, Clone, PartialEq)]
 pub(super) struct TypeEditor {
+    /// The type shown, or the one being copied.
     type_id: ElementId,
-    /// The values changed since it opened or since Apply, not yet made.
-    pending: Vec<(&'static str, Value)>,
+    /// The elements selected when it opened, which take a copy on OK.
+    instances: Vec<ElementId>,
+    /// The name of the copy Duplicate makes, until OK or Apply makes it.
+    duplicate: Option<String>,
+    /// The changes since it opened or since Apply, not yet made.
+    pending: Vec<(&'static Parameter, Current)>,
+    /// The Name dialog, while it's open.
+    naming: Option<Naming>,
+}
+
+/// The Name dialog of Duplicate or Rename.
+#[derive(Debug, Clone, PartialEq)]
+struct Naming {
+    renaming: bool,
+    text: String,
+    error: Option<String>,
 }
 
 impl TypeEditor {
-    fn pending(&self, property: &str) -> Option<&Value> {
-        let found = self.pending.iter().find(|(p, _)| *p == property);
+    fn pending(&self, parameter: &Parameter) -> Option<&Current> {
+        let found = self.pending.iter().find(|(p, _)| same(p, parameter));
         found.map(|(_, value)| value)
     }
 
-    fn set(&mut self, property: &'static str, value: Value) {
-        self.pending.retain(|(p, _)| *p != property);
-        self.pending.push((property, value));
+    fn set(&mut self, parameter: &'static Parameter, value: Current) {
+        self.pending.retain(|(p, _)| !same(p, parameter));
+        self.pending.push((parameter, value));
     }
+
+    /// Edits `type_id` from now on: the copy Apply just made.
+    pub(super) fn now_editing(&mut self, type_id: ElementId) {
+        self.type_id = type_id;
+        self.duplicate = None;
+    }
+
+    /// Whether Apply or OK will make a copy of the type.
+    pub(super) fn is_duplicating(&self) -> bool {
+        self.duplicate.is_some()
+    }
+
+    /// The name the dialog shows: the copy's, a new one, or the type's.
+    fn name(&self, view: &StoreView<'_>) -> String {
+        if let Some(Current::Value(Value::Text(name))) = self.pending(&parameters::TYPE_NAME) {
+            return name.clone();
+        }
+        let stored = || parameters::type_name(view, self.type_id);
+        self.duplicate.clone().unwrap_or_else(stored)
+    }
+}
+
+fn same(a: &Parameter, b: &Parameter) -> bool {
+    a.property == b.property && a.label == b.label
 }
 
 /// The selected elements' properties, editable. Shown when the selection
@@ -83,23 +125,22 @@ pub(super) fn selection(
         {
             elements.type_editor = Some(TypeEditor {
                 type_id,
+                instances: ids.clone(),
+                duplicate: None,
                 pending: Vec::new(),
+                naming: None,
             });
         }
     });
 
     let rows = parameters::rows(&view, &ids);
-    let mut set = |property, value| {
-        edits.push(Edit::Set {
-            elements: ids.clone(),
-            values: vec![(property, value)],
-        });
-    };
     let mut failed = None;
     grouped(ui, i18n, &rows, "instance", |ui, row| {
-        let shown = Shown::of(input, i18n, row);
-        match edit_row(ui, i18n, input, row, &shown, ("instance", ids[0])) {
-            Some(Ok(value)) => set(row.parameter.property, value),
+        match edit_row(ui, i18n, input, &view, row, ("instance", ids[0])) {
+            Some(Ok(value)) => edits.push(Edit::Change {
+                elements: ids.clone(),
+                changes: vec![(row.parameter, value)],
+            }),
             Some(Err(message)) => failed = Some(message),
             None => {}
         }
@@ -113,7 +154,7 @@ pub(super) fn selection(
 }
 
 /// Revit's type selector: a list of the types the selection can take,
-/// showing its type, or nothing if the elements have different ones.
+/// showing its type, or "(varies)" if the elements have different ones.
 /// Returns the type the user picked, if they picked another.
 fn type_selector(
     ui: &mut egui::Ui,
@@ -175,74 +216,114 @@ fn grouped(
     }
 }
 
-/// A row's value as the panel shows it.
-enum Shown {
-    /// As text, empty if it varies, with the hint shown when it's empty.
-    Text { text: String, hint: String },
-    /// A check box's state, `None` if it varies.
-    Check(Option<bool>),
+/// A list choice's text.
+fn label_text(i18n: &I18n, label: &Label) -> String {
+    match label {
+        Label::Text(text) => text.clone(),
+        Label::Key(key) => i18n.tr(key),
+        Label::UpToLevel(level) => i18n.tr_with("parameter-up-to-level", "level", level.as_str()),
+    }
 }
 
-impl Shown {
-    fn of(input: &InputFormat, i18n: &I18n, row: &Row) -> Self {
-        match (row.parameter.editor, &row.value) {
-            (Editor::Boolean, Shared::Same(value)) => {
-                Shown::Check(Some(matches!(value, Some(Value::Boolean(true)))))
-            }
-            (Editor::Boolean, Shared::Varies) => Shown::Check(None),
-            (Editor::Quantity(dimension), Shared::Same(value)) => Shown::Text {
-                text: match value {
-                    Some(Value::Real(x)) => input.format(*x, dimension),
-                    _ => String::new(),
-                },
-                hint: String::new(),
-            },
-            (Editor::Quantity(_), Shared::Varies) => Shown::Text {
-                text: String::new(),
-                hint: i18n.tr("properties-varies"),
-            },
+/// A value as a text field shows it, empty if there's none.
+fn as_text(input: &InputFormat, editor: Editor, value: Option<&Current>) -> String {
+    match (editor, value) {
+        (Editor::Quantity(dimension), Some(Current::Value(Value::Real(x)))) => {
+            input.format(*x, dimension)
         }
+        (_, Some(Current::Value(Value::Text(text)))) => text.clone(),
+        _ => String::new(),
     }
 }
 
 /// One parameter's row: its label and its editor, linked for screen
-/// readers, or a greyed-out value if it's computed. Returns a value the
-/// user entered, or why what they typed isn't one.
+/// readers, greyed out if it's computed. Returns a value the user entered
+/// or picked, or why what they typed isn't one.
 fn edit_row(
     ui: &mut egui::Ui,
     i18n: &I18n,
     input: &InputFormat,
+    view: &StoreView<'_>,
     row: &Row,
-    shown: &Shown,
     salt: (&str, ElementId),
-) -> Option<Result<Value, String>> {
-    let label = i18n.tr(row.parameter.label);
-    let property = row.parameter.property;
-    match (shown, row.parameter.editor) {
-        (Shown::Check(state), _) => {
-            let label = ui.label(label);
-            let mut checked = state.unwrap_or(false);
-            let checkbox =
-                egui::Checkbox::without_text(&mut checked).indeterminate(state.is_none());
+) -> Option<Result<Current, String>> {
+    let label_text_ = i18n.tr(row.parameter.label);
+    let editor = row.parameter.editor;
+    let (value, varies) = match &row.value {
+        Shared::Same(value) => (value.as_ref(), false),
+        Shared::Varies => (None, true),
+    };
+    let hint = match varies {
+        true => i18n.tr("properties-varies"),
+        false => String::new(),
+    };
+    match editor {
+        Editor::Boolean => {
+            let label = ui.label(label_text_);
+            let state = match value {
+                Some(Current::Value(Value::Boolean(b))) => *b,
+                _ => false,
+            };
+            let mut checked = state;
+            let checkbox = egui::Checkbox::without_text(&mut checked).indeterminate(varies);
             let response = ui
                 .add_enabled(!row.computed, checkbox)
                 .labelled_by(label.id);
             ui.end_row();
-            response.changed().then_some(Ok(Value::Boolean(checked)))
+            response
+                .changed()
+                .then_some(Ok(Current::Value(Value::Boolean(checked))))
         }
-        (Shown::Text { text, hint }, _) if row.computed => {
-            let label = ui.label(label);
-            let mut text = text.clone();
+        _ if editor.is_list() => {
+            let label = ui.label(label_text_);
+            let choices = parameters::choices(view, row.parameter);
+            let shown = match value {
+                _ if varies => hint,
+                Some(current) => choices
+                    .iter()
+                    .find(|(c, _)| c == current)
+                    .map(|(_, l)| label_text(i18n, l))
+                    .unwrap_or_default(),
+                None => String::new(),
+            };
+            let mut picked = None;
+            ui.add_enabled_ui(!row.computed, |ui| {
+                let combo = egui::ComboBox::from_id_salt((salt, row.parameter.property, "list"))
+                    .selected_text(shown)
+                    .show_ui(ui, |ui| {
+                        for (choice, choice_label) in &choices {
+                            let selected = !varies && value == Some(choice);
+                            let text = label_text(i18n, choice_label);
+                            if ui.selectable_label(selected, text).clicked() && !selected {
+                                picked = Some(choice.clone());
+                            }
+                        }
+                    });
+                combo.response.labelled_by(label.id);
+            });
+            ui.end_row();
+            picked.map(Ok)
+        }
+        _ if row.computed => {
+            let label = ui.label(label_text_);
+            let mut text = as_text(input, editor, value);
             let field = egui::TextEdit::singleline(&mut text).hint_text(hint.as_str());
             ui.add_enabled(false, field).labelled_by(label.id);
             ui.end_row();
             None
         }
-        (Shown::Text { text, hint }, Editor::Quantity(dimension)) => {
-            let typed = elements::text_row(ui, &label, (salt, property), text, hint)?;
-            Some(parse(i18n, input, &typed, dimension))
+        Editor::Quantity(dimension) => {
+            let text = as_text(input, editor, value);
+            let property = row.parameter.property;
+            let typed = elements::text_row(ui, &label_text_, (salt, property), &text, &hint)?;
+            Some(parse(i18n, input, &typed, dimension).map(Current::Value))
         }
-        (Shown::Text { .. }, Editor::Boolean) => unreachable!("booleans show a check box"),
+        _ => {
+            let text = as_text(input, editor, value);
+            let property = row.parameter.property;
+            let typed = elements::text_row(ui, &label_text_, (salt, property), &text, &hint)?;
+            Some(Ok(Current::Value(Value::Text(typed))))
+        }
     }
 }
 
@@ -260,10 +341,10 @@ fn parse(
     }
 }
 
-/// The type editor, as Revit's Type Properties dialog: the type's name,
-/// a warning that its changes apply to every element of the type, its
-/// parameters, and OK, Cancel and Apply. OK and Apply make every change
-/// in one transaction.
+/// The type editor, as Revit's Type Properties dialog: the type's name
+/// with Duplicate and Rename, a warning that its changes apply to every
+/// element of the type, its parameters, and OK, Cancel and Apply. OK and
+/// Apply make every change in one transaction.
 pub(super) fn type_editor(
     ctx: &egui::Context,
     i18n: &I18n,
@@ -291,23 +372,41 @@ pub(super) fn type_editor(
             .num_columns(2)
             .show(ui, |ui| {
                 let label = ui.label(i18n.tr("properties-type"));
-                ui.label(parameters::type_name(&view, type_id))
-                    .labelled_by(label.id);
+                ui.label(editor.name(&view)).labelled_by(label.id);
                 ui.end_row();
             });
-        ui.colored_label(
-            ui.visuals().warn_fg_color,
-            i18n.tr_with("type-editor-warning", "count", count),
-        );
+        ui.horizontal(|ui| {
+            for (key, renaming) in [
+                ("type-editor-duplicate", false),
+                ("type-editor-rename", true),
+            ] {
+                if ui.button(i18n.tr(key)).clicked() {
+                    let text = match renaming {
+                        true => editor.name(&view),
+                        false => parameters::copy_name(&view, type_id),
+                    };
+                    let error = None;
+                    editor.naming = Some(Naming {
+                        renaming,
+                        text,
+                        error,
+                    });
+                }
+            }
+        });
+        let warning = match editor.duplicate {
+            Some(_) => i18n.tr_with("type-editor-new-type", "count", editor.instances.len()),
+            None => i18n.tr_with("type-editor-warning", "count", count),
+        };
+        ui.colored_label(ui.visuals().warn_fg_color, warning);
         ui.separator();
         grouped(ui, i18n, &rows, "type", |ui, row| {
             let mut row = row.clone();
-            if let Some(value) = editor.pending(row.parameter.property) {
+            if let Some(value) = editor.pending(row.parameter) {
                 row.value = Shared::Same(Some(value.clone()));
             }
-            let shown = Shown::of(input, i18n, &row);
-            match edit_row(ui, i18n, input, &row, &shown, ("type", type_id)) {
-                Some(Ok(value)) => editor.set(row.parameter.property, value),
+            match edit_row(ui, i18n, input, &view, &row, ("type", type_id)) {
+                Some(Ok(value)) => editor.set(row.parameter, value),
                 Some(Err(message)) => failed = Some(message),
                 None => {}
             }
@@ -322,16 +421,81 @@ pub(super) fn type_editor(
             apply = ui.button(i18n.tr("action-apply")).clicked();
         });
     });
-    if (ok || apply) && !editor.pending.is_empty() {
-        edits.push(Edit::Set {
-            elements: vec![type_id],
-            values: std::mem::take(&mut editor.pending),
+    name_dialog(ctx, i18n, &view, editor);
+    let changed = !editor.pending.is_empty() || editor.duplicate.is_some();
+    if (ok || apply) && changed {
+        let duplicate = editor.duplicate.clone();
+        edits.push(Edit::TypeChanges {
+            type_id,
+            instances: match duplicate {
+                Some(_) => editor.instances.clone(),
+                None => Vec::new(),
+            },
+            duplicate,
+            changes: std::mem::take(&mut editor.pending),
         });
     }
-    if ok || cancel || modal.should_close() {
+    let naming = editor.naming.is_some();
+    if ok || cancel || (modal.should_close() && !naming) {
         elements.type_editor = None;
     }
     if let Some(message) = failed {
         elements.fail(message);
+    }
+}
+
+/// Revit's Name dialog, over the type editor: the name for Duplicate's
+/// copy or for Rename, checked to be new among the types of its class.
+fn name_dialog(ctx: &egui::Context, i18n: &I18n, view: &StoreView<'_>, editor: &mut TypeEditor) {
+    let Some(naming) = editor.naming.as_mut() else {
+        return;
+    };
+    let (mut ok, mut cancel) = (false, false);
+    let modal = egui::Modal::new(egui::Id::new("type-name")).show(ctx, |ui| {
+        ui.heading(i18n.tr("type-name-title"));
+        egui::Grid::new("type-name-grid")
+            .num_columns(2)
+            .show(ui, |ui| {
+                let label = ui.label(i18n.tr("properties-name"));
+                let field = egui::TextEdit::singleline(&mut naming.text);
+                let response = ui.add(field).labelled_by(label.id);
+                if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                    ok = true;
+                }
+                ui.end_row();
+            });
+        if let Some(error) = &naming.error {
+            ui.colored_label(ui.visuals().error_fg_color, error);
+        }
+        ui.horizontal(|ui| {
+            ok |= ui.button(i18n.tr("action-ok")).clicked();
+            cancel = ui.button(i18n.tr("action-cancel")).clicked();
+        });
+    });
+    if cancel || modal.should_close() {
+        editor.naming = None;
+        return;
+    }
+    if !ok {
+        return;
+    }
+    // Renaming a copy not made yet renames the copy.
+    let renaming_type = naming.renaming && editor.duplicate.is_none();
+    match parameters::check_type_name(view, editor.type_id, &naming.text, renaming_type) {
+        Ok(name) => {
+            match (naming.renaming, &mut editor.duplicate) {
+                (true, Some(copy)) => *copy = name,
+                (true, None) => {
+                    let value = Current::Value(Value::Text(name));
+                    editor.set(&parameters::TYPE_NAME, value);
+                }
+                (false, _) => editor.duplicate = Some(name),
+            }
+            editor.naming = None;
+        }
+        Err(NameProblem::Empty) => naming.error = Some(i18n.tr("type-name-empty")),
+        Err(NameProblem::Taken(name)) => {
+            naming.error = Some(i18n.tr_with("type-name-taken", "name", name));
+        }
     }
 }

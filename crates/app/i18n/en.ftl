@@ -219,6 +219,34 @@ parameter-x = Position X
 parameter-y = Position Y
 parameter-grid-offset-x = Offset from Grids X
 parameter-grid-offset-y = Offset from Grids Y
+group-materials-and-finishes = Materials and Finishes
+parameter-structural-material = Structural Material
+parameter-base-constraint = Base Constraint
+parameter-top-constraint = Top Constraint
+parameter-base-level = Base Level
+parameter-top-level = Top Level
+parameter-reference-level = Reference Level
+parameter-level = Level
+parameter-location-line = Location Line
+parameter-unconnected = Unconnected
+parameter-up-to-level = Up to level: { $level }
+location-line-wall-centerline = Wall Centerline
+location-line-core-centerline = Core Centerline
+location-line-finish-face-exterior = Finish Face: Exterior
+location-line-finish-face-interior = Finish Face: Interior
+location-line-core-face-exterior = Core Face: Exterior
+location-line-core-face-interior = Core Face: Interior
+
+# The type editor's Duplicate and Rename, and their Name dialog.
+type-editor-duplicate = Duplicate...
+type-editor-rename = Rename...
+type-editor-new-type = { $count ->
+    [one] A new type. On OK, the selected element takes it.
+   *[other] A new type. On OK, the { $count } selected elements take it.
+}
+type-name-title = Name
+type-name-empty = Enter a name
+type-name-taken = Another type is already called { $name }
 
 ## Deleting elements
 

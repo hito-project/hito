@@ -317,6 +317,59 @@ fn layers_lie_across_the_location_line_as_it_says() {
 }
 
 #[test]
+fn changing_the_location_line_keeps_the_wall_in_place() {
+    let mut p = project();
+    let placement = p.placement(p.brick, [0.0, 0.0], [5.0, 0.0]);
+    let wall = p.place(&placement).unwrap();
+    let before = faces(&p, wall);
+    for line in LocationLine::ALL {
+        let mut tx = p.store.transaction();
+        wall::set_location_line(&mut tx, wall, line).unwrap();
+        tx.commit().unwrap();
+        assert_eq!(wall::location_line(&p.store.view(), wall), line);
+        let (l, h) = faces(&p, wall);
+        assert!(
+            close(l, before.0) && close(h, before.1),
+            "{line:?}: {l}, {h}"
+        );
+    }
+    // On its exterior face, the line runs along that face.
+    let mut tx = p.store.transaction();
+    wall::set_location_line(&mut tx, wall, LocationLine::FinishFaceExterior).unwrap();
+    tx.commit().unwrap();
+    let (start, _) = wall::line(&p.store.view(), wall).unwrap();
+    assert!(close(start[1], before.0) || close(start[1], before.1));
+}
+
+#[test]
+fn the_top_constraint_is_a_level_or_unconnected() {
+    let mut p = project();
+    let placement = p
+        .placement(p.brick, [0.0, 0.0], [5.0, 0.0])
+        .with_top(Top::Level {
+            level: p.first,
+            offset: 0.0,
+        });
+    let wall = p.place(&placement).unwrap();
+    let mut tx = p.store.transaction();
+    wall::set_top(&mut tx, wall, None).unwrap();
+    tx.commit().unwrap();
+    assert_eq!(wall::top_level(&p.store.view(), wall), None);
+    assert_eq!(wall::elevations(&p.store.view(), wall), Some((0.0, 3.0)));
+    // Unconnected, it no longer follows the first floor.
+    let mut tx = p.store.transaction();
+    tx.set_property(p.first, level::ELEVATION, 4.0).unwrap();
+    tx.commit().unwrap();
+    assert_eq!(wall::elevations(&p.store.view(), wall), Some((0.0, 3.0)));
+
+    let mut tx = p.store.transaction();
+    wall::set_top(&mut tx, wall, Some(p.first)).unwrap();
+    tx.commit().unwrap();
+    assert_eq!(wall::elevations(&p.store.view(), wall), Some((0.0, 4.0)));
+    assert!(!wall::top_is_attached(&p.store.view(), wall));
+}
+
+#[test]
 fn the_exterior_is_on_the_left_until_flipped() {
     let mut p = project();
     // Drawn along +x, the exterior render is on the +y side.
