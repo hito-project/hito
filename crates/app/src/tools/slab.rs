@@ -1,12 +1,21 @@
 //! The Slab tool (`SB`) and the Vertical opening tool: sketch a closed
-//! boundary, corner by corner (#39).
+//! boundary (#39).
 //!
 //! As in Revit's sketch mode, the boundary is drawn as lines: each point
-//! after the first ends one line and starts the next, and typing the first
-//! point again closes the boundary and finishes the slab. A point that
-//! would make the boundary cross or touch itself is refused as it's typed.
-//! Points are clicked in a plan view (#183) or typed on the command line:
-//! absolute (`5,0`), or relative to the last point (`@4<90`, `@4,0`).
+//! after the first ends one line and starts the next, and entering the
+//! first point again closes the boundary and finishes the slab. Points are
+//! clicked in a plan view (#183) or typed on the command line: absolute
+//! (`5,0`), or relative to the last point (`@4<90`, `@4,0`).
+//!
+//! A slab's boundary can also be picked from walls and beams, as Revit's
+//! Pick Walls: while the Slab tool runs, a click on a wall in plan adds a
+//! line along the wall's interior face, and a click on a beam a line along
+//! its centreline. Consecutive picked lines meet where they cross, so the
+//! corners come from intersecting each line with the next. The boundary
+//! closes when the last line picked meets the first, or when the first is
+//! picked again. Picked lines and points mix in one boundary.
+//!
+//! A boundary that would cross or touch itself is refused as it's drawn.
 //!
 //! Slabs go on the active level (the level picked in the project browser,
 //! or else the lowest level), their top on it, with the project's first
@@ -15,10 +24,12 @@
 //!
 //! The Vertical opening tool, as Revit's Opening > Vertical, first asks
 //! for the slab to cut, picked in a plan view, and then sketches the
-//! opening the same way. It stays active for more openings in the same
-//! slab until Esc.
+//! opening with points. It stays active for more openings in the same slab
+//! until Esc.
 
+use hito_architectural::wall::{self, WALL};
 use hito_core::{ElementId, StoreError, StoreView, Transaction};
+use hito_structural::beam::{self, BEAM};
 use hito_structural::level::LEVEL;
 use hito_structural::outline::{self, Point, TOLERANCE};
 use hito_structural::slab::{self, Placement, SLAB, SLAB_TYPE};
@@ -32,6 +43,18 @@ const SLABS: &[ClassRef] = &[ClassRef {
     schema: hito_structural::SCHEMA,
     name: SLAB,
 }];
+
+/// What a slab's boundary is picked from.
+const SUPPORTS: &[ClassRef] = &[
+    ClassRef {
+        schema: hito_architectural::SCHEMA,
+        name: WALL,
+    },
+    ClassRef {
+        schema: hito_structural::SCHEMA,
+        name: BEAM,
+    },
+];
 
 /// Starts the Slab tool.
 pub fn start() -> Box<dyn Tool> {
@@ -49,13 +72,27 @@ enum Target {
     Opening,
 }
 
+/// One piece of a boundary being sketched.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Item {
+    /// A corner, clicked or typed.
+    Point(Point),
+    /// A line picked from an element: a wall's interior face or a beam's
+    /// centreline.
+    Line {
+        element: ElementId,
+        line: [Point; 2],
+    },
+}
+
 #[derive(Debug, Clone)]
 struct SketchTool {
     target: Target,
     level: Option<ElementId>,
     /// The slab an opening cuts, once it's picked.
     host: Option<ElementId>,
-    corners: Vec<Point>,
+    items: Vec<Item>,
+    closed: bool,
 }
 
 impl SketchTool {
@@ -64,8 +101,40 @@ impl SketchTool {
             target,
             level: None,
             host: None,
-            corners: Vec::new(),
+            items: Vec::new(),
+            closed: false,
         }
+    }
+
+    fn corners(&self) -> Vec<Point> {
+        corners(&self.items, self.closed)
+    }
+
+    /// Closes the boundary if it makes a valid outline closed.
+    fn close(&mut self) -> Result<(), &'static str> {
+        if self.items.len() < 2 {
+            return Err("sketch-too-few");
+        }
+        let closed = corners(&self.items, true);
+        match outline::check(&closed) {
+            Ok(()) => {
+                self.closed = true;
+                Ok(())
+            }
+            Err(_) if closed.len() < 3 => Err("sketch-too-few"),
+            Err(_) => Err("sketch-crossing"),
+        }
+    }
+
+    /// Adds `item`, unless the open boundary would then cross or touch
+    /// itself.
+    fn add(&mut self, item: Item) -> Result<(), &'static str> {
+        self.items.push(item);
+        if outline::check_open(&self.corners()).is_err() {
+            self.items.pop();
+            return Err("sketch-crossing");
+        }
+        Ok(())
     }
 }
 
@@ -85,29 +154,24 @@ impl Tool for SketchTool {
             Target::Slab => ("slab-prompt-start", "slab-prompt-next"),
             Target::Opening => ("opening-prompt-start", "opening-prompt-next"),
         };
-        match self.corners.last() {
-            None => Prompt {
-                message: first,
-                wants: Wants::Point,
+        let from = self.corners().last().map(|&[x, y]| [x, y, 0.0]);
+        let message = if from.is_some() { next } else { first };
+        let wants = match (self.target, from) {
+            (Target::Slab, from) => Wants::PointOrElement {
+                from,
+                classes: SUPPORTS,
             },
-            Some(&[x, y]) => Prompt {
-                message: next,
-                wants: Wants::PointFrom([x, y, 0.0]),
-            },
-        }
+            (Target::Opening, None) => Wants::Point,
+            (Target::Opening, Some(from)) => Wants::PointFrom(from),
+        };
+        Prompt { message, wants }
     }
 
     fn pick(&mut self, element: ElementId, model: &StoreView<'_>) -> Next {
-        let wants_slab = self.target == Target::Opening && self.host.is_none();
-        let class = hito_structural::class(SLAB);
-        let is_slab = model
-            .get(element)
-            .is_some_and(|e| model.registry().is_a(e.class(), &class));
-        if !wants_slab || !is_slab {
-            return Next::Reject("opening-pick-a-slab");
+        match self.target {
+            Target::Opening => self.pick_host(element, model),
+            Target::Slab => self.pick_line(element, model),
         }
-        self.host = Some(element);
-        Next::Ask
     }
 
     fn input(&mut self, input: Input) -> Next {
@@ -116,28 +180,25 @@ impl Tool for SketchTool {
         };
         let point = [x, y];
         let near = |a: Point| (a[0] - x).hypot(a[1] - y) <= TOLERANCE;
-        match (self.corners.first(), self.corners.last()) {
+        let corners = self.corners();
+        match (corners.first(), corners.last()) {
             (_, Some(&last)) if near(last) => Next::Reject("sketch-same-point"),
-            (Some(&first), _) if near(first) => match outline::check(&self.corners) {
+            (Some(&first), _) if near(first) => match self.close() {
                 Ok(()) => Next::Repeat,
-                Err(_) if self.corners.len() < 3 => Next::Reject("sketch-too-few"),
-                Err(_) => Next::Reject("sketch-crossing"),
+                Err(message) => Next::Reject(message),
             },
-            _ => {
-                self.corners.push(point);
-                if outline::check_open(&self.corners).is_err() {
-                    self.corners.pop();
-                    return Next::Reject("sketch-crossing");
-                }
-                Next::Ask
-            }
+            _ => match self.add(Item::Point(point)) {
+                Ok(()) => Next::Ask,
+                Err(message) => Next::Reject(message),
+            },
         }
     }
 
     /// An opening's next one goes in the same slab; a slab's starts again.
     fn after_commit(&self) -> Option<Box<dyn Tool>> {
         Some(Box::new(SketchTool {
-            corners: Vec::new(),
+            items: Vec::new(),
+            closed: false,
             ..self.clone()
         }))
     }
@@ -145,6 +206,7 @@ impl Tool for SketchTool {
     fn commit(self: Box<Self>, tx: &mut Transaction<'_>) -> Result<(), StoreError> {
         let model = project::physical_model(tx)?;
         let view = tx.view();
+        let corners = self.corners();
         match self.target {
             Target::Slab => {
                 // Without a level or a slab type, the command fails and
@@ -153,16 +215,194 @@ impl Tool for SketchTool {
                     .ok_or_else(|| StoreError::UnknownClass(hito_structural::class(LEVEL)))?;
                 let slab_type = default_type(&view)
                     .ok_or_else(|| StoreError::UnknownClass(hito_structural::class(SLAB_TYPE)))?;
-                let placement = Placement::new(slab_type, level, &self.corners);
+                let placement = Placement::new(slab_type, level, &corners);
                 slab::insert(tx, model, &placement).map(drop)
             }
             Target::Opening => {
                 let host = self.host.expect("the slab is picked first");
                 // The slab's rules refuse an opening that isn't inside it.
-                slab::insert_opening(tx, model, host, &self.corners).map(drop)
+                slab::insert_opening(tx, model, host, &corners).map(drop)
             }
         }
     }
+}
+
+impl SketchTool {
+    /// The Vertical opening's slab.
+    fn pick_host(&mut self, element: ElementId, model: &StoreView<'_>) -> Next {
+        let class = hito_structural::class(SLAB);
+        let is_slab = model
+            .get(element)
+            .is_some_and(|e| model.registry().is_a(e.class(), &class));
+        if self.host.is_some() || !is_slab {
+            return Next::Reject("opening-pick-a-slab");
+        }
+        self.host = Some(element);
+        Next::Ask
+    }
+
+    /// A wall's interior face or a beam's centreline, for a slab's
+    /// boundary.
+    fn pick_line(&mut self, element: ElementId, model: &StoreView<'_>) -> Next {
+        let is = |name| {
+            let class = match name {
+                WALL => hito_architectural::class(WALL),
+                _ => hito_structural::class(BEAM),
+            };
+            model
+                .get(element)
+                .is_some_and(|e| model.registry().is_a(e.class(), &class))
+        };
+        let line = if is(WALL) {
+            wall::interior_face(model, element)
+        } else if is(BEAM) {
+            beam::line(model, element)
+        } else {
+            None
+        };
+        let Some((a, b)) = line else {
+            return Next::Reject("slab-pick-wall-or-beam");
+        };
+        let picked = |item: &Item| matches!(item, Item::Line { element: e, .. } if *e == element);
+        // Picking the first line again closes the boundary.
+        if self.items.first().is_some_and(picked) {
+            return match self.close() {
+                Ok(()) => Next::Repeat,
+                Err(message) => Next::Reject(message),
+            };
+        }
+        if self.items.iter().any(picked) {
+            return Next::Reject("sketch-picked-twice");
+        }
+        let line = Item::Line {
+            element,
+            line: [a, b],
+        };
+        // The line picked meeting the first closes the boundary. Left
+        // open, it would cross the first line, so this comes first.
+        let meets_first = match self.items.first() {
+            Some(Item::Line { line: first, .. }) => {
+                self.items.len() >= 2 && segments_meet([a, b], *first)
+            }
+            _ => false,
+        };
+        if meets_first {
+            self.items.push(line);
+            if self.close().is_ok() {
+                return Next::Repeat;
+            }
+            self.items.pop();
+        }
+        match self.add(line) {
+            Ok(()) => Next::Ask,
+            Err(message) => Next::Reject(message),
+        }
+    }
+}
+
+/// The boundary's corners, in order. A point is a corner. A line's end
+/// that meets the next line, or its start that meets the one before, is
+/// where the two lines cross; its other ends are its own. Closed, the last
+/// item is followed by the first.
+fn corners(items: &[Item], closed: bool) -> Vec<Point> {
+    let n = items.len();
+    let around = closed && n > 1;
+    let prev = |i: usize| match i {
+        0 if around => Some(n - 1),
+        0 => None,
+        i => Some(i - 1),
+    };
+    let next = |i: usize| match i + 1 {
+        j if j < n => Some(j),
+        _ if around => Some(0),
+        _ => None,
+    };
+    let line = |i: Option<usize>| match i.map(|i| items[i]) {
+        Some(Item::Line { line, .. }) => Some(line),
+        _ => None,
+    };
+    let point = |i: Option<usize>| match i.map(|i| items[i]) {
+        Some(Item::Point(p)) => Some(p),
+        _ => None,
+    };
+    let mut out: Vec<Point> = Vec::new();
+    for (i, &item) in items.iter().enumerate() {
+        let [a, b] = match item {
+            Item::Point(p) => {
+                out.push(p);
+                continue;
+            }
+            Item::Line { line, .. } => line,
+        };
+        let crossing_next = line(next(i)).and_then(|l| intersection([a, b], l));
+        let crossing_prev = line(prev(i)).and_then(|l| intersection(l, [a, b]));
+        let nearer = |to: Point| match distance(a, to) <= distance(b, to) {
+            true => (a, b),
+            false => (b, a),
+        };
+        // Which end the boundary comes in by, and which it leaves by.
+        let (start, end) = if let Some(x) = crossing_next {
+            let (near, far) = nearer(x);
+            (far, near)
+        } else if let Some(x) = crossing_prev {
+            nearer(x)
+        } else if let Some(p) = point(prev(i)) {
+            nearer(p)
+        } else if let Some(q) = point(next(i)) {
+            let (near, far) = nearer(q);
+            (far, near)
+        } else {
+            (a, b)
+        };
+        // A crossing with the line before is that line's end.
+        if crossing_prev.is_none() {
+            out.push(start);
+        }
+        out.push(crossing_next.unwrap_or(end));
+    }
+    out.dedup_by(|a, b| distance(*a, *b) <= TOLERANCE);
+    if out.len() > 1 && distance(out[0], out[out.len() - 1]) <= TOLERANCE {
+        out.pop();
+    }
+    out
+}
+
+fn distance(a: Point, b: Point) -> f64 {
+    (a[0] - b[0]).hypot(a[1] - b[1])
+}
+
+/// Where the lines through `p` and `q` cross, `None` if they're parallel.
+fn intersection(p: [Point; 2], q: [Point; 2]) -> Option<Point> {
+    crossing(p, q).map(|(t, _)| along(p, t))
+}
+
+/// How far along `p` and along `q` (0 at their starts, 1 at their ends)
+/// the lines through them cross, `None` if they're parallel.
+fn crossing([a, b]: [Point; 2], [c, d]: [Point; 2]) -> Option<(f64, f64)> {
+    let r = [b[0] - a[0], b[1] - a[1]];
+    let s = [d[0] - c[0], d[1] - c[1]];
+    let denominator = r[0] * s[1] - r[1] * s[0];
+    let scale = (r[0].hypot(r[1]) * s[0].hypot(s[1])).max(f64::MIN_POSITIVE);
+    if (denominator / scale).abs() < 1e-9 {
+        return None;
+    }
+    let w = [c[0] - a[0], c[1] - a[1]];
+    let t = (w[0] * s[1] - w[1] * s[0]) / denominator;
+    let u = (w[0] * r[1] - w[1] * r[0]) / denominator;
+    Some((t, u))
+}
+
+fn along([a, b]: [Point; 2], t: f64) -> Point {
+    [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
+}
+
+/// Whether the segments `p` and `q` cross or touch, within the tolerance.
+fn segments_meet(p: [Point; 2], q: [Point; 2]) -> bool {
+    let within = |t: f64, [a, b]: [Point; 2]| {
+        let slack = TOLERANCE / distance(a, b).max(f64::MIN_POSITIVE);
+        (-slack..=1.0 + slack).contains(&t)
+    };
+    crossing(p, q).is_some_and(|(t, u)| within(t, p) && within(u, q))
 }
 
 /// The slab type new slabs get: the project's first.
@@ -260,8 +500,8 @@ mod tests {
         let outcomes = f.enter_all(&["0,0", "@6<0", "@4<90", "@-6,0"]);
         assert!(outcomes.iter().all(|o| matches!(o, Outcome::Nothing)));
         assert_eq!(
-            f.session.prompt().unwrap().wants,
-            Wants::PointFrom([0.0, 4.0, 0.0])
+            f.session.prompt().unwrap().wants.point(),
+            Some(Wants::PointFrom([0.0, 4.0, 0.0]))
         );
         let Outcome::Committed(changes) = f.enter("0,0") else {
             panic!("closing the boundary commits the slab");
@@ -302,8 +542,8 @@ mod tests {
         assert!(f.session.message().is_some());
         // The refused point wasn't kept: the next one goes on from 2,4.
         assert_eq!(
-            f.session.prompt().unwrap().wants,
-            Wants::PointFrom([2.0, 4.0, 0.0])
+            f.session.prompt().unwrap().wants.point(),
+            Some(Wants::PointFrom([2.0, 4.0, 0.0]))
         );
         assert!(matches!(f.enter("0,4"), Outcome::Nothing));
         assert!(matches!(f.enter("0,0"), Outcome::Committed(_)));
@@ -371,6 +611,107 @@ mod tests {
         assert!(f.session.message().is_some());
         assert_eq!(slab::openings(&f.store.view(), floor).len(), 1);
         assert!(slab::openings(&f.store.view(), other).is_empty());
+    }
+
+    fn line(element: ElementId, a: Point, b: Point) -> Item {
+        Item::Line {
+            element,
+            line: [a, b],
+        }
+    }
+
+    fn same(corners: &[Point], expected: &[Point]) -> bool {
+        corners.len() == expected.len()
+            && corners
+                .iter()
+                .zip(expected)
+                .all(|(a, b)| distance(*a, *b) < 1e-9)
+    }
+
+    #[test]
+    fn picked_lines_meet_where_they_cross() {
+        let id = || ElementId::generate();
+        // Four faces running past each other at the corners, in any
+        // direction.
+        let lines = [
+            line(id(), [-0.1, 0.0], [6.1, 0.0]),
+            line(id(), [6.0, -0.1], [6.0, 4.1]),
+            line(id(), [-0.1, 4.0], [6.1, 4.0]),
+            line(id(), [0.0, 4.1], [0.0, -0.1]),
+        ];
+        let rectangle = [[6.0, 0.0], [6.0, 4.0], [0.0, 4.0], [0.0, 0.0]];
+        assert!(same(&corners(&lines, true), &rectangle));
+        // Open, the first line's start and the last one's end are their own.
+        let open = corners(&lines, false);
+        assert!(same(
+            &open,
+            &[[-0.1, 0.0], [6.0, 0.0], [6.0, 4.0], [0.0, 4.0], [0.0, -0.1]]
+        ));
+
+        // Mixed with points, a line runs from the end nearer the point
+        // before it.
+        let mixed = [
+            Item::Point([0.0, 0.0]),
+            line(id(), [6.0, 4.0], [6.0, 0.0]),
+            Item::Point([0.0, 4.0]),
+        ];
+        let expected = [[0.0, 0.0], [6.0, 0.0], [6.0, 4.0], [0.0, 4.0]];
+        assert!(same(&corners(&mixed, true), &expected));
+    }
+
+    #[test]
+    fn parallel_lines_keep_their_ends() {
+        let id = || ElementId::generate();
+        let lines = [
+            line(id(), [0.0, 0.0], [3.0, 0.0]),
+            line(id(), [3.0, 0.0], [6.0, 0.0]),
+        ];
+        assert!(same(
+            &corners(&lines, false),
+            &[[0.0, 0.0], [3.0, 0.0], [6.0, 0.0]]
+        ));
+    }
+
+    #[test]
+    fn a_slab_boundary_picked_from_beams_and_points() {
+        let mut f = Fixture::new();
+        let view = f.store.view();
+        let ground = level::levels(&view)[0].0;
+        let beam_type = placement::first_of(&view, &hito_structural::class(beam::BEAM_TYPE));
+        let mut tx = f.store.transaction();
+        let model = project::physical_model(&mut tx).unwrap();
+        let mut beam = |a, b| {
+            let placement = beam::Placement::new(
+                beam_type.unwrap(),
+                ground,
+                beam::End::Point(a),
+                beam::End::Point(b),
+            );
+            beam::insert(&mut tx, model, &placement).unwrap()
+        };
+        let south = beam([0.0, 0.0], [6.0, 0.0]);
+        let east = beam([6.0, 0.0], [6.0, 4.0]);
+        tx.commit().unwrap();
+
+        f.enter("SB");
+        assert!(matches!(f.pick(south), Outcome::Nothing));
+        assert!(matches!(f.pick(east), Outcome::Nothing));
+        // The same beam twice is refused; a level isn't a support.
+        f.pick(east);
+        assert!(f.session.message().is_some());
+        f.pick(ground);
+        assert!(f.session.message().is_some());
+        assert_eq!(
+            f.session.prompt().unwrap().wants.point(),
+            Some(Wants::PointFrom([6.0, 4.0, 0.0]))
+        );
+        f.enter("0,4");
+        let Outcome::Committed(_) = f.enter("0,0") else {
+            panic!("closed on the first corner");
+        };
+        let boundary = slab::boundary(&f.store.view(), f.slabs()[0]);
+        let expected = [[0.0, 0.0], [6.0, 0.0], [6.0, 4.0], [0.0, 4.0]];
+        assert!(same(&boundary, &expected), "{boundary:?}");
     }
 
     #[test]

@@ -285,6 +285,23 @@ pub fn line(store: &StoreView<'_>, wall: ElementId) -> Option<(Point, Point)> {
     read_line(store, wall)
 }
 
+/// The wall's interior face in plan, along the wall from its start to its
+/// end: the line a slab boundary picked from the wall follows, as Revit's
+/// Pick Walls does by default.
+///
+/// The exterior is on the wall's left, looking from its start to its end,
+/// unless the wall is flipped (`Flipped`), so the interior face is on its
+/// right, or on its left when flipped. Its distance from the location line
+/// comes from the location line's position across the type's layers.
+pub fn interior_face(store: &StoreView<'_>, wall: ElementId) -> Option<(Point, Point)> {
+    let w = crate::footprint::WallGeom::load(store, wall)?;
+    let offset = crate::plan::scale(w.side, w.interior());
+    Some((
+        crate::plan::add(w.start, offset),
+        crate::plan::add(w.end, offset),
+    ))
+}
+
 /// The wall's base and top elevations, from its levels, offsets and
 /// attachments, as they're recomputed.
 pub fn elevations(store: &StoreView<'_>, wall: ElementId) -> Option<(f64, f64)> {

@@ -77,6 +77,11 @@ impl InputFormat {
             Wants::Point => self.point(text),
             Wants::PointFrom(base) => self.point_from(text, base),
             Wants::Element(_) => Err(InputError::NotAPick),
+            // Only the point can be typed.
+            Wants::PointOrElement { from: None, .. } => self.point(text),
+            Wants::PointOrElement {
+                from: Some(base), ..
+            } => self.point_from(text, base),
         }
     }
 

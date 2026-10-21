@@ -74,9 +74,9 @@ material-concrete-generic = Concrete
 ## Slabs
 
 # The Slab tool (SB) and the Vertical opening tool sketch a closed boundary.
-# Points are typed until plan views let them be clicked.
-slab-prompt-start = Specify the slab boundary's first point, such as 0,0
-slab-prompt-next = Specify the next point, such as 5,0, @5,0 or @5<90. Enter the first point again to finish the slab
+# Points are clicked in a plan view or typed; walls and beams can be picked.
+slab-prompt-start = Specify the slab boundary's first point, such as 0,0, or pick a wall or a beam in a plan view
+slab-prompt-next = Specify the next point, such as 5,0, @5,0 or @5<90, or pick a wall or a beam. Entering the first point again, or meeting the first line picked, finishes the slab
 opening-prompt-slab = Pick the slab to cut the opening in, in a plan view
 opening-pick-a-slab = Pick a slab
 opening-prompt-start = Specify the opening's first point, inside the slab
@@ -84,6 +84,8 @@ opening-prompt-next = Specify the next point, such as 1,0, @1,0 or @1<90. Enter 
 sketch-same-point = The next point must differ from the last one
 sketch-too-few = A boundary needs at least 3 points before it closes
 sketch-crossing = The boundary can't cross or touch itself
+sketch-picked-twice = That line is already in the boundary
+slab-pick-wall-or-beam = Pick a wall or a beam
 # The slab type every new project starts with. It's data from then on.
 slab-type-generic = Generic - 150 mm
 

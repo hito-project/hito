@@ -121,6 +121,14 @@ pub struct PlanOutput {
     pub element: Option<ElementId>,
 }
 
+/// What a pick prompt found under the cursor this frame.
+struct Pick {
+    /// Whether a pickable element is under the cursor.
+    hovered: bool,
+    /// The one a click picked.
+    picked: Option<ElementId>,
+}
+
 /// What the cursor points at in a plan: a point on the level, and whether
 /// it snapped to a grid intersection.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -304,11 +312,22 @@ impl Viewport {
         painter.rect_filled(rect, 0.0, egui::Color32::from_rgb(r, g, b));
         let shapes = painter.add(egui::Shape::Noop);
 
-        let pointing = matches!(wants, Some(Wants::Point | Wants::PointFrom(_)));
         let mut output = PlanOutput::default();
         if let Some(Wants::Element(_)) = wants {
-            output.element = self.pick_ui(&response, scene, plan);
-        } else if pointing {
+            output.element = self.pick_ui(&response, scene, plan).picked;
+        } else if let Some(Wants::PointOrElement { .. }) = wants {
+            // On a pickable element a click picks it; elsewhere it's a
+            // point.
+            let under = self.pick_ui(&response, scene, plan);
+            match under.hovered {
+                true => output.element = under.picked,
+                false => {
+                    let point = wants.and_then(Wants::point);
+                    output.point = self.point_ui(ui, &response, &painter, plan, point);
+                }
+            }
+        } else if let Some(wants) = wants.and_then(Wants::point) {
+            let wants = Some(wants);
             if self.prehighlighting {
                 scene.set_prehighlight(None);
                 self.prehighlighting = false;
@@ -424,12 +443,7 @@ impl Viewport {
     /// While a tool asks for an element: the one of [`Plan::pickable`]
     /// under the cursor, as a click would select it, pre-highlighted, and
     /// picked by a click.
-    fn pick_ui(
-        &mut self,
-        response: &egui::Response,
-        scene: &mut Scene,
-        plan: &Plan,
-    ) -> Option<ElementId> {
+    fn pick_ui(&mut self, response: &egui::Response, scene: &mut Scene, plan: &Plan) -> Pick {
         let found = response
             .hover_pos()
             .zip(self.rect)
@@ -443,7 +457,10 @@ impl Viewport {
             scene.set_prehighlight(found);
             self.prehighlighting = found.is_some();
         }
-        found.filter(|_| response.clicked_by(egui::PointerButton::Primary))
+        Pick {
+            hovered: found.is_some(),
+            picked: found.filter(|_| response.clicked_by(egui::PointerButton::Primary)),
+        }
     }
 
     /// Zooms with the wheel, pans with the wheel held down (a plan doesn't

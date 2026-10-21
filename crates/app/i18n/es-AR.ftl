@@ -74,9 +74,9 @@ material-concrete-generic = Hormigón
 ## Losas
 
 # Las herramientas Losa (SB) y Abertura vertical dibujan un contorno cerrado.
-# Los puntos se escriben hasta que las vistas en planta permitan marcarlos.
-slab-prompt-start = Indicar el primer punto del contorno de la losa, como 0,0
-slab-prompt-next = Indicar el punto siguiente, como 5,0, @5,0 o @5<90. Repetir el primer punto termina la losa
+# Los puntos se hacen clic en una vista de planta o se escriben; también se pueden elegir muros y vigas.
+slab-prompt-start = Indicar el primer punto del contorno de la losa, como 0,0, o elegir un muro o una viga en una vista de planta
+slab-prompt-next = Indicar el punto siguiente, como 5,0, @5,0 o @5<90, o elegir un muro o una viga. Repetir el primer punto, o llegar a la primera línea elegida, termina la losa
 opening-prompt-slab = Elegir en una vista de planta la losa donde va la abertura
 opening-pick-a-slab = Elegir una losa
 opening-prompt-start = Indicar el primer punto de la abertura, dentro de la losa
@@ -84,6 +84,8 @@ opening-prompt-next = Indicar el punto siguiente, como 1,0, @1,0 o @1<90. Repeti
 sketch-same-point = El punto siguiente tiene que ser distinto del anterior
 sketch-too-few = El contorno necesita al menos 3 puntos antes de cerrarse
 sketch-crossing = El contorno no puede cruzarse ni tocarse a sí mismo
+sketch-picked-twice = Esa línea ya está en el contorno
+slab-pick-wall-or-beam = Elegir un muro o una viga
 # El tipo de losa con el que empieza todo proyecto nuevo. Desde ahí es un dato.
 slab-type-generic = Genérico - 150 mm
 

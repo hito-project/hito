@@ -440,6 +440,50 @@ fn footings_go_under_the_columns_selected_when_the_tool_starts() {
 }
 
 #[test]
+fn a_slab_boundary_is_picked_from_walls_in_plan_along_their_interior_faces() {
+    use hito_structural::slab;
+    let mut h = window();
+    let plan = open_plan(&mut h, "Level 1");
+    // A room drawn clockwise, so its exterior faces are outside.
+    command_line(&mut h, "WA");
+    for point in ["0,0", "0,4", "6,4", "6,0", "0,0"] {
+        command_line(&mut h, point);
+    }
+    esc(&mut h);
+    let walls = walls(&h);
+    assert_eq!(walls.len(), 4);
+
+    command_line(&mut h, "SB");
+    let none = egui::Vec2::ZERO;
+    for at in [[0.0, 2.0], [3.0, 4.0], [6.0, 2.0]] {
+        click_at(&mut h, plan, [at[0], at[1], 0.0], none);
+        assert!(slab::slabs(&h.state().project().view()).is_empty());
+    }
+    // The fourth wall's face meets the first's, which closes the boundary.
+    click_at(&mut h, plan, [3.0, 0.0, 0.0], none);
+    esc(&mut h);
+    let view = h.state().project().view();
+    let slabs = slab::slabs(&view);
+    assert_eq!(slabs.len(), 1);
+    let mut boundary = slab::boundary(&view, slabs[0]);
+    boundary.sort_by(|a, b| a[0].total_cmp(&b[0]).then(a[1].total_cmp(&b[1])));
+    // Inside the room, on the walls' interior faces.
+    let face = |wall| {
+        hito_architectural::wall::interior_face(&view, wall)
+            .unwrap()
+            .0
+    };
+    let (west, north) = (face(walls[0])[0], face(walls[1])[1]);
+    let (east, south) = (face(walls[2])[0], face(walls[3])[1]);
+    assert!(west > 0.0 && east < 6.0 && south > 0.0 && north < 4.0);
+    let expected = [[west, south], [west, north], [east, south], [east, north]];
+    assert_eq!(boundary.len(), 4);
+    for (corner, expected) in boundary.iter().zip(expected) {
+        assert!(close(*corner, expected, 1e-9), "{corner:?} {expected:?}");
+    }
+}
+
+#[test]
 fn a_vertical_opening_cuts_the_slab_picked_in_plan() {
     use hito_structural::slab;
     let mut h = window();
