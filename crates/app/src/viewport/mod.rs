@@ -20,9 +20,10 @@ use glam::{DVec2, DVec3, Vec4};
 use hito_core::ElementId;
 
 pub use camera::{Bounds, Camera, Projection};
+pub use cut::Segment;
 pub use navigation::Navigation;
 pub use pick::BoxKind;
-pub use plan::{Plan, PlanGrid, PlanOutput};
+pub use plan::{Plan, PlanGrid, PlanOutput, Symbol};
 pub use scene::Scene;
 
 use crate::i18n::I18n;

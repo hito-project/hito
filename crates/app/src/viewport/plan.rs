@@ -11,7 +11,11 @@
 //! - the grids, with their labels in bubbles.
 //!
 //! Both come from the elements' meshes, so any element with geometry
-//! shows in plan without code of its own.
+//! shows in plan without code of its own. Doors and windows are the
+//! exception: as in Revit, they draw their plan [`Symbol`] (the jambs, the
+//! leaf and its swing, the window's lines) instead of where the cut
+//! crosses their 3D body. The wall's own cut shows the gap, since the
+//! opening is cut out of the wall's mesh.
 //!
 //! A click selects as in the 3D views, in the same selection. While a
 //! placement tool asks for a point, a click gives it the point under the
@@ -64,6 +68,20 @@ pub struct Plan {
     /// The elements on the level, which show from above even where the
     /// cut misses them.
     pub on_level: BTreeSet<ElementId>,
+    /// The elements that draw a symbol instead of their mesh, such as doors
+    /// and windows. An empty symbol hides the element.
+    pub symbols: Vec<Symbol>,
+}
+
+/// What an element draws in plan instead of its mesh: a door's or a
+/// window's plan symbol.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Symbol {
+    pub id: ElementId,
+    /// Lines drawn as cut, heavy.
+    pub cut: Vec<Segment>,
+    /// Lines drawn thin.
+    pub thin: Vec<Segment>,
 }
 
 /// A grid as a plan view draws it.
@@ -134,6 +152,16 @@ impl Plan {
         scene.geometry_revision().hash(&mut h);
         self.elevation.to_bits().hash(&mut h);
         self.on_level.hash(&mut h);
+        for symbol in &self.symbols {
+            symbol.id.hash(&mut h);
+            for lines in [&symbol.cut, &symbol.thin] {
+                lines.len().hash(&mut h);
+                for p in lines.iter().flatten() {
+                    p.x.to_bits().hash(&mut h);
+                    p.y.to_bits().hash(&mut h);
+                }
+            }
+        }
         for grid in &self.grids {
             grid.id.hash(&mut h);
             for x in [grid.start, grid.end].into_iter().flatten() {
@@ -165,6 +193,11 @@ impl Drawing {
         self.elements = scene
             .meshes()
             .filter_map(|(id, mesh)| {
+                if let Some(symbol) = plan.symbols.iter().find(|s| s.id == id) {
+                    let (cut, beyond) = (symbol.cut.clone(), symbol.thin.clone());
+                    let shown = !cut.is_empty() || !beyond.is_empty();
+                    return shown.then_some(Drawn { id, cut, beyond });
+                }
                 let cut = cut::section(mesh, z);
                 let beyond = if cut.is_empty() && plan.on_level.contains(&id) {
                     cut::projection(mesh)
@@ -564,6 +597,7 @@ mod tests {
             ],
             snaps: vec![[6.0, 0.0]],
             on_level: BTreeSet::new(),
+            symbols: Vec::new(),
         };
         let mut viewport = Viewport::plan();
         viewport.size = SIZE;
@@ -685,5 +719,43 @@ mod tests {
         scene.remove(standing);
         drawing.update(&scene, &plan);
         assert!(drawing.get(standing).is_none(), "follows the scene");
+    }
+
+    #[test]
+    fn a_symbol_draws_instead_of_the_mesh_and_an_empty_one_hides_it() {
+        let mut scene = Scene::default();
+        let [door, high] = [(); 2].map(|_| ElementId::generate());
+        scene.insert(door, column(0.0, 0.4));
+        scene.insert(high, column(3.0, 0.4));
+        let leaf = [DVec2::ZERO, DVec2::new(0.0, -0.8)];
+        let jamb = [DVec2::ZERO, DVec2::new(0.05, 0.0)];
+        let mut plan = Plan {
+            symbols: vec![
+                Symbol {
+                    id: door,
+                    cut: vec![jamb],
+                    thin: vec![leaf],
+                },
+                Symbol {
+                    id: high,
+                    cut: Vec::new(),
+                    thin: Vec::new(),
+                },
+            ],
+            ..Plan::default()
+        };
+        let mut drawing = Drawing::default();
+        drawing.update(&scene, &plan);
+        let drawn = drawing.get(door).unwrap();
+        assert_eq!(
+            (&drawn.cut[..], &drawn.beyond[..]),
+            (&[jamb][..], &[leaf][..])
+        );
+        assert!(drawing.get(high).is_none(), "the cut misses it");
+
+        // Flipping the door changes its symbol, and the drawing follows.
+        plan.symbols[0].thin = vec![[DVec2::ZERO, DVec2::new(0.0, 0.8)]];
+        drawing.update(&scene, &plan);
+        assert_eq!(drawing.get(door).unwrap().beyond, plan.symbols[0].thin);
     }
 }
