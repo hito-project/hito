@@ -51,7 +51,7 @@ input-empty = Escribir una respuesta, o Esc para cancelar
 # el punto separa los decimales y la coma, las coordenadas.
 input-not-a-point = Ingresar un punto como x,y o x,y,z, por ejemplo 3.5,2
 input-not-a-value = Ingresar un valor, como 3.5 o 350 cm
-input-not-a-pick = Hacer clic en el elemento en una vista de planta
+input-not-a-pick = Hacer clic en el elemento
 
 ## Niveles
 
@@ -75,9 +75,9 @@ material-concrete-generic = Hormigón
 
 # Las herramientas Losa (SB) y Abertura vertical dibujan un contorno cerrado.
 # Los puntos se hacen clic en una vista de planta o se escriben; también se pueden elegir muros y vigas.
-slab-prompt-start = Indicar el primer punto del contorno de la losa, como 0,0, o elegir un muro o una viga en una vista de planta
+slab-prompt-start = Indicar el primer punto del contorno de la losa, como 0,0, o elegir un muro o una viga
 slab-prompt-next = Indicar el punto siguiente, como 5,0, @5,0 o @5<90, o elegir un muro o una viga. Repetir el primer punto, o llegar a la primera línea elegida, termina la losa
-opening-prompt-slab = Elegir en una vista de planta la losa donde va la abertura
+opening-prompt-slab = Elegir la losa donde va la abertura
 opening-pick-a-slab = Elegir una losa
 opening-prompt-start = Indicar el primer punto de la abertura, dentro de la losa
 opening-prompt-next = Indicar el punto siguiente, como 1,0, @1,0 o @1<90. Repetir el primer punto termina la abertura

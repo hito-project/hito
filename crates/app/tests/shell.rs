@@ -551,7 +551,9 @@ fn esc_cancels_a_command() {
     ribbon_tab(&mut h, "View");
     click(&mut h, "3D View");
     assert_eq!(prompt(&h), None);
-    assert_eq!(h.state().layout().open_views().len(), 2);
+    // The probe wants a point, so it opened Level 1's plan (#229).
+    assert_eq!(h.state().layout().views().len(), 2, "a new 3D view");
+    assert_eq!(h.state().layout().open_views().len(), 3);
 }
 
 /// The browser picks into the selection the views share (#30). The
@@ -561,7 +563,8 @@ fn esc_cancels_a_command() {
 fn the_properties_show_the_selection_and_esc_clears_it() {
     let mut h = window();
     add_level(&mut h, "3");
-    h.get_by_label("Level 1").click();
+    // The level under Levels, after its plan under Floor Plans.
+    h.query_all_by_label("Level 1").last().unwrap().click();
     h.run_steps(2);
     assert_eq!(h.state().selection().len(), 1, "the browser selects");
     assert!(
@@ -661,7 +664,8 @@ fn a_new_project_starts_with_one_level() {
 fn levels_are_renamed_and_moved_in_the_properties() {
     let mut h = window();
     add_level(&mut h, "3");
-    h.get_by_label("Level 2").click();
+    // The level under Levels, after its plan under Floor Plans.
+    h.query_all_by_label("Level 2").last().unwrap().click();
     h.run_steps(2);
     let elevation = h.get_by_role_and_label(Role::TextInput, "Elevation");
     assert_eq!(elevation.value().as_deref(), Some("3 m"));
@@ -709,14 +713,19 @@ fn levels_are_added_with_their_command_until_esc() {
 fn levels_are_deleted_with_the_delete_key_or_their_menu() {
     let mut h = window();
     add_level(&mut h, "3");
-    h.get_by_label("Level 2").click();
+    // The level under Levels, after its plan under Floor Plans.
+    h.query_all_by_label("Level 2").last().unwrap().click();
     h.run_steps(2);
     h.key_press(egui::Key::Delete);
     h.run_steps(2);
     assert_eq!(level(&h, "Level 2"), None);
     assert!(!shows(&h, "Level 2"));
 
-    h.get_by_label("Level 1").click_secondary();
+    // The level under Levels, after its plan under Floor Plans.
+    h.query_all_by_label("Level 1")
+        .last()
+        .unwrap()
+        .click_secondary();
     h.run_steps(2);
     click(&mut h, "Delete");
     assert_eq!(level(&h, "Level 1"), None);

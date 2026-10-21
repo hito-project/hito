@@ -51,7 +51,7 @@ input-empty = Type an answer, or press Esc to cancel
 # is the decimal separator and a comma separates coordinates.
 input-not-a-point = Enter a point as x,y or x,y,z, such as 3.5,2
 input-not-a-value = Enter a value, such as 3.5 or 350 cm
-input-not-a-pick = Click the element in a plan view
+input-not-a-pick = Click the element
 
 ## Levels
 
@@ -75,9 +75,9 @@ material-concrete-generic = Concrete
 
 # The Slab tool (SB) and the Vertical opening tool sketch a closed boundary.
 # Points are clicked in a plan view or typed; walls and beams can be picked.
-slab-prompt-start = Specify the slab boundary's first point, such as 0,0, or pick a wall or a beam in a plan view
+slab-prompt-start = Specify the slab boundary's first point, such as 0,0, or pick a wall or a beam
 slab-prompt-next = Specify the next point, such as 5,0, @5,0 or @5<90, or pick a wall or a beam. Entering the first point again, or meeting the first line picked, finishes the slab
-opening-prompt-slab = Pick the slab to cut the opening in, in a plan view
+opening-prompt-slab = Pick the slab to cut the opening in
 opening-pick-a-slab = Pick a slab
 opening-prompt-start = Specify the opening's first point, inside the slab
 opening-prompt-next = Specify the next point, such as 1,0, @1,0 or @1<90. Enter the first point again to finish the opening

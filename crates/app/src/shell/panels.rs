@@ -100,11 +100,10 @@ impl Tabs<'_> {
             .id_salt("browser-views")
             .default_open(true)
             .show(ui, |ui| {
-                // Closed at first: a plan is named after its level, which
-                // the levels below list too, until elevations (#197) show
-                // the levels instead.
+                // Open at first, so the plans are easy to find (#229).
                 egui::CollapsingHeader::new(tr("browser-floor-plans"))
                     .id_salt("browser-floor-plans")
+                    .default_open(true)
                     .show(ui, |ui| {
                         for &(view, level) in &self.plans {
                             let name = plans::name(self.project, level);

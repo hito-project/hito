@@ -178,6 +178,13 @@ impl Wants {
             Wants::Quantity(_) | Wants::Element(_) => None,
         }
     }
+
+    /// Whether the answer is clicked in a plan view: a point or an
+    /// element. A tool asking for one opens a plan view when it starts in
+    /// 3D (#229).
+    pub fn is_clicked(self) -> bool {
+        self.point().is_some() || self.classes().is_some()
+    }
 }
 
 /// A class named by its schema and its name, so a [`Prompt`] can name the

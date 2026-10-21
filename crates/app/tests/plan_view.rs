@@ -47,18 +47,10 @@ fn level_id(h: &Harness<'_, Shell>, name: &str) -> ElementId {
 }
 
 /// Opens a level's plan from the project browser's Floor Plans, as in
-/// Revit: a double click on its name. Floor Plans start closed.
+/// Revit: a double click on its name. Floor Plans start open (#229).
 fn open_plan(h: &mut Harness<'_, Shell>, name: &str) -> ViewId {
-    let shown = |h: &Harness<'_, Shell>| h.query_all_by_label(name).count();
-    let before = shown(h);
-    h.get_by_label("Floor Plans").click();
-    h.run_steps(2);
-    if shown(h) < before {
-        // It was open, and that click closed it.
-        h.run_steps(60);
-        h.get_by_label("Floor Plans").click();
-    }
-    // Let the click age, or egui counts the next two as a triple click.
+    // Let any earlier click age, or egui counts the next two as a triple
+    // click.
     h.run_steps(60);
     // Floor Plans come before Levels in the browser.
     for _ in 0..2 {
@@ -196,7 +188,8 @@ fn walls_clicked_in_a_plan_go_on_its_level() {
     command_line(&mut h, "3");
     esc(&mut h);
     let second = level_id(&h, "Level 2");
-    // Started before the plan is open, the tool moves to the plan's level.
+    // Started in 3D, the tool opens Level 1's plan; clicked in Level 2's,
+    // it moves to that level.
     command_line(&mut h, "WA");
     let plan = open_plan(&mut h, "Level 2");
     let none = egui::Vec2::ZERO;
@@ -510,4 +503,82 @@ fn a_vertical_opening_cuts_the_slab_picked_in_plan() {
     }
     esc(&mut h);
     assert_eq!(slab::openings(&h.state().project().view(), floor).len(), 1);
+}
+
+/// Double-clicks a view's name in the project browser, which opens it.
+fn open_in_browser(h: &mut Harness<'_, Shell>, name: &str) {
+    h.run_steps(60);
+    for _ in 0..2 {
+        h.query_all_by_label(name).last().expect("listed").click();
+        h.run_steps(1);
+    }
+    h.run_steps(2);
+}
+
+/// The app opens in 3D, with Floor Plans open in the browser, so each
+/// level is listed twice: as its plan and as itself (#229).
+#[test]
+fn the_window_opens_in_3d_with_the_floor_plans_listed() {
+    let h = window();
+    assert_eq!(h.state().layout().active_view(), Some(ViewId::DEFAULT_3D));
+    assert_eq!(h.query_all_by_label("Level 1").count(), 2);
+}
+
+/// A tool that wants clicks, started in 3D from the ribbon, opens the
+/// active level's plan, as Revit's Go To View does (#229). Its points go
+/// on that level, the first one typed and the next clicked.
+#[test]
+fn a_tool_started_in_3d_from_the_ribbon_opens_the_levels_plan() {
+    let mut h = window();
+    h.get_by_label("Architecture").click();
+    h.run_steps(2);
+    h.get_by_role_and_label(Role::Button, "Wall").click();
+    h.run_steps(2);
+    let first = level_id(&h, "Level 1");
+    let layout = h.state().layout();
+    let plan = layout.plan_of(first).expect("a plan view");
+    assert_eq!(layout.active_view(), Some(plan));
+    assert!(
+        layout.open_views().contains(&ViewId::DEFAULT_3D),
+        "still open"
+    );
+
+    command_line(&mut h, "0,0");
+    click_at(&mut h, plan, [4.0, 0.0, 0.0], egui::Vec2::ZERO);
+    esc(&mut h);
+    let walls = walls(&h);
+    assert_eq!(walls.len(), 1, "the typed point is kept");
+    let view = h.state().project().view();
+    let (start, end) = hito_architectural::wall::line(&view, walls[0]).unwrap();
+    assert!(close(start, [0.0, 0.0], 1e-9), "{start:?}");
+    assert!(close(end, [4.0, 0.0], 0.05), "{end:?}");
+    assert_eq!(level::level_of(&view, walls[0]), Some(first));
+}
+
+/// With a level selected in 3D, a tool goes to its plan, switching to the
+/// plan's tab if it's open already. A tool that only asks for values stays
+/// in 3D.
+#[test]
+fn a_tool_started_in_3d_goes_to_the_selected_levels_plan() {
+    let mut h = window();
+    command_line(&mut h, "LL");
+    assert_eq!(h.state().layout().active_view(), Some(ViewId::DEFAULT_3D));
+    command_line(&mut h, "3");
+    esc(&mut h);
+    let second = level_id(&h, "Level 2");
+    let plan = open_plan(&mut h, "Level 2");
+    open_in_browser(&mut h, "{3D}");
+    assert_eq!(h.state().layout().active_view(), Some(ViewId::DEFAULT_3D));
+    let open = h.state().layout().open_views().len();
+
+    h.state_mut()
+        .select([second], hito::selection::Mode::Replace);
+    h.run_steps(1);
+    // As its ribbon button does; the properties' fields are open.
+    h.state_mut().run("SLAB");
+    h.run_steps(2);
+    let layout = h.state().layout();
+    assert_eq!(layout.active_view(), Some(plan));
+    assert_eq!(layout.open_views().len(), open, "the same tab");
+    assert_eq!(h.state().commands().running_level(), Some(second));
 }
