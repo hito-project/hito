@@ -51,13 +51,17 @@ impl Default for InputFormat {
 
 impl InputFormat {
     /// Reads numbers with a decimal point, as CLDR's root locale writes
-    /// them, and values without units in SI units until the project's units
-    /// exist.
+    /// them, and values without units in SI units, except angles in
+    /// degrees, until the project's units (#55) exist.
     pub fn new() -> Self {
         let numbers = NumberFormat::new("und").expect("the root locale is a valid tag");
-        Self {
-            units: Units::new(UnitCatalogue::standard(), numbers),
-        }
+        let mut units = Units::new(UnitCatalogue::standard(), numbers);
+        // Angles are stored in radians but shown and typed in degrees, as
+        // Revit and AutoCAD do.
+        units
+            .set_display(Dimension::ANGLE, "°", 2)
+            .expect("degrees are an angle");
+        Self { units }
     }
 
     /// Reads `text` as the answer to a prompt that `wants` it.

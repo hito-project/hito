@@ -166,6 +166,55 @@ properties-label = Rótulo
 properties-name = Nombre
 properties-elevation = Elevación
 properties-edit-failed = No se pudo hacer el cambio
+# El selector de tipo arriba del panel, y el editor de tipos.
+properties-type = Tipo
+# Un valor que difiere entre los elementos seleccionados.
+properties-varies = (varía)
+properties-edit-type = Editar tipo
+type-editor-title = Propiedades de tipo
+type-editor-warning = { $count ->
+    [one] Los cambios se aplican al único elemento de este tipo.
+   *[other] Los cambios se aplican a los { $count } elementos de este tipo.
+}
+action-ok = Aceptar
+action-apply = Aplicar
+
+# La clase de la selección, como la muestra el título del panel.
+class-wall = Muro
+class-door = Puerta
+class-window = Ventana
+class-column = Columna
+class-beam = Viga
+class-slab = Losa
+class-slab-opening = Abertura
+class-footing = Base aislada
+
+# Los grupos de parámetros y los parámetros de Revit.
+group-constraints = Restricciones
+group-construction = Construcción
+group-structural = Estructura
+group-dimensions = Cotas
+parameter-base-offset = Desfase de base
+parameter-top-offset = Desfase superior
+parameter-unconnected-height = Altura desconectada
+parameter-structural = Estructural
+parameter-rotation = Rotación
+parameter-level-offset = Desfase de nivel
+parameter-height-offset = Desfase de altura desde nivel
+parameter-elevation-at-top = Elevación en parte superior
+parameter-elevation-at-bottom = Elevación en parte inferior
+parameter-sill-height = Altura de antepecho
+parameter-section-width = Ancho (b)
+parameter-section-depth = Alto (h)
+parameter-diameter = Diámetro
+parameter-default-thickness = Espesor por defecto
+parameter-length = Largo
+parameter-width = Ancho
+parameter-height = Alto
+parameter-foundation-thickness = Espesor de la base
+parameter-default-sill-height = Altura de antepecho por defecto
+parameter-frame-width = Ancho del marco
+parameter-frame-depth = Profundidad del marco
 
 ## Eliminar elementos
 

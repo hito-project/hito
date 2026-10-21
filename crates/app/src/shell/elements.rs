@@ -16,6 +16,8 @@ use crate::command::{Input, InputFormat, Wants};
 use crate::i18n::I18n;
 use crate::selection::{Mode, Selection};
 
+use super::properties::TypeEditor;
+
 /// What the browser and the properties panel remember between frames.
 #[derive(Debug, Default)]
 pub(super) struct Elements {
@@ -26,6 +28,8 @@ pub(super) struct Elements {
     /// A deletion that removes more than the selected elements, while the
     /// user is asked to confirm it.
     confirm: Option<Deletion>,
+    /// The type being edited in the type editor, if it's open.
+    pub(super) type_editor: Option<TypeEditor>,
 }
 
 /// A deletion waiting for the user to confirm it.
@@ -40,11 +44,17 @@ struct Deletion {
 /// A change the user asked for, made after the panels are drawn.
 #[derive(Debug, Clone, PartialEq)]
 pub(super) enum Edit {
-    /// Sets an element's property.
+    /// Sets properties of one or more elements, in one transaction: a
+    /// value typed for several selected elements, or a type editor's
+    /// changes.
     Set {
-        element: ElementId,
-        property: &'static str,
-        value: Value,
+        elements: Vec<ElementId>,
+        values: Vec<(&'static str, Value)>,
+    },
+    /// Gives elements another type, as Revit's type selector does.
+    SetType {
+        elements: Vec<ElementId>,
+        type_id: ElementId,
     },
     /// Deletes elements, asking first if others go with them.
     Delete(Vec<ElementId>),
@@ -90,6 +100,11 @@ impl Elements {
 
     pub fn clear_error(&mut self) {
         self.error = None;
+    }
+
+    /// Why the last edit couldn't be made, if it couldn't.
+    pub fn error(&self) -> Option<&str> {
+        self.error.as_deref()
     }
 
     /// Asks the user to confirm deleting `selected`, which takes `deleted`
@@ -239,12 +254,11 @@ pub(super) fn properties(
         .striped(true)
         .show(ui, |ui| {
             let label = i18n.tr(name_label);
-            if let Some(text) = text_row(ui, &label, ("name", id), current_name) {
+            if let Some(text) = text_row(ui, &label, ("name", id), current_name, "") {
                 match rename(&view, kind, id, &text) {
                     Ok(value) => edits.push(Edit::Set {
-                        element: id,
-                        property: level::NAME,
-                        value,
+                        elements: vec![id],
+                        values: vec![(level::NAME, value)],
                     }),
                     Err((key, name)) => elements.fail(i18n.tr_with(key, "name", name)),
                 }
@@ -258,12 +272,11 @@ pub(super) fn properties(
             };
             let label = i18n.tr("properties-elevation");
             let shown = input.format(elevation, Dimension::LENGTH);
-            if let Some(text) = text_row(ui, &label, ("level-elevation", id), &shown) {
+            if let Some(text) = text_row(ui, &label, ("level-elevation", id), &shown, "") {
                 match input.parse(&text, Wants::Quantity(Dimension::LENGTH)) {
                     Ok(Input::Quantity(value)) => edits.push(Edit::Set {
-                        element: id,
-                        property: level::ELEVATION,
-                        value: value.into(),
+                        elements: vec![id],
+                        values: vec![(level::ELEVATION, value.into())],
                     }),
                     Ok(Input::Point(_) | Input::Element(_)) => {
                         unreachable!("a quantity was asked for")
@@ -303,14 +316,16 @@ fn rename(
 }
 
 /// A property row with a text field, labelled for screen readers. The
-/// field shows `current` until it's focused, keeps what's typed while it
-/// is, and returns the text when the user presses Enter or leaves the field
-/// with a change. Esc leaves it unchanged.
-fn text_row(
+/// field shows `current` until it's focused, or `hint` greyed out when
+/// `current` is empty, keeps what's typed while it is, and returns the
+/// text when the user presses Enter or leaves the field with a change. Esc
+/// leaves it unchanged.
+pub(super) fn text_row(
     ui: &mut egui::Ui,
     label: &str,
     id_salt: impl std::hash::Hash + std::fmt::Debug,
     current: &str,
+    hint: &str,
 ) -> Option<String> {
     let id = ui.id().with(id_salt);
     let typing = id.with("typing");
@@ -319,7 +334,7 @@ fn text_row(
         .data(|d| d.get_temp::<String>(typing))
         .unwrap_or_else(|| current.to_owned());
     let response = ui
-        .add(egui::TextEdit::singleline(&mut text).id(id))
+        .add(egui::TextEdit::singleline(&mut text).id(id).hint_text(hint))
         .labelled_by(label.id);
     ui.end_row();
     if response.has_focus() {
