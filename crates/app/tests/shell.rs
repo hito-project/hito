@@ -347,11 +347,20 @@ fn the_3d_view_renders_with_wgpu() {
     assert!(close, "pixel {pixel:?}, background {background:?}");
 }
 
+/// The command line's text field: the lowest text field in the window,
+/// since the command line runs along its bottom edge. The properties panel
+/// and the options bar show text fields of their own above it.
+fn command_input<'h>(h: &'h Harness<'_, Shell>) -> egui_kittest::Node<'h> {
+    let inputs = h.get_all_by_role(Role::TextInput);
+    let lowest = inputs.max_by(|a, b| a.rect().bottom().total_cmp(&b.rect().bottom()));
+    lowest.expect("the command line")
+}
+
 /// Types `text` in the command line and presses Enter.
 fn command_line(h: &mut Harness<'_, Shell>, text: &str) {
-    h.get_by_role(Role::TextInput).focus();
+    command_input(h).focus();
     h.run_steps(1);
-    h.get_by_role(Role::TextInput).type_text(text);
+    command_input(h).type_text(text);
     h.run_steps(1);
     h.key_press(egui::Key::Enter);
     h.run_steps(2);
@@ -366,9 +375,9 @@ fn command_line_autocompletes_and_runs() {
 
     // A partial label lists the matches with their names and aliases; Tab
     // runs the highlighted one.
-    h.get_by_role(Role::TextInput).focus();
+    command_input(&h).focus();
     h.run_steps(1);
-    h.get_by_role(Role::TextInput).type_text("tile");
+    command_input(&h).type_text("tile");
     h.run_steps(2);
     assert!(shows(&h, "Tile Views   TILEVIEWS   WT"), "completion");
     h.key_press(egui::Key::Tab);
@@ -391,9 +400,9 @@ fn accent_insensitive_completion() {
     h.run_steps(2);
     command_line(&mut h, "vista 3d");
     // Spanish labels, whatever the case and the accents.
-    h.get_by_role(Role::TextInput).focus();
+    command_input(&h).focus();
     h.run_steps(1);
-    h.get_by_role(Role::TextInput).type_text("MOSÁI");
+    command_input(&h).type_text("MOSÁI");
     h.run_steps(2);
     let completion = "Vistas en mosaico   TILEVIEWS   WT";
     assert!(shows(&h, completion), "completion");
@@ -488,19 +497,19 @@ fn commands_prompt_on_the_command_line() {
     assert_eq!(prompt(&h), Some("probe-point"));
     assert!(shows(&h, "⟨probe-point⟩"), "the prompt is the label");
 
-    h.get_by_role(Role::TextInput).type_text("1,2");
+    command_input(&h).type_text("1,2");
     h.key_press(egui::Key::Enter);
     h.run_steps(2);
     assert_eq!(prompt(&h), Some("probe-length"));
 
     // The answer must be a length.
-    h.get_by_role(Role::TextInput).type_text("2 kN");
+    command_input(&h).type_text("2 kN");
     h.key_press(egui::Key::Enter);
     h.run_steps(2);
     assert_eq!(prompt(&h), Some("probe-length"));
     assert!(h.state().commands().message().is_some());
 
-    h.get_by_role(Role::TextInput).type_text("3 m");
+    command_input(&h).type_text("3 m");
     h.key_press(egui::Key::Enter);
     h.run_steps(2);
     assert_eq!(prompt(&h), None);
@@ -693,10 +702,10 @@ fn levels_are_added_with_their_command_until_esc() {
     h.event(egui::Event::Text("LL".into()));
     h.run_steps(2);
     assert_eq!(prompt(&h), Some("level-prompt-elevation"));
-    h.get_by_role(Role::TextInput).type_text("3");
+    command_input(&h).type_text("3");
     h.key_press(egui::Key::Enter);
     h.run_steps(2);
-    h.get_by_role(Role::TextInput).type_text("6 m");
+    command_input(&h).type_text("6 m");
     h.key_press(egui::Key::Enter);
     h.run_steps(2);
     assert_eq!(prompt(&h), Some("level-prompt-elevation"), "still active");
@@ -742,7 +751,7 @@ fn grid(h: &Harness<'_, Shell>, label: &str) -> Option<hito_structural::grid::Gr
 
 /// Types `text` in the focused command line and presses Enter.
 fn answer(h: &mut Harness<'_, Shell>, text: &str) {
-    h.get_by_role(Role::TextInput).type_text(text);
+    command_input(h).type_text(text);
     h.key_press(egui::Key::Enter);
     h.run_steps(2);
 }

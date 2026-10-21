@@ -125,7 +125,10 @@ const fn computed_when(
     }
 }
 
-const fn shown_when(parameter: Parameter, when: fn(&StoreView<'_>, ElementId) -> bool) -> Parameter {
+const fn shown_when(
+    parameter: Parameter,
+    when: fn(&StoreView<'_>, ElementId) -> bool,
+) -> Parameter {
     Parameter {
         shown: Shown::When(when),
         ..parameter
@@ -246,8 +249,18 @@ const DESCRIBED: &[Described] = &[
                 Group::Constraints,
                 ANGLE,
             ),
-            computed_when(column::X, "parameter-x", Group::Constraints, column_on_grids),
-            computed_when(column::Y, "parameter-y", Group::Constraints, column_on_grids),
+            computed_when(
+                column::X,
+                "parameter-x",
+                Group::Constraints,
+                column_on_grids,
+            ),
+            computed_when(
+                column::Y,
+                "parameter-y",
+                Group::Constraints,
+                column_on_grids,
+            ),
             shown_when(
                 editable(
                     column::GRID_OFFSET_X,
@@ -316,8 +329,18 @@ const DESCRIBED: &[Described] = &[
                 Group::Constraints,
                 ANGLE,
             ),
-            computed_when(footing::X, "parameter-x", Group::Constraints, footing_under_column),
-            computed_when(footing::Y, "parameter-y", Group::Constraints, footing_under_column),
+            computed_when(
+                footing::X,
+                "parameter-x",
+                Group::Constraints,
+                footing_under_column,
+            ),
+            computed_when(
+                footing::Y,
+                "parameter-y",
+                Group::Constraints,
+                footing_under_column,
+            ),
             computed(
                 footing::TOP_ELEVATION,
                 "parameter-elevation-at-top",
@@ -769,10 +792,16 @@ mod tests {
         assert!(!row(&rows, "parameter-grid-offset-x").computed);
         // A free column has no offsets from grids.
         let free = rows_of(&view, f.columns[0]);
-        assert!(free.iter().all(|r| r.parameter.label != "parameter-grid-offset-x"));
+        assert!(
+            free.iter()
+                .all(|r| r.parameter.label != "parameter-grid-offset-x")
+        );
         // Nor do they show when only some of the selection is on grids.
         let both = super::rows(&view, &[on_grids, f.columns[0]]);
-        assert!(both.iter().all(|r| r.parameter.label != "parameter-grid-offset-y"));
+        assert!(
+            both.iter()
+                .all(|r| r.parameter.label != "parameter-grid-offset-y")
+        );
     }
 
     fn rows_of(view: &StoreView<'_>, id: ElementId) -> Vec<Row> {
