@@ -155,6 +155,32 @@ impl<'s> Transaction<'s> {
         Ok(self.stage(id).properties.remove(name))
     }
 
+    /// Gives an element another type, as Revit's type selector does. The
+    /// new type must be an element of the class's type class or of a
+    /// subclass of it, as on [`insert`](Self::insert): the element's own
+    /// class never changes, so a door can take any door type but not a
+    /// window type.
+    ///
+    /// The element keeps its own property values, so an instance value
+    /// still overrides the new type's. On commit the element is recomputed
+    /// with its new type's values, and so is everything it drives, and the
+    /// rules for all of them run, as for any change to the element.
+    pub fn set_type(&mut self, id: ElementId, type_id: ElementId) -> Result<(), StoreError> {
+        let element = self.view().get(id).ok_or(StoreError::UnknownElement(id))?;
+        self.view().check_type(&element.class, type_id)?;
+        self.by_user(id, FieldKey::Type);
+        self.stage(id).type_id = Some(type_id);
+        // Listed once only, or recompute would count the type twice as the
+        // element's driver: the store may still list it under this type
+        // from before the transaction.
+        let stored = self.store.instances.get(&type_id);
+        let instances = self.staged.instances.entry(type_id).or_default();
+        if !instances.contains(&id) && !stored.is_some_and(|s| s.contains(&id)) {
+            instances.push(id);
+        }
+        Ok(())
+    }
+
     /// Gives an element a new code, or removes it with `None`. The element
     /// keeps its ID.
     pub fn set_code(&mut self, id: ElementId, code: Option<Code>) -> Result<(), StoreError> {
