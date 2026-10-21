@@ -2,9 +2,10 @@
 //!
 //! As Revit's, with its "Chain" option off by default, each beam takes a
 //! start point and an end point, and the tool stays active until Esc. Each
-//! beam is its own transaction and undo step. Points are typed on the
-//! command line until plan views (#183) let them be clicked: absolute
-//! (`5,0`), or the end relative to the start (`@5<0`).
+//! beam is its own transaction and undo step. Points are clicked in a plan
+//! view (#183), or typed on the command line: absolute (`5,0`), or the end
+//! relative to the start (`@5<0`). A click on or within a few points of a
+//! column snaps to its centre, so the end frames into it.
 //!
 //! Beams go on the active level (the level picked in the project browser,
 //! or else the lowest level), with their top at the level, as Revit places

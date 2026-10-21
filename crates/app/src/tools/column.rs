@@ -1,10 +1,11 @@
 //! The Column tool (`CL`): places structural columns, one per point (#37).
 //!
 //! As Revit's, the tool stays active until Esc, and each column is its own
-//! transaction and undo step. Points are typed on the command line until
-//! plan views (#183) let them be clicked. A point on a grid intersection
-//! (within 1 mm) places the column on the two grids, so it moves when they
-//! move, as Revit's "Moves With Grids".
+//! transaction and undo step. Points are clicked in a plan view (#183) or
+//! typed on the command line. A point on a grid intersection (within 1 mm)
+//! places the column on the two grids, so it moves when they move, as
+//! Revit's "Moves With Grids". A click within a few points of an
+//! intersection snaps to it exactly, so it goes on the grids too.
 //!
 //! Columns go on the active level (the level picked in the project
 //! browser, or else the lowest level), up to the next level above it, or

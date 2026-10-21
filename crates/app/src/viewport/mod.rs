@@ -23,7 +23,7 @@ pub use camera::{Bounds, Camera, Projection};
 pub use cut::Segment;
 pub use navigation::Navigation;
 pub use pick::BoxKind;
-pub use plan::{Plan, PlanGrid, PlanOutput, Symbol};
+pub use plan::{Centre, Plan, PlanGrid, PlanOutput, Symbol};
 pub use scene::Scene;
 
 use crate::i18n::I18n;
