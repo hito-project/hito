@@ -12,6 +12,10 @@
 //! the model in one transaction ([`Session`]). Placement tools (#33, #34,
 //! #37 to #41) are tools, so each of them is one undo step (#19).
 //!
+//! While a tool runs, the shell shows a contextual ribbon tab with Finish
+//! and Cancel ([`Tool::finish`], [`Session::cancel`]), as Revit does, so no
+//! tool needs the command line to end.
+//!
 //! Nothing here uses egui; the shell draws the command line.
 
 mod input;
@@ -103,6 +107,24 @@ pub trait Tool {
     fn ready_at_start(&self, model: &StoreView<'_>) -> bool {
         let _ = model;
         false
+    }
+
+    /// Finishes the tool, as the contextual tab's Finish button, or Enter
+    /// on an empty command line, does. `None`, the default, means there's
+    /// nothing more to make: the tool ends, and anything half drawn, such
+    /// as a wall's start point, is dropped. A sketch tool returns
+    /// `Some(Next::Done)` to commit its sketch and end, or
+    /// `Some(Next::Reject(..))` when the sketch can't be finished yet.
+    fn finish(&mut self) -> Option<Next> {
+        None
+    }
+
+    /// The message key of the contextual tab's title while the tool runs,
+    /// for tools that sketch, such as "Modify | Create Floor Boundary".
+    /// `None`, the default, titles it "Modify | Place" and the command's
+    /// label, as Revit does.
+    fn tab_title(&self) -> Option<&'static str> {
+        None
     }
 }
 

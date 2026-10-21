@@ -34,6 +34,11 @@ pub enum Pressed {
     Command(&'static str),
     /// A setting that isn't a command, such as the theme.
     Action(Action),
+    /// The contextual tab's Finish: ends the running command, committing
+    /// its sketch.
+    Finish,
+    /// The contextual tab's Cancel, as Esc.
+    Cancel,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -127,8 +132,15 @@ const TABS: &[RibbonTab] = &[
 /// The ribbon's state: which tab is showing.
 #[derive(Debug, Default)]
 pub struct Ribbon {
+    /// The tab showing: one of [`TABS`], or [`CONTEXTUAL`].
     selected: usize,
+    /// While the contextual tab is there, the tab that showed before it,
+    /// to go back to when it goes, as in Revit.
+    before: Option<usize>,
 }
+
+/// The contextual tab's index, after [`TABS`].
+const CONTEXTUAL: usize = TABS.len();
 
 const BUTTON_SIZE: egui::Vec2 = egui::vec2(64.0, 48.0);
 
@@ -140,6 +152,9 @@ pub(super) struct State<'a, F> {
     pub is_open: F,
     pub theme: Theme,
     pub navigation: Navigation,
+    /// The title of the contextual tab a running command shows, such as
+    /// "Modify | Place Column".
+    pub contextual: Option<String>,
 }
 
 impl Ribbon {
@@ -149,11 +164,34 @@ impl Ribbon {
         ui: &mut egui::Ui,
         state: &State<'_, F>,
     ) -> Option<Pressed> {
+        // A command starting brings its contextual tab to the front, and
+        // the tab before comes back when it ends.
+        match (&state.contextual, self.before) {
+            (Some(_), None) => {
+                self.before = Some(self.selected);
+                self.selected = CONTEXTUAL;
+            }
+            (None, Some(before)) => {
+                self.before = None;
+                if self.selected == CONTEXTUAL {
+                    self.selected = before;
+                }
+            }
+            _ => {}
+        }
         ui.horizontal(|ui| {
             for (index, tab) in TABS.iter().enumerate() {
                 ui.selectable_value(&mut self.selected, index, state.i18n.tr(tab.title));
             }
+            if let Some(title) = &state.contextual {
+                // Revit colours its contextual tabs green.
+                let title = egui::RichText::new(title).color(CONTEXTUAL_COLOUR);
+                ui.selectable_value(&mut self.selected, CONTEXTUAL, title);
+            }
         });
+        if self.selected == CONTEXTUAL {
+            return contextual_ui(ui, state.i18n);
+        }
         let mut pressed = None;
         ui.horizontal(|ui| {
             for group in TABS[self.selected].groups {
@@ -173,6 +211,69 @@ impl Ribbon {
             }
         });
         pressed
+    }
+}
+
+/// The colour of a contextual tab's title, as Revit's green.
+const CONTEXTUAL_COLOUR: egui::Color32 = egui::Color32::from_rgb(0x2e, 0x9e, 0x48);
+/// The colour of Cancel's cross, as Revit's red.
+const CANCEL_COLOUR: egui::Color32 = egui::Color32::from_rgb(0xc8, 0x32, 0x32);
+
+/// The mark drawn on a contextual tab's button. egui's fonts have no tick,
+/// so both are drawn.
+#[derive(Clone, Copy)]
+enum Mark {
+    Tick,
+    Cross,
+}
+
+/// The contextual tab's Mode group: Finish and Cancel, as Revit's
+/// sketch mode shows them, a green tick and a red cross.
+fn contextual_ui(ui: &mut egui::Ui, i18n: &I18n) -> Option<Pressed> {
+    let mut pressed = None;
+    ui.horizontal(|ui| {
+        egui::Frame::group(ui.style()).show(ui, |ui| {
+            ui.vertical(|ui| {
+                ui.horizontal(|ui| {
+                    let buttons = [
+                        (Mark::Tick, "ribbon-finish", Pressed::Finish),
+                        (Mark::Cross, "ribbon-cancel", Pressed::Cancel),
+                    ];
+                    for (mark, label, press) in buttons {
+                        // The label goes on the second line, under the mark.
+                        let text = format!("\n{}", i18n.tr(label));
+                        let button = egui::Button::new(text).min_size(BUTTON_SIZE);
+                        let response = ui.add(button);
+                        paint_mark(ui, response.rect, mark);
+                        if response.clicked() {
+                            pressed = Some(press);
+                        }
+                    }
+                });
+                let title = i18n.tr("ribbon-group-mode");
+                ui.label(egui::RichText::new(title).small().weak());
+            });
+        });
+    });
+    pressed
+}
+
+fn paint_mark(ui: &egui::Ui, rect: egui::Rect, mark: Mark) {
+    let centre = egui::pos2(rect.center().x, rect.top() + rect.height() * 0.3);
+    let size = 7.0;
+    let at = |x: f32, y: f32| centre + egui::vec2(x * size, y * size);
+    let painter = ui.painter();
+    match mark {
+        Mark::Tick => {
+            let stroke = egui::Stroke::new(2.5, CONTEXTUAL_COLOUR);
+            let points = vec![at(-1.0, 0.0), at(-0.3, 0.7), at(1.0, -0.8)];
+            painter.add(egui::Shape::line(points, stroke));
+        }
+        Mark::Cross => {
+            let stroke = egui::Stroke::new(2.5, CANCEL_COLOUR);
+            painter.line_segment([at(-0.8, -0.8), at(0.8, 0.8)], stroke);
+            painter.line_segment([at(-0.8, 0.8), at(0.8, -0.8)], stroke);
+        }
     }
 }
 

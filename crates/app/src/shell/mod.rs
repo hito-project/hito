@@ -215,6 +215,25 @@ impl Shell {
         self.command_line.clear();
     }
 
+    /// Finishes the running command, as the contextual tab's Finish does:
+    /// a sketch is committed and the command ends.
+    pub fn finish(&mut self) {
+        let outcome = self.commands.finish(&self.i18n, &mut self.project);
+        self.follow(outcome);
+    }
+
+    /// The running command's contextual tab title, as Revit's
+    /// "Modify | Place Column", or the sketch mode's the tool names.
+    fn contextual_title(&self) -> Option<String> {
+        let command = self.commands.running()?;
+        Some(match self.commands.tab_title() {
+            Some(key) => self.i18n.tr(key),
+            None => self
+                .i18n
+                .tr_with("tab-modify-place", "command", self.i18n.tr(command.label)),
+        })
+    }
+
     /// Changes the window.
     pub fn apply(&mut self, action: Action) {
         let layout = &mut self.layout;
@@ -386,6 +405,14 @@ impl eframe::App for Shell {
         if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
             self.cancel();
         }
+        // Enter with nothing focused finishes it, as an empty command line
+        // does.
+        let enter = ui.input(|i| i.key_pressed(egui::Key::Enter))
+            && ui.ctx().memory(|m| m.focused().is_none())
+            && !self.elements.is_asking();
+        if enter {
+            self.finish();
+        }
         if let Some(name) = self
             .command_line
             .shortcuts(ui.ctx(), self.commands.registry())
@@ -410,6 +437,7 @@ impl eframe::App for Shell {
             is_open: |panel| layout.is_open(panel),
             theme,
             navigation: self.navigation,
+            contextual: self.contextual_title(),
         };
         let pressed = egui::Panel::top("ribbon")
             .show(ui, |ui| self.ribbon.ui(ui, &state))
@@ -417,6 +445,8 @@ impl eframe::App for Shell {
         match pressed {
             Some(Pressed::Command(name)) => self.run(name),
             Some(Pressed::Action(action)) => self.apply(action),
+            Some(Pressed::Finish) => self.finish(),
+            Some(Pressed::Cancel) => self.cancel(),
             None => {}
         }
 

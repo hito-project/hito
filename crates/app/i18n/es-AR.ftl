@@ -201,3 +201,12 @@ view-cube-home = Inicio
 view-cube-go-home = Ir a inicio
 view-perspective = Perspectiva
 view-orthographic = Ortogonal
+
+## La ficha contextual, mientras corre una herramienta (#230)
+
+tab-modify-place = Modificar | Colocar { $command }
+tab-create-floor-boundary = Modificar | Crear contorno de losa
+tab-create-opening-boundary = Modificar | Crear contorno de abertura
+ribbon-group-mode = Modo
+ribbon-finish = Finalizar
+ribbon-cancel = Cancelar

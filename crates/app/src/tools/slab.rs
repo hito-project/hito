@@ -2,8 +2,11 @@
 //! boundary (#39).
 //!
 //! As in Revit's sketch mode, the boundary is drawn as lines: each point
-//! after the first ends one line and starts the next, and entering the
-//! first point again closes the boundary and finishes the slab. Points are
+//! after the first ends one line and starts the next. Finish, on the
+//! contextual tab or Enter on an empty command line, closes the boundary,
+//! makes the slab and ends the tool, as Revit's Finish Edit Mode does.
+//! Entering the first point again also closes the boundary and makes the
+//! slab, and the tool carries on with the next one. Points are
 //! clicked in a plan view (#183) or typed on the command line: absolute
 //! (`5,0`), or relative to the last point (`@4<90`, `@4,0`).
 //!
@@ -192,6 +195,26 @@ impl Tool for SketchTool {
                 Err(message) => Next::Reject(message),
             },
         }
+    }
+
+    /// Closes the boundary and makes the slab or the opening, and the tool
+    /// ends, as Revit's Finish Edit Mode does. With nothing sketched, the
+    /// tool just ends.
+    fn finish(&mut self) -> Option<Next> {
+        if self.items.is_empty() {
+            return None;
+        }
+        Some(match self.close() {
+            Ok(()) => Next::Done,
+            Err(message) => Next::Reject(message),
+        })
+    }
+
+    fn tab_title(&self) -> Option<&'static str> {
+        Some(match self.target {
+            Target::Slab => "tab-create-floor-boundary",
+            Target::Opening => "tab-create-opening-boundary",
+        })
     }
 
     /// An opening's next one goes in the same slab; a slab's starts again.
@@ -527,6 +550,51 @@ mod tests {
         assert_eq!(f.session.prompt().unwrap().message, "slab-prompt-start");
     }
 
+    /// Finish closes the boundary, makes the slab and ends the tool, as
+    /// Revit's Finish Edit Mode; Enter on an empty command line does the
+    /// same.
+    #[test]
+    fn finish_closes_the_boundary_and_ends_the_tool() {
+        let mut f = Fixture::new();
+        f.enter("SB");
+        assert_eq!(
+            f.session.tab_title(),
+            Some("tab-create-floor-boundary"),
+            "sketch mode"
+        );
+        f.enter_all(&["0,0", "6,0"]);
+        let Fixture {
+            session,
+            i18n,
+            store,
+            ..
+        } = &mut f;
+        assert!(matches!(session.finish(i18n, store), Outcome::Nothing));
+        assert!(session.message().is_some(), "too few corners");
+        assert!(session.running().is_some(), "still sketching");
+
+        f.enter("6,4");
+        let Outcome::Committed(changes) = f.enter("") else {
+            panic!("Enter finished the slab");
+        };
+        assert_eq!(changes.command().map(|c| c.name()), Some("SLAB"));
+        assert_eq!(f.slabs().len(), 1);
+        assert_eq!(slab::boundary(&f.store.view(), f.slabs()[0]).len(), 3);
+        assert!(f.session.running().is_none(), "the tool ended");
+
+        // With nothing sketched, Finish just ends the tool.
+        f.enter("SB");
+        let Fixture {
+            session,
+            i18n,
+            store,
+            ..
+        } = &mut f;
+        assert!(matches!(session.finish(i18n, store), Outcome::Nothing));
+        assert!(session.running().is_none());
+        assert_eq!(f.slabs().len(), 1);
+    }
+
     #[test]
     fn a_boundary_that_would_cross_or_close_too_early_is_refused() {
         let mut f = Fixture::new();
@@ -611,6 +679,16 @@ mod tests {
         assert!(f.session.message().is_some());
         assert_eq!(slab::openings(&f.store.view(), floor).len(), 1);
         assert!(slab::openings(&f.store.view(), other).is_empty());
+
+        // Finish makes the opening and ends the tool.
+        f.session.cancel(&f.i18n);
+        f.enter("VERTICALOPENING");
+        assert_eq!(f.session.tab_title(), Some("tab-create-opening-boundary"));
+        f.pick(floor);
+        f.enter_all(&["3,1", "4,1", "4,2"]);
+        assert!(matches!(f.enter(""), Outcome::Committed(_)));
+        assert_eq!(slab::openings(&f.store.view(), floor).len(), 2);
+        assert!(f.session.running().is_none());
     }
 
     fn line(element: ElementId, a: Point, b: Point) -> Item {
