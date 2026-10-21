@@ -205,6 +205,27 @@ pub fn insert(
     Ok(column)
 }
 
+/// Sets the column's top level, as Revit's Top Level parameter, or makes
+/// it unconnected with `None`. An unconnected column keeps the height it
+/// has; a column given a top level keeps its top offset.
+pub fn set_top(
+    tx: &mut Transaction<'_>,
+    column: ElementId,
+    level: Option<ElementId>,
+) -> Result<(), StoreError> {
+    if level.is_none()
+        && let Some((bottom, top)) = read_elevations(&tx.view(), column)
+    {
+        tx.set_property(column, HEIGHT, top - bottom)?;
+    }
+    crate::level::relate_only(tx, column, &class(TOP_LEVEL), level)
+}
+
+/// The column's top level, if it has one.
+pub fn top_level(store: &StoreView<'_>, column: ElementId) -> Option<ElementId> {
+    store.targets(column, &class(TOP_LEVEL)).first().copied()
+}
+
 /// The column's centre in plan.
 pub fn location(store: &StoreView<'_>, column: ElementId) -> Option<[f64; 2]> {
     read_location(store, column)

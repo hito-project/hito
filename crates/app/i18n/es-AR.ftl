@@ -219,6 +219,34 @@ parameter-x = Posición X
 parameter-y = Posición Y
 parameter-grid-offset-x = Desfase desde ejes X
 parameter-grid-offset-y = Desfase desde ejes Y
+group-materials-and-finishes = Materiales y acabados
+parameter-structural-material = Material estructural
+parameter-base-constraint = Restricción de base
+parameter-top-constraint = Restricción superior
+parameter-base-level = Nivel base
+parameter-top-level = Nivel superior
+parameter-reference-level = Nivel de referencia
+parameter-level = Nivel
+parameter-location-line = Línea de ubicación
+parameter-unconnected = Sin conexión
+parameter-up-to-level = Hasta nivel: { $level }
+location-line-wall-centerline = Línea central del muro
+location-line-core-centerline = Línea central del núcleo
+location-line-finish-face-exterior = Cara de acabado: exterior
+location-line-finish-face-interior = Cara de acabado: interior
+location-line-core-face-exterior = Cara de núcleo: exterior
+location-line-core-face-interior = Cara de núcleo: interior
+
+# Duplicar y Cambiar nombre del editor de tipos, y su cuadro Nombre.
+type-editor-duplicate = Duplicar...
+type-editor-rename = Cambiar nombre...
+type-editor-new-type = { $count ->
+    [one] Un tipo nuevo. Al aceptar, el elemento seleccionado lo toma.
+   *[other] Un tipo nuevo. Al aceptar, los { $count } elementos seleccionados lo toman.
+}
+type-name-title = Nombre
+type-name-empty = Escribí un nombre
+type-name-taken = Ya hay otro tipo llamado { $name }
 
 ## Eliminar elementos
 

@@ -280,6 +280,62 @@ pub fn flip(tx: &mut Transaction<'_>, wall: ElementId) -> Result<(), StoreError>
     tx.set_property(wall, FLIPPED, !flipped)
 }
 
+/// Sets the wall's top level, as Revit's Top Constraint ("Up to level"),
+/// or makes it unconnected with `None`. An unconnected wall keeps the
+/// height it has; a wall given a top level keeps its top offset.
+pub fn set_top(
+    tx: &mut Transaction<'_>,
+    wall: ElementId,
+    level: Option<ElementId>,
+) -> Result<(), StoreError> {
+    if level.is_none()
+        && let Some((bottom, top)) = read_elevations(&tx.view(), wall)
+    {
+        tx.set_property(wall, HEIGHT, top - bottom)?;
+    }
+    let top_level = class(TOP_LEVEL);
+    hito_structural::level::relate_only(tx, wall, &top_level, level)
+}
+
+/// The wall's top level, if it has one.
+pub fn top_level(store: &StoreView<'_>, wall: ElementId) -> Option<ElementId> {
+    store.targets(wall, &class(TOP_LEVEL)).first().copied()
+}
+
+/// Whether the wall's top is attached to a slab or another horizontal
+/// element, so its top level doesn't apply.
+pub fn top_is_attached(store: &StoreView<'_>, wall: ElementId) -> bool {
+    !store.targets(wall, &class(TOP_ATTACHED_TO)).is_empty()
+}
+
+/// The wall's location line.
+pub fn location_line(store: &StoreView<'_>, wall: ElementId) -> LocationLine {
+    read_location_line(store, wall)
+}
+
+/// Puts the wall's location line on `line`, as Revit's Location Line
+/// parameter does: the wall stays where it is, and its location line moves
+/// across it. The walls it's joined to are joined again.
+pub fn set_location_line(
+    tx: &mut Transaction<'_>,
+    wall: ElementId,
+    line: LocationLine,
+) -> Result<(), StoreError> {
+    if let Some(geometry) = crate::footprint::WallGeom::load(&tx.view(), wall) {
+        let shift = crate::plan::scale(geometry.side, geometry.shift_to(line));
+        let (start, end) = (
+            crate::plan::add(geometry.start, shift),
+            crate::plan::add(geometry.end, shift),
+        );
+        tx.set_property(wall, START_X, start[0])?;
+        tx.set_property(wall, START_Y, start[1])?;
+        tx.set_property(wall, END_X, end[0])?;
+        tx.set_property(wall, END_Y, end[1])?;
+    }
+    tx.set_property(wall, LOCATION_LINE, line.name())?;
+    join::update(tx, &[wall])
+}
+
 /// The wall's location line, from its start to its end.
 pub fn line(store: &StoreView<'_>, wall: ElementId) -> Option<(Point, Point)> {
     read_line(store, wall)

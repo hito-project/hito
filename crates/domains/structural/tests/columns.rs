@@ -286,6 +286,39 @@ fn an_unconnected_column_keeps_its_height() {
 }
 
 #[test]
+fn the_base_and_top_levels_are_changed_as_revit_does() {
+    let mut p = project();
+    let column = p.column([0.0, 0.0]);
+    let elevations = |p: &Project| column::elevations(&p.store.view(), column);
+
+    // Unconnected, it keeps its height.
+    let mut tx = p.store.transaction();
+    column::set_top(&mut tx, column, None).unwrap();
+    tx.commit().unwrap();
+    assert_eq!(column::top_level(&p.store.view(), column), None);
+    assert_eq!(elevations(&p), Some((0.0, 3.0)));
+
+    // Moved to the first floor, its base follows and its height stays.
+    let mut tx = p.store.transaction();
+    level::set_level(&mut tx, column, p.first).unwrap();
+    tx.commit().unwrap();
+    assert_eq!(level::level_of(&p.store.view(), column), Some(p.first));
+    assert_eq!(elevations(&p), Some((3.0, 6.0)));
+
+    // Its top can't be a level below its base.
+    let mut tx = p.store.transaction();
+    column::set_top(&mut tx, column, Some(p.ground)).unwrap();
+    assert!(rule_broken(tx.commit(), "ColumnHeight"));
+
+    let mut tx = p.store.transaction();
+    level::set_level(&mut tx, column, p.ground).unwrap();
+    column::set_top(&mut tx, column, Some(p.first)).unwrap();
+    tx.commit().unwrap();
+    assert_eq!(column::top_level(&p.store.view(), column), Some(p.first));
+    assert_eq!(elevations(&p), Some((0.0, 3.0)));
+}
+
+#[test]
 fn deleting_the_top_level_leaves_the_column_at_its_height() {
     let mut p = project();
     let column = p.column([0.0, 0.0]);

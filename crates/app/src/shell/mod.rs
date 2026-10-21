@@ -39,6 +39,7 @@ pub use theme::Theme;
 
 use crate::command::{Input, InputFormat, Outcome, Session, Wants};
 use crate::i18n::{I18n, Locale};
+use crate::parameters;
 use crate::project;
 use crate::selection::{Mode, Selection};
 use crate::viewport::{Navigation, Scene, Viewport};
@@ -339,6 +340,56 @@ impl Shell {
                     .try_for_each(|&element| tx.set_type(element, type_id));
                 let result = set.and_then(|()| tx.commit());
                 self.commit(result);
+            }
+            Edit::Change { elements, changes } => {
+                let names: Vec<_> = changes.iter().map(|(p, _)| p.property).collect();
+                let command =
+                    Command::new("SETPROPERTY").with_parameter("Property", names.join(", "));
+                let mut tx = self.project.transaction_for(command);
+                let set = elements.iter().try_for_each(|&element| {
+                    let mut changes = changes.iter();
+                    changes.try_for_each(|(p, value)| parameters::apply(&mut tx, element, p, value))
+                });
+                let result = set.and_then(|()| tx.commit());
+                self.commit(result);
+            }
+            Edit::TypeChanges {
+                type_id,
+                duplicate,
+                changes,
+                instances,
+            } => {
+                let name = match duplicate {
+                    Some(_) => "DUPLICATETYPE",
+                    None => "EDITTYPE",
+                };
+                let mut tx = self.project.transaction_for(Command::new(name));
+                let made = (|| {
+                    let target = match &duplicate {
+                        Some(name) => parameters::duplicate_type(&mut tx, type_id, name)?,
+                        None => type_id,
+                    };
+                    for (parameter, value) in &changes {
+                        parameters::apply(&mut tx, target, parameter, value)?;
+                    }
+                    for &instance in &instances {
+                        tx.set_type(instance, target)?;
+                    }
+                    Ok(target)
+                })();
+                let result = made.and_then(|target| tx.commit().map(|changes| (target, changes)));
+                match result {
+                    Ok((target, changes)) => {
+                        self.committed(&changes);
+                        // After Apply, the dialog goes on with the copy.
+                        if let Some(editor) = &mut self.elements.type_editor
+                            && editor.is_duplicating()
+                        {
+                            editor.now_editing(target);
+                        }
+                    }
+                    Err(_) => self.elements.fail(self.i18n.tr("properties-edit-failed")),
+                }
             }
             Edit::Delete(selected) => {
                 let view = self.project.view();

@@ -97,6 +97,21 @@ pub(crate) struct WallGeom {
     pub top: f64,
 }
 
+/// How far the exterior face is from a location line on `line`, given the
+/// layer boundaries' depths from the exterior face and the core's layers.
+fn exterior_from(line: LocationLine, depths: &[f64], core: &Range<usize>) -> f64 {
+    let width = depths[depths.len() - 1];
+    let (core_out, core_in) = (depths[core.start], depths[core.end]);
+    match line {
+        LocationLine::WallCenterline => width / 2.0,
+        LocationLine::CoreCenterline => (core_out + core_in) / 2.0,
+        LocationLine::FinishFaceExterior => 0.0,
+        LocationLine::FinishFaceInterior => width,
+        LocationLine::CoreFaceExterior => core_out,
+        LocationLine::CoreFaceInterior => core_in,
+    }
+}
+
 impl WallGeom {
     pub fn load<'a>(store: &impl Read<'a>, id: ElementId) -> Option<Self> {
         if !store.is_a(id, &class(wall::WALL)) {
@@ -120,15 +135,7 @@ impl WallGeom {
             return None;
         }
         let core = wall_type::core(&layers);
-        let (core_out, core_in) = (depths[core.start], depths[core.end]);
-        let exterior = match wall::read_location_line(store, id) {
-            LocationLine::WallCenterline => width / 2.0,
-            LocationLine::CoreCenterline => (core_out + core_in) / 2.0,
-            LocationLine::FinishFaceExterior => 0.0,
-            LocationLine::FinishFaceInterior => width,
-            LocationLine::CoreFaceExterior => core_out,
-            LocationLine::CoreFaceInterior => core_in,
-        };
+        let exterior = exterior_from(wall::read_location_line(store, id), &depths, &core);
         let side = match store.boolean(id, wall::FLIPPED) {
             true => scale(left(direction), -1.0),
             false => left(direction),
@@ -152,6 +159,12 @@ impl WallGeom {
 
     pub fn width(&self) -> f64 {
         self.depths[self.layers.len()]
+    }
+
+    /// How far the location line would move across the wall, along `side`,
+    /// to be on `line` with the wall's faces where they are.
+    pub fn shift_to(&self, line: LocationLine) -> f64 {
+        self.exterior - exterior_from(line, &self.depths, &self.core)
     }
 
     /// How far the middle of the wall's thickness is from the location

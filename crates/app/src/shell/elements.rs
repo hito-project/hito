@@ -17,6 +17,7 @@ use crate::i18n::I18n;
 use crate::selection::{Mode, Selection};
 
 use super::properties::TypeEditor;
+use crate::parameters::{Current, Parameter};
 
 /// What the browser and the properties panel remember between frames.
 #[derive(Debug, Default)]
@@ -55,6 +56,22 @@ pub(super) enum Edit {
     SetType {
         elements: Vec<ElementId>,
         type_id: ElementId,
+    },
+    /// Sets parameters of one or more elements, in one transaction,
+    /// through the domains' operations: a value typed or picked in the
+    /// properties panel for the selected elements.
+    Change {
+        elements: Vec<ElementId>,
+        changes: Vec<(&'static Parameter, Current)>,
+    },
+    /// The type editor's OK or Apply: its changes to a type, made in one
+    /// transaction. With `duplicate`, they're made to a copy of the type
+    /// under that name, which `instances` then take.
+    TypeChanges {
+        type_id: ElementId,
+        duplicate: Option<String>,
+        changes: Vec<(&'static Parameter, Current)>,
+        instances: Vec<ElementId>,
     },
     /// Deletes elements, asking first if others go with them.
     Delete(Vec<ElementId>),

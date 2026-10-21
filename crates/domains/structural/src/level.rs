@@ -42,7 +42,7 @@
 
 use hito_core::{
     ClassDef, ClassId, DataType, Dimension, ElementId, OnDelete, Properties, Recompute,
-    RelationshipDef, Rule, StoreView, Value,
+    Relationship, RelationshipDef, Rule, StoreError, StoreView, Transaction, Value,
 };
 
 use crate::class;
@@ -159,6 +159,42 @@ pub(crate) fn rules() -> Vec<Rule> {
     });
 
     vec![name, elevation, one_level]
+}
+
+/// Moves a level-based element to another level, as Revit's Base
+/// Constraint, Base Level or Level parameter does. Its offset from the
+/// level stays, so it moves by the difference between the levels.
+pub fn set_level(
+    tx: &mut Transaction<'_>,
+    element: ElementId,
+    level: ElementId,
+) -> Result<(), StoreError> {
+    relate_only(tx, element, &class(ATTACHED_TO_LEVEL), Some(level))
+}
+
+/// Makes `target` the only target of `source`'s relationships of class
+/// `relationship`, or removes them all with `None`: a level, a top level
+/// or a material picked from a list.
+pub fn relate_only(
+    tx: &mut Transaction<'_>,
+    source: ElementId,
+    relationship: &ClassId,
+    target: Option<ElementId>,
+) -> Result<(), StoreError> {
+    let view = tx.view();
+    let current: Vec<_> = view
+        .relationships_from(source)
+        .filter(|r| r.class() == relationship)
+        .cloned()
+        .collect();
+    let new = target.map(|t| Relationship::new(relationship.clone(), source, t));
+    for r in current.iter().filter(|r| Some(*r) != new.as_ref()) {
+        tx.unrelate(r)?;
+    }
+    match new {
+        Some(new) if !current.contains(&new) => tx.relate(new),
+        _ => Ok(()),
+    }
 }
 
 /// The level an element is attached to, if any.
