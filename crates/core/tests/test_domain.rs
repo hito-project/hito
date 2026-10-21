@@ -456,6 +456,158 @@ fn an_element_type_must_be_of_its_class_type_class() {
     ));
 }
 
+// Changing an instance's type, as Revit's type selector does (#26).
+
+/// A second column type, 40 × 40 cm in H-30 concrete.
+fn larger_type(p: &mut Project) -> ElementId {
+    let larger = Element::new(class("ColumnType"), p.definitions)
+        .with_property("Width", 0.40)
+        .with_property("Depth", 0.40)
+        .with_property("ConcreteStrength", 30e6);
+    p.insert(larger).unwrap()
+}
+
+#[test]
+fn an_instance_takes_its_new_types_values_and_keeps_its_own() {
+    let mut p = project();
+    let small = p.column_type();
+    let large = larger_type(&mut p);
+    let c1 = p.column(small);
+    let c2 = p.column(small);
+    p.set_property(c2, "ConcreteStrength", 35e6).unwrap();
+
+    p.change(|tx| {
+        tx.set_type(c1, large)?;
+        tx.set_type(c2, large)
+    })
+    .unwrap();
+
+    assert_eq!(p.store.get(c1).unwrap().type_id(), Some(large));
+    assert_eq!(p.store.property(c1, "Width"), Some(&Value::Real(0.40)));
+    assert_eq!(p.store.property(c1, "Height"), Some(&Value::Real(3.0)));
+    // An instance value still overrides the new type's.
+    assert_eq!(
+        p.store.property(c2, "ConcreteStrength"),
+        Some(&Value::Real(35e6))
+    );
+
+    // The columns now go with the new type, not the old one.
+    assert_eq!(p.store.view().preview_delete(small).unwrap(), [small]);
+    let mut deleted = p.store.view().preview_delete(large).unwrap();
+    deleted.sort();
+    let mut expected = vec![large, c1, c2];
+    expected.sort();
+    assert_eq!(deleted, expected);
+}
+
+#[test]
+fn a_type_change_is_one_field_of_the_change_set_and_replays() {
+    let mut p = project();
+    let small = p.column_type();
+    let large = larger_type(&mut p);
+    let column = p.column(small);
+    let before = p.store.clone();
+
+    let mut tx = p.store.transaction_for(Command::new("ChangeType"));
+    tx.set_type(column, large).unwrap();
+    let changes = tx.commit().unwrap();
+    assert_eq!(
+        changes.elements(),
+        [ElementChange::Modified {
+            id: column,
+            fields: vec![by_user(FieldChange::Type {
+                before: Some(small),
+                after: Some(large),
+            })],
+        }]
+    );
+
+    let mut replayed = before;
+    replayed.replay(&changes).unwrap();
+    assert_same_contents(&replayed, &p.store);
+    assert_eq!(replayed.view().preview_delete(small).unwrap(), [small]);
+}
+
+#[test]
+fn changing_a_type_back_in_the_same_transaction_leaves_it() {
+    let runs = Arc::new(AtomicUsize::new(0));
+    let mut registry = registry();
+    let counter = Arc::clone(&runs);
+    let count_columns = Recompute::new(class("Column"), move |_, _| {
+        counter.fetch_add(1, Ordering::Relaxed);
+        Properties::new()
+    });
+    registry.add_recompute(count_columns).unwrap();
+    let mut p = project_with(registry);
+    let small = p.column_type();
+    let large = larger_type(&mut p);
+    let column = p.column(small);
+    let before = runs.load(Ordering::Relaxed);
+
+    let mut tx = p.store.transaction();
+    tx.set_type(column, large).unwrap();
+    tx.set_type(column, small).unwrap();
+    // The old type changes too, so the column is recomputed as its
+    // instance, once: the type counts once as what drives it.
+    tx.set_property(small, "Width", 0.32).unwrap();
+    let changes = tx.commit().unwrap();
+    let changed: Vec<_> = changes.elements().iter().map(ElementChange::id).collect();
+    assert_eq!(changed, [small]);
+    assert_eq!(runs.load(Ordering::Relaxed), before + 1);
+    assert_eq!(p.store.get(column).unwrap().type_id(), Some(small));
+    assert_eq!(p.store.view().preview_delete(large).unwrap(), [large]);
+}
+
+#[test]
+fn a_new_type_must_be_of_the_class_type_class_or_a_subclass() {
+    let mut registry = registry();
+    let precast = Schema::new("TestPrecast", SchemaVersion::new(1, 0, 0))
+        .class(ClassDef::new("PrecastColumnType", class("ColumnType")));
+    registry.register(precast).unwrap();
+    let mut p = project_with(registry);
+    let column_type = p.column_type();
+    let column = p.column(column_type);
+    let level = Element::new(class("Level"), p.physical).with_property("Elevation", 0.0);
+    let level = p.insert(level).unwrap();
+
+    assert!(matches!(
+        p.change(|tx| tx.set_type(column, level)),
+        Err(StoreError::InvalidType { .. })
+    ));
+    // A class with no type class takes no type.
+    assert!(matches!(
+        p.change(|tx| tx.set_type(level, column_type)),
+        Err(StoreError::InvalidType { .. })
+    ));
+    let unknown = ElementId::generate();
+    assert!(matches!(
+        p.change(|tx| tx.set_type(unknown, column_type)),
+        Err(StoreError::UnknownElement(id)) if id == unknown
+    ));
+
+    let precast_class = ClassId::new("TestPrecast", "PrecastColumnType");
+    let precast = Element::new(precast_class, p.definitions).with_property("Width", 0.25);
+    let precast = p.insert(precast).unwrap();
+    p.change(|tx| tx.set_type(column, precast)).unwrap();
+    assert_eq!(p.store.property(column, "Width"), Some(&Value::Real(0.25)));
+}
+
+#[test]
+fn a_new_type_that_breaks_a_rule_is_refused() {
+    let mut p = project();
+    let column_type = p.column_type();
+    let column = p.column(column_type);
+    let weak =
+        Element::new(class("ColumnType"), p.definitions).with_property("ConcreteStrength", 15e6);
+    let weak = p.insert(weak).unwrap();
+
+    let Err(StoreError::Violations(violations)) = p.change(|tx| tx.set_type(column, weak)) else {
+        panic!("the column should break MinimumStrength with the weak type");
+    };
+    assert_eq!(violations[0].rule, "MinimumStrength");
+    assert_eq!(p.store.get(column).unwrap().type_id(), Some(column_type));
+}
+
 // Aspects, codes and models, from the element model.
 
 #[test]

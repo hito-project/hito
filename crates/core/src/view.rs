@@ -31,7 +31,10 @@ pub(crate) struct Staged {
     /// target.
     outgoing: HashMap<ElementId, Vec<Relationship>>,
     incoming: HashMap<ElementId, Vec<Relationship>>,
-    /// The elements the transaction created with a type, by type.
+    /// The elements the transaction created with a type or gave one, by
+    /// type. An element whose type changed again stays listed under the
+    /// old one: [`StoreView::instances_of`] checks. None is listed here if
+    /// the store lists it under the same type.
     pub(crate) instances: HashMap<ElementId, Vec<ElementId>>,
     /// What the user changed directly, rather than through recompute or a
     /// deletion: fields, deleted elements and relationships.
@@ -446,7 +449,7 @@ impl<'a> StoreView<'a> {
             .try_for_each(|(name, value)| self.check_property(class, name, value))
     }
 
-    fn check_type(&self, class: &ClassId, type_id: ElementId) -> Result<(), StoreError> {
+    pub(crate) fn check_type(&self, class: &ClassId, type_id: ElementId) -> Result<(), StoreError> {
         let type_element = self
             .get(type_id)
             .ok_or(StoreError::UnknownElement(type_id))?;
